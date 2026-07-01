@@ -1,0 +1,77 @@
+name: subject-choice-forum
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: scf-postgres
+    environment:
+      POSTGRES_USER: forum
+      POSTGRES_PASSWORD: forum_dev_password
+      POSTGRES_DB: forum
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forum -d forum"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    container_name: scf-redis
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: scf-backend
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_ADDR: redis:6379
+    ports:
+      - "${HTTP_HOST_PORT:-8081}:8080"
+    volumes:
+      - ./backend:/app
+      - go-mod-cache:/go/pkg/mod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: node:24-alpine
+    container_name: scf-frontend
+    working_dir: /app
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8081/api/v1}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    command: sh -c "corepack enable && corepack prepare pnpm@11.7.0 --activate && pnpm install && pnpm dev --host 0.0.0.0"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  redis-data:
+  go-mod-cache:
+  frontend-node-modules:

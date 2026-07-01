@@ -5,6 +5,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
 import { fetchTopic } from '../lib/api'
+import { sampleTopicDetails } from '../lib/sampleData'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,18 +14,19 @@ const topicQuery = useQuery({
   queryKey: computed(() => ['topic-detail', slug.value]),
   queryFn: () => fetchTopic(slug.value),
 })
+const topicDetail = computed(() => topicQuery.data.value ?? sampleTopicDetails[slug.value])
 </script>
 
 <template>
   <main class="detail-page">
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
-    <section v-if="topicQuery.data.value" class="topic-hero">
+    <section v-if="topicDetail" class="topic-hero">
       <div class="breadcrumb">首页 / 热门话题</div>
-      <h1># {{ topicQuery.data.value.topic.title }}</h1>
-      <p>{{ topicQuery.data.value.topic.summary }}</p>
+      <h1># {{ topicDetail.topic.title }}</h1>
+      <p>{{ topicDetail.topic.summary }}</p>
       <div class="article-actions">
-        <span><Eye :size="17" /> {{ topicQuery.data.value.topic.viewsCount }} 浏览</span>
-        <span><MessageSquare :size="17" /> {{ topicQuery.data.value.topic.postsCount }} 篇讨论</span>
+        <span><Eye :size="17" /> {{ topicDetail.topic.viewsCount }} 浏览</span>
+        <span><MessageSquare :size="17" /> {{ topicDetail.topic.postsCount }} 篇讨论</span>
       </div>
     </section>
 
@@ -35,7 +37,7 @@ const topicQuery = useQuery({
         </div>
       </div>
       <div class="feed-grid">
-        <PostCard v-for="post in topicQuery.data.value?.posts ?? []" :key="post.id" :post="post" />
+        <PostCard v-for="post in topicDetail?.posts ?? []" :key="post.id" :post="post" />
       </div>
     </section>
   </main>

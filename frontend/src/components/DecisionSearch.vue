@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Sparkles } from '@lucide/vue'
 import { computed } from 'vue'
+import { provinceKnowledge } from '../lib/knowledgeBase'
 import { majorRequirements } from '../lib/majorRequirements'
 import { useForumStore } from '../stores/forum'
 import type { Post, Topic } from '../types/forum'
@@ -30,8 +31,16 @@ const matchedPosts = computed(() =>
     [post.title, post.content, post.authorName, post.tags.join('')].some((value) => value.includes(keyword.value)),
   ).slice(0, 3),
 )
+const matchedPolicies = computed(() =>
+  provinceKnowledge.filter((item) => {
+    if (!keyword.value) return true
+    const compactKeyword = keyword.value.replace(/政策|招生|考试|选科|省份|信息|入口/g, '')
+    const fields = [item.province, item.authority, item.status, item.focus.join(''), item.checklist.join('')]
+    return fields.some((value) => value.includes(keyword.value) || (!!compactKeyword && value.includes(compactKeyword)))
+  }).slice(0, 2),
+)
 
-const quickQueries = ['临床医学', '计算机', '物化生避坑', '史政地就业', '浙江选科']
+const quickQueries = ['临床医学', '计算机', '物化生避坑', '史政地就业', '浙江选科', '四川政策']
 </script>
 
 <template>
@@ -61,6 +70,11 @@ const quickQueries = ['临床医学', '计算机', '物化生避坑', '史政地
         <small>经验/数据帖</small>
         <strong>{{ post.title }}</strong>
         <span>{{ post.authorName }} · {{ post.tags.slice(0, 2).join(' / ') || '选科讨论' }}</span>
+      </RouterLink>
+      <RouterLink v-for="item in matchedPolicies" :key="item.province" to="/knowledge">
+        <small>省份政策</small>
+        <strong>{{ item.province }} · {{ item.reformMode }}</strong>
+        <span>{{ item.authority }}</span>
       </RouterLink>
     </div>
   </section>

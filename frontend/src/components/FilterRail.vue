@@ -19,20 +19,26 @@ const subjectIcons = {
 }
 
 const hotCombos = computed(() => [
-  { label: '物化生', count: '12.6k', color: '#0f9f7a' },
-  { label: '物化地', count: '9.8k', color: '#2563eb' },
-  { label: '物生地', count: '7.3k', color: '#38bdf8' },
-  { label: '物化政', count: '6.1k', color: '#ef4444' },
-  { label: '史政地', count: '5.7k', color: '#f97316' },
-  { label: '史地生', count: '4.2k', color: '#f59e0b' },
+  { label: '物化生', count: '12.6k', color: '#0f9f7a', track: 'physics' as Track, subjects: ['chemistry', 'biology'] as Subject[] },
+  { label: '物化地', count: '9.8k', color: '#2563eb', track: 'physics' as Track, subjects: ['chemistry', 'geography'] as Subject[] },
+  { label: '物生地', count: '7.3k', color: '#38bdf8', track: 'physics' as Track, subjects: ['biology', 'geography'] as Subject[] },
+  { label: '物化政', count: '6.1k', color: '#ef4444', track: 'physics' as Track, subjects: ['chemistry', 'politics'] as Subject[] },
+  { label: '史政地', count: '5.7k', color: '#f97316', track: 'history' as Track, subjects: ['politics', 'geography'] as Subject[] },
+  { label: '史地生', count: '4.2k', color: '#f59e0b', track: 'history' as Track, subjects: ['geography', 'biology'] as Subject[] },
 ])
+
+function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }) {
+  forumStore.setTrack(combo.track)
+  forumStore.setSubjects(combo.subjects)
+  forumStore.setKeyword(combo.label)
+}
 </script>
 
 <template>
   <aside class="filter-rail">
     <div class="panel-title-row">
       <h2>选科组合筛选</h2>
-      <button class="ghost-link">重置</button>
+      <button class="ghost-link" type="button" @click="forumStore.resetFilters()">重置</button>
     </div>
 
     <section class="filter-section">
@@ -82,13 +88,13 @@ const hotCombos = computed(() => [
 
     <section class="filter-section hot-list">
       <h3>热门组合</h3>
-      <button v-for="combo in hotCombos" :key="combo.label" class="hot-row">
+      <button v-for="combo in hotCombos" :key="combo.label" class="hot-row" type="button" @click="selectCombo(combo)">
         <span class="hot-dot" :style="{ background: combo.color }"></span>
         <span>{{ combo.label }}</span>
         <strong>{{ combo.count }}</strong>
       </button>
     </section>
 
-    <button class="outline-wide">查看全部组合</button>
+    <RouterLink class="outline-wide" to="/insights">查看全部组合</RouterLink>
   </aside>
 </template>

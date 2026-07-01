@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../pages/HomePage.vue'
+import KnowledgeBasePage from '../pages/KnowledgeBasePage.vue'
 import InsightPage from '../pages/InsightPage.vue'
 import InsightsOverviewPage from '../pages/InsightsOverviewPage.vue'
 import MessagesPage from '../pages/MessagesPage.vue'
@@ -23,6 +24,7 @@ export const router = createRouter({
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/messages', name: 'messages', component: MessagesPage },
     { path: '/requirements', name: 'requirements', component: RequirementsPage },
+    { path: '/knowledge', name: 'knowledge-base', component: KnowledgeBasePage },
   ],
   scrollBehavior() {
     return { top: 0 }

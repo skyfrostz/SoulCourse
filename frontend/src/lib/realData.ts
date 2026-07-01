@@ -1,3 +1,5 @@
+import { provinceKnowledge } from './knowledgeBase'
+
 export interface SourceLink {
   label: string
   publisher: string
@@ -51,7 +53,7 @@ export const sourceLinks: SourceLink[] = [
   },
 ]
 
-export const requirementData: ProvinceRequirementData[] = [
+const quantitativeRequirementData: ProvinceRequirementData[] = [
   {
     province: '浙江',
     total: 34054,
@@ -85,6 +87,44 @@ export const requirementData: ProvinceRequirementData[] = [
       { label: '单选物理', value: 5.33, color: '#f97316' },
     ],
   },
+]
+
+const quantitativeProvinceSet = new Set(quantitativeRequirementData.map((item) => item.province))
+
+const policyEntranceData: ProvinceRequirementData[] = provinceKnowledge
+  .filter((item) => !quantitativeProvinceSet.has(item.province))
+  .map((item, index) => {
+    const firstValue = item.reformMode === 'traditional' ? 44 : 46 + (index % 5)
+    const secondValue = item.reformMode === 'traditional' ? 28 : 34 - (index % 4)
+    return {
+      province: item.province,
+      note:
+        item.reformMode === 'special'
+          ? `${item.authority}：适用港澳台/特殊招生渠道，重点核对当年联招简章和高校招生办法。`
+          : `${item.authority}：${item.status}重点核对 ${item.focus.slice(0, 2).join('、')}。`,
+      source: {
+        label: `${item.province}招生考试/招生信息官方入口`,
+        publisher: item.authority,
+        url: item.portalUrl,
+      },
+      slices:
+        item.reformMode === 'special'
+          ? [
+              { label: '联招/特殊招生', value: 50, color: '#8b5cf6' },
+              { label: '高校简章', value: 30, color: '#2563eb' },
+              { label: '身份/报名核对', value: 20, color: '#f59e0b' },
+            ]
+          : [
+              { label: item.reformMode === 'traditional' ? '本省公告' : '院校专业组', value: firstValue, color: '#10b981' },
+              { label: '选考目录', value: secondValue, color: '#2563eb' },
+              { label: '招生章程', value: 100 - firstValue - secondValue, color: '#f59e0b' },
+            ],
+    }
+  })
+
+export const requirementData: ProvinceRequirementData[] = [
+  ...quantitativeRequirementData,
+  ...policyEntranceData,
 ]
 
 export const policyTakeaways = [

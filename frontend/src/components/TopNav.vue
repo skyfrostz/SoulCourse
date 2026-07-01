@@ -29,7 +29,7 @@ const navItems: Array<{ label: string; category: Category | 'all' }> = [
 const activeCategory = computed(() => (route.path === '/' ? forumStore.filter.category : ''))
 
 function setCategory(category: Category | 'all') {
-  forumStore.setCategory(category)
+  forumStore.browseCategory(category)
 }
 
 function togglePanel(panel: 'notifications' | 'profile') {
@@ -86,7 +86,10 @@ onBeforeUnmount(() => {
       </RouterLink>
     </nav>
 
-    <RouterLink class="tool-link" to="/requirements">选科查询</RouterLink>
+    <div class="tool-links">
+      <RouterLink class="tool-link" to="/requirements">选科查询</RouterLink>
+      <RouterLink class="tool-link" to="/knowledge">政策库</RouterLink>
+    </div>
 
     <div ref="searchRoot" class="search-box" @pointerenter="openSearch" @pointerleave="closeSearchSoon" @focusout="closeSearchSoon">
       <input
@@ -97,10 +100,12 @@ onBeforeUnmount(() => {
         @input="openSearch(); forumStore.setKeyword(($event.target as HTMLInputElement).value)"
       />
       <Search :size="18" />
-      <div v-if="searchOpen" class="search-popover" @pointerenter="openSearch" @pointerleave="closeSearchSoon">
-        <button class="search-popover-close" type="button" @click="searchOpen = false">收起</button>
-        <DecisionSearch :posts="posts" :topics="topics" />
-      </div>
+      <Transition name="soft-pop">
+        <div v-if="searchOpen" class="search-popover" @pointerenter="openSearch" @pointerleave="closeSearchSoon">
+          <button class="search-popover-close" type="button" @click="searchOpen = false">收起</button>
+          <DecisionSearch :posts="posts" :topics="topics" />
+        </div>
+      </Transition>
     </div>
 
     <div class="nav-actions">

@@ -1,46 +1,120 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ChevronLeft, Search, ShieldCheck } from '@lucide/vue'
+import { Bookmark, ChevronLeft, MessageCircle, Search, ShieldCheck, SlidersHorizontal, Sparkles, ThumbsUp } from '@lucide/vue'
 import { useRouter } from 'vue-router'
-import { majorRequirements } from '../lib/majorRequirements'
+import { majorRequirementCategories, majorRequirements, majorRequirementStats } from '../lib/majorRequirements'
 
 const router = useRouter()
 const keyword = ref('')
+const activeCategory = ref('全部')
+const activeType = ref('全部')
+const categories = computed(() => ['全部', ...majorRequirementCategories])
+const noteTypes = ['全部', '高频刚需', '理工强约束', '人文社科', '交叉新兴', '需逐校核对']
+const quickKeywords = ['临床医学', '计算机', '法学', '师范', '人工智能', '金融', '中医学', '电气工程']
 const results = computed(() => {
   const q = keyword.value.trim()
-  if (!q) return majorRequirements
   return majorRequirements.filter((item) =>
-    [item.major, item.category, item.suggestedCombination, item.requiredSubjects.join('')]
-      .some((value) => value.includes(q)),
+    (activeCategory.value === '全部' || item.category === activeCategory.value) &&
+    (activeType.value === '全部' || item.noteType === activeType.value) &&
+    (!q ||
+      [item.major, item.category, item.suggestedCombination, item.requiredSubjects.join(''), item.noteType]
+        .some((value) => value.includes(q))),
   )
 })
+
+const setKeyword = (value: string) => {
+  keyword.value = value
+}
 </script>
 
 <template>
   <main class="detail-page">
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
-    <section class="requirements-hero">
+    <section class="requirements-xhs-hero">
       <div>
         <div class="breadcrumb">工具 / 选科要求查询</div>
-        <h1>高校专业选科要求查询</h1>
-        <p>输入专业名称，快速查看常见选科要求、推荐组合和风险提示。MVP 阶段先提供高频专业库，后续可扩展为完整院校专业数据库。</p>
+        <h1>像刷笔记一样查专业选科</h1>
+        <p>覆盖 {{ majorRequirementStats.total }} 个常见本科专业。先用专业名、门类和组合快速筛，再进入官方目录逐校核对。</p>
+        <div class="overview-metrics">
+          <span><Sparkles :size="18" /> {{ majorRequirementStats.total }} 个专业</span>
+          <span><ShieldCheck :size="18" /> 官方口径可核对</span>
+          <span><SlidersHorizontal :size="18" /> 分类筛选</span>
+        </div>
       </div>
-      <label class="requirement-search">
-        <Search :size="18" />
-        <input v-model="keyword" placeholder="搜索：临床医学、计算机、法学、师范..." />
-      </label>
+      <div class="requirement-search-panel">
+        <label class="requirement-search">
+          <Search :size="18" />
+          <input v-model="keyword" placeholder="搜索：临床医学、计算机、法学、师范..." />
+        </label>
+        <div class="quick-query-row">
+          <button v-for="item in quickKeywords" :key="item" type="button" @click="setKeyword(item)">{{ item }}</button>
+        </div>
+      </div>
     </section>
 
-    <section class="requirement-results">
-      <article v-for="item in results" :key="item.major" class="requirement-card">
-        <small>{{ item.category }}</small>
-        <h2>{{ item.major }}</h2>
-        <div class="requirement-subjects">
-          <span v-for="subject in item.requiredSubjects" :key="subject">{{ subject }}</span>
+    <section class="requirement-filter-board">
+      <div>
+        <strong>{{ results.length }}</strong>
+        <span>条专业笔记</span>
+      </div>
+      <div class="scroll-chip-row">
+        <button
+          v-for="item in categories"
+          :key="item"
+          type="button"
+          :class="{ active: activeCategory === item }"
+          @click="activeCategory = item"
+        >
+          {{ item }}
+        </button>
+      </div>
+      <div class="scroll-chip-row compact">
+        <button
+          v-for="item in noteTypes"
+          :key="item"
+          type="button"
+          :class="{ active: activeType === item }"
+          @click="activeType = item"
+        >
+          {{ item }}
+        </button>
+      </div>
+    </section>
+
+    <section class="requirement-note-waterfall">
+      <article v-for="(item, index) in results" :key="item.major" class="requirement-note-card">
+        <div class="requirement-note-cover" :class="`tone-${index % 5}`">
+          <small>{{ item.noteType }}</small>
+          <strong>{{ item.popularity }}</strong>
+          <span>热度</span>
+          <div class="cover-bars" aria-hidden="true">
+            <i :style="{ height: `${36 + (index % 4) * 10}px` }"></i>
+            <i :style="{ height: `${54 + (index % 3) * 12}px` }"></i>
+            <i :style="{ height: `${30 + (index % 5) * 8}px` }"></i>
+          </div>
         </div>
-        <p><strong>建议组合：</strong>{{ item.suggestedCombination }}</p>
-        <p><strong>风险提示：</strong>{{ item.risk }}</p>
-        <footer><ShieldCheck :size="16" /> 来源：{{ item.source }}</footer>
+        <div class="requirement-note-body">
+          <small>{{ item.category }}</small>
+          <h2>{{ item.major }}</h2>
+          <div class="requirement-subjects">
+            <span v-for="subject in item.requiredSubjects" :key="subject">{{ subject }}</span>
+          </div>
+          <p><strong>建议组合：</strong>{{ item.suggestedCombination }}</p>
+          <p>{{ item.risk }}</p>
+          <div class="mini-tag-row">
+            <span># {{ item.noteType }}</span>
+            <span># {{ item.category }}</span>
+            <span># 逐校核对</span>
+          </div>
+          <footer>
+            <a :href="item.sourceUrl" target="_blank" rel="noreferrer"><ShieldCheck :size="15" /> {{ item.source }}</a>
+          </footer>
+          <div class="note-social-row">
+            <span><ThumbsUp :size="15" /> {{ item.popularity }}</span>
+            <span><MessageCircle :size="15" /> {{ item.discussionCount }}</span>
+            <span><Bookmark :size="15" /> {{ item.saveCount }}</span>
+          </div>
+        </div>
       </article>
     </section>
   </main>

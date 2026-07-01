@@ -28,7 +28,7 @@ export const useForumStore = defineStore('forum', {
     } satisfies FeedFilter,
     selectedPostId: 1,
     page: 1,
-    pageSize: 4,
+    pageSize: 12,
     session: readStoredSession(),
     authOpen: false,
     publishOpen: false,
@@ -57,8 +57,35 @@ export const useForumStore = defineStore('forum', {
       }
       this.filter.subjects = [...this.filter.subjects.slice(-1), subject]
     },
+    setSubjects(subjects: Subject[]) {
+      this.filter.subjects = subjects.slice(0, 2)
+      this.page = 1
+    },
     setCategory(category: Category | 'all') {
       this.filter.category = category
+      this.page = 1
+    },
+    browseCategory(category: Category | 'all') {
+      this.filter.category = category
+      this.filter.keyword = ''
+      if (category === 'question') {
+        this.filter.track = 'history'
+        this.filter.subjects = ['politics', 'biology']
+      }
+      if (category === 'data') {
+        this.filter.track = 'physics'
+        this.filter.subjects = ['chemistry', 'biology']
+      }
+      this.page = 1
+    },
+    resetFilters() {
+      this.filter = {
+        track: 'physics',
+        subjects: ['chemistry', 'biology'],
+        category: 'all',
+        keyword: '',
+        sort: 'recommended',
+      }
       this.page = 1
     },
     setSort(sort: FeedSort) {

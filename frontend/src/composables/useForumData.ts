@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
 import { fetchInsights, fetchPosts, fetchTopics } from '../lib/api'
-import { sampleInsights, samplePosts } from '../lib/sampleData'
+import { sampleInsights, samplePosts, sampleTopics } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
+import type { Post } from '../types/forum'
 
 export function useForumData() {
   const forumStore = useForumStore()
@@ -25,8 +26,9 @@ export function useForumData() {
   const localPosts = computed(() => {
     const keyword = forumStore.filter.keyword.trim()
     const filtered = samplePosts.filter((post) => {
-      const matchesTrack = post.track === forumStore.filter.track
-      const matchesSubjects = forumStore.filter.subjects.every((subject) => post.electives.includes(subject))
+      const categoryFocused = forumStore.filter.category !== 'all'
+      const matchesTrack = categoryFocused || post.track === forumStore.filter.track
+      const matchesSubjects = categoryFocused || forumStore.filter.subjects.every((subject) => post.electives.includes(subject))
       const matchesCategory =
         forumStore.filter.category === 'all' || post.category === forumStore.filter.category
       const matchesKeyword =
@@ -55,14 +57,22 @@ export function useForumData() {
     return sorted.slice(start, start + forumStore.pageSize)
   })
 
-  const posts = computed(() => postsQuery.data.value ?? localPosts.value)
-  const insights = computed(() => insightsQuery.data.value ?? sampleInsights)
+  const posts = computed(() => {
+    const apiPosts = postsQuery.data.value ?? []
+    const merged = new Map<number, Post>()
+    ;[...apiPosts, ...localPosts.value].forEach((post) => merged.set(post.id, post))
+    return Array.from(merged.values())
+  })
+  const insights = computed(() => {
+    const apiInsights = insightsQuery.data.value ?? []
+    return [...apiInsights, ...sampleInsights.filter((item) => !apiInsights.some((apiItem) => apiItem.id === item.id))]
+  })
   const source = computed(() => (postsQuery.data.value ? 'api' : 'local'))
 
   return {
     posts,
     insights,
-    topics: computed(() => topicsQuery.data.value ?? []),
+    topics: computed(() => (topicsQuery.data.value?.length ? topicsQuery.data.value : sampleTopics)),
     source,
     isLoading: computed(() => postsQuery.isLoading.value && !postsQuery.data.value),
   }

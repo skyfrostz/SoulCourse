@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { createComment, fetchPostDetail, toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels, trackLabels } from '../lib/labels'
 import { requirementData, sourcedDataPosts } from '../lib/realData'
+import { sampleComments, samplePosts } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 
 const route = useRoute()
@@ -21,8 +22,9 @@ const detailQuery = useQuery({
   queryFn: () => fetchPostDetail(postId.value),
 })
 
-const post = computed(() => detailQuery.data.value?.post)
-const comments = computed(() => detailQuery.data.value?.comments ?? [])
+const fallbackPost = computed(() => samplePosts.find((item) => item.id === postId.value))
+const post = computed(() => detailQuery.data.value?.post ?? fallbackPost.value)
+const comments = computed(() => detailQuery.data.value?.comments?.length ? detailQuery.data.value.comments : sampleComments[postId.value] ?? [])
 const dataEvidence = computed(() => {
   if (post.value?.category !== 'data') return null
   return (

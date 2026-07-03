@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DecisionSearch from './DecisionSearch.vue'
 import { useForumData } from '../composables/useForumData'
+import { notificationSeeds, notificationTypeLabels } from '../lib/notifications'
 import { useForumStore } from '../stores/forum'
 import { samplePosts } from '../lib/sampleData'
 import type { Category } from '../types/forum'
@@ -21,6 +22,12 @@ let searchCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 let profileCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 const { posts, topics } = useForumData()
 const favoritePosts = computed(() => forumStore.getFavoritePosts([...forumStore.getCreatedPosts(), ...samplePosts, ...posts.value]).slice(0, 8))
+const notificationItems = computed(() =>
+  notificationSeeds.map((item) => ({
+    ...item,
+    unread: !forumStore.readNotificationIds[item.id],
+  })),
+)
 
 const navItems: Array<{ label: string; category: Category | 'all' }> = [
   { label: '首页', category: 'all' },
@@ -37,8 +44,13 @@ function setCategory(category: Category | 'all') {
 
 function togglePanel(panel: 'notifications' | 'profile') {
   if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
-  openPanel.value = openPanel.value === panel ? null : panel
-  if (panel === 'notifications') forumStore.markNotificationsRead()
+  const willOpen = openPanel.value !== panel
+  openPanel.value = willOpen ? panel : null
+  if (panel === 'notifications' && willOpen) forumStore.markNotificationsRead()
+}
+
+function formatNotificationTime(value: string) {
+  return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 function openSearch() {
@@ -131,11 +143,11 @@ onBeforeUnmount(() => {
       </button>
       <button class="icon-button" aria-label="通知" @click="togglePanel('notifications')">
         <Bell :size="20" />
-        <span v-if="forumStore.notificationUnread" class="notification-dot">{{ forumStore.notificationUnread }}</span>
+        <span v-if="forumStore.unreadNotificationCount" class="notification-dot" />
       </button>
       <RouterLink class="icon-button" aria-label="私信" to="/messages" @click="forumStore.markMessagesRead()">
         <Mail :size="20" />
-        <span v-if="forumStore.messageUnread" class="message-dot">{{ forumStore.messageUnread }}</span>
+        <span v-if="forumStore.messageUnread" class="message-dot" />
       </RouterLink>
       <button
         v-if="!forumStore.currentUser"
@@ -201,12 +213,29 @@ onBeforeUnmount(() => {
         </Transition>
       </div>
 
-      <div v-if="openPanel === 'notifications'" class="nav-popover">
-        <strong>通知</strong>
-        <p>你关注的“物理方向组合怎么选”新增 3 条讨论。</p>
-        <p>系统建议你完善 MBTI 和目标专业，提高推荐准确度。</p>
-        <RouterLink to="/settings" @click="openPanel = null">去完善资料</RouterLink>
-      </div>
+      <Transition name="soft-pop">
+        <div v-if="openPanel === 'notifications'" class="nav-popover notification-popover">
+          <header>
+            <strong>通知</strong>
+            <RouterLink to="/notifications" @click="openPanel = null">通知中心</RouterLink>
+          </header>
+          <RouterLink
+            v-for="item in notificationItems.slice(0, 4)"
+            :key="item.id"
+            class="notification-preview-card"
+            :to="item.targetUrl"
+            @click="openPanel = null; forumStore.markNotificationsRead([item.id])"
+          >
+            <span :class="{ unread: item.unread }"></span>
+            <small>{{ notificationTypeLabels[item.type] }} · {{ formatNotificationTime(item.createdAt) }}</small>
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.summary }}</p>
+          </RouterLink>
+          <RouterLink class="notification-center-link" to="/notifications" @click="openPanel = null">
+            查看全部通知
+          </RouterLink>
+        </div>
+      </Transition>
     </div>
   </header>
 </template>

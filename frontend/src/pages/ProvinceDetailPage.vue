@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChevronLeft, Download, ExternalLink, FileText, ShieldCheck } from '@lucide/vue'
+import { ChevronLeft, ExternalLink, FileText, ShieldCheck } from '@lucide/vue'
 import PostCard from '../components/PostCard.vue'
-import { nationalOfficialSources, provinceKnowledge } from '../lib/knowledgeBase'
+import { provinceKnowledge } from '../lib/knowledgeBase'
+import { createProvincePolicyDocuments, policyDocumentPath } from '../lib/policyDocuments'
 import { requirementData } from '../lib/realData'
 import { samplePosts } from '../lib/sampleData'
 
@@ -24,54 +25,7 @@ const provincePosts = computed(() => {
   return Array.from(merged.values()).slice(0, 12)
 })
 
-function searchUrl(query: string) {
-  return `https://www.baidu.com/s?wd=${encodeURIComponent(query)}`
-}
-
-const fileCards = computed(() => {
-  if (!province.value) return []
-  const policySource = nationalOfficialSources[0]
-  const volunteerSource = nationalOfficialSources[2]
-  return [
-    {
-      title: `${province.value.province}普通高校招生政策核对入口`,
-      type: '招生政策 / 官方文件入口',
-      summary: `重点核对 ${province.value.focus.join('、')}。${province.value.status}`,
-      url: province.value.portalUrl,
-      action: '进入考试院文件页',
-    },
-    {
-      title: `${province.value.province}本科专业选考科目要求`,
-      type: '选考目录 / PDF附件检索',
-      summary: province.value.reformMode === 'special'
-        ? '港澳台学生需以全国联招简章、高校面向港澳台招生办法和身份报名要求为准。'
-        : '逐校核对目标院校专业组的首选科目、再选科目和是否要求物理+化学。',
-      url: searchUrl(`${province.value.authority} 本科专业 选考科目要求 PDF 附件`),
-      action: '检索本省选考目录PDF',
-    },
-    {
-      title: `${province.value.province}招生政策及照顾政策`,
-      type: '政策汇总 / 官方汇总',
-      summary: '适合核对照顾政策、专项计划、报名条件、录取批次和志愿填报办法。',
-      url: policySource.url,
-      action: '查看全国招生政策汇总',
-    },
-    {
-      title: `${province.value.province}招生工作规定PDF`,
-      type: '招生规定 / PDF附件检索',
-      summary: '用于核对当年报名、考试、志愿填报、投档录取、照顾政策等完整文件。',
-      url: searchUrl(`${province.value.authority} 普通高校招生工作规定 PDF ${new Date().getFullYear()}`),
-      action: '检索招生规定PDF',
-    },
-    {
-      title: `${province.value.province}高校与专业信息延展`,
-      type: '志愿资料 / 专业库入口',
-      summary: '从选科要求延展到高校、专业介绍、培养方向和志愿参考信息。',
-      url: volunteerSource.url,
-      action: '进入阳光志愿信息系统',
-    },
-  ]
-})
+const fileCards = computed(() => (province.value ? createProvincePolicyDocuments(province.value) : []))
 </script>
 
 <template>
@@ -97,10 +51,15 @@ const fileCards = computed(() => {
       <article v-for="file in fileCards" :key="file.title" class="province-file-card">
         <small><FileText :size="15" /> {{ file.type }}</small>
         <h2>{{ file.title }}</h2>
-        <p>{{ file.summary }}</p>
-        <a :href="file.url" target="_blank" rel="noreferrer">
-          <Download :size="15" /> {{ file.action }}
-        </a>
+        <p>{{ file.abstract }}</p>
+        <div class="province-file-actions">
+          <RouterLink :to="policyDocumentPath(province.province, file.id)">
+            <FileText :size="15" /> 查看网页化全文
+          </RouterLink>
+          <a :href="file.downloadUrl" target="_blank" rel="noreferrer">
+            官方/下载入口 <ExternalLink :size="14" />
+          </a>
+        </div>
       </article>
     </section>
 

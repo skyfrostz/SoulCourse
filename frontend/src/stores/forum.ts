@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { authStorageKey } from '../lib/api'
+import { notificationSeeds } from '../lib/notifications'
 import type {
   AuthSession,
   Category,
@@ -67,7 +68,7 @@ export const useForumStore = defineStore('forum', {
     publishOpen: false,
     publishCategory: 'question' as Category,
     refreshHint: '',
-    notificationUnread: 12,
+    readNotificationIds: readStoredNotificationReads(),
     messageUnread: 3,
     choiceProfile: readStoredChoiceProfile(),
     localEngagement: readStoredLocalEngagement(),
@@ -76,6 +77,8 @@ export const useForumStore = defineStore('forum', {
   getters: {
     isAuthed: (state) => Boolean(state.session?.token),
     currentUser: (state) => state.session?.user ?? null,
+    unreadNotificationCount: (state) =>
+      notificationSeeds.filter((notification) => !state.readNotificationIds[notification.id]).length,
   },
   actions: {
     setTrack(track: Track) {
@@ -128,8 +131,14 @@ export const useForumStore = defineStore('forum', {
         this.refreshHint = ''
       }, 1600)
     },
-    markNotificationsRead() {
-      this.notificationUnread = 0
+    markNotificationsRead(ids?: string[]) {
+      const next = { ...this.readNotificationIds }
+      const targetIds = ids ?? notificationSeeds.map((notification) => notification.id)
+      targetIds.forEach((id) => {
+        next[id] = true
+      })
+      this.readNotificationIds = next
+      localStorage.setItem(notificationReadsStorageKey, JSON.stringify(next))
     },
     markMessagesRead(count?: number) {
       const readCount = count ?? this.messageUnread
@@ -365,6 +374,7 @@ export const useForumStore = defineStore('forum', {
 })
 
 export const choiceProfileStorageKey = 'scf_choice_profile'
+export const notificationReadsStorageKey = 'scf_notification_reads'
 
 function readStoredSession(): AuthSession | null {
   try {
@@ -405,6 +415,16 @@ function readStoredChoiceProfile(): ChoiceProfile {
   } catch {
     localStorage.removeItem(choiceProfileStorageKey)
     return defaults
+  }
+}
+
+function readStoredNotificationReads(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(notificationReadsStorageKey)
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+  } catch {
+    localStorage.removeItem(notificationReadsStorageKey)
+    return {}
   }
 }
 

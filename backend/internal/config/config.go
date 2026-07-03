@@ -43,7 +43,7 @@ func Load() (Config, error) {
 		AppEnv:             getEnv("APP_ENV", "local"),
 		AppName:            getEnv("APP_NAME", "subject-choice-forum"),
 		HTTPPort:           getEnv("HTTP_PORT", "8080"),
-		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")),
+		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174")),
 
 		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:     getEnv("POSTGRES_PORT", "5432"),

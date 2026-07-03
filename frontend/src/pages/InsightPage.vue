@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/vue-query'
 import { BarChart3, ChevronLeft, Gauge, TrendingUp } from '@lucide/vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchInsight } from '../lib/api'
+import PostCard from '../components/PostCard.vue'
+import { apiDataEnabled, fetchInsight } from '../lib/api'
 import { sampleInsights, samplePosts } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 
@@ -14,6 +15,7 @@ const insightId = computed(() => Number(route.params.id))
 const insightQuery = useQuery({
   queryKey: computed(() => ['insight-detail', insightId.value]),
   queryFn: () => fetchInsight(insightId.value),
+  enabled: apiDataEnabled,
 })
 const insight = computed(() =>
   insightQuery.data.value ?? sampleInsights.find((item) => item.id === insightId.value) ?? sampleInsights[0],
@@ -45,14 +47,11 @@ const relatedPosts = computed(() =>
     <section class="feed-panel topic-feed-panel">
       <div class="feed-toolbar">
         <div class="feed-tabs">
-          <button class="active">同组合小红书笔记</button>
+          <button class="active">同组合笔记</button>
         </div>
       </div>
       <div class="feed-grid">
-        <RouterLink v-for="post in relatedPosts" :key="post.id" class="mini-note-link" :to="`/posts/${post.id}`">
-          <strong>{{ post.title }}</strong>
-          <span>{{ post.authorName }} · {{ post.likesCount }}赞 · {{ post.favoritesCount }}收藏</span>
-        </RouterLink>
+        <PostCard v-for="post in relatedPosts" :key="post.id" :post="post" />
       </div>
     </section>
   </main>

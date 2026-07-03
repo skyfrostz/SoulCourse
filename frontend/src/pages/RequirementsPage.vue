@@ -3,8 +3,12 @@ import { computed, ref } from 'vue'
 import { Bookmark, ChevronLeft, MessageCircle, Search, ShieldCheck, SlidersHorizontal, Sparkles, ThumbsUp } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { majorRequirementCategories, majorRequirements, majorRequirementStats } from '../lib/majorRequirements'
+import { formatCompactCount, getMajorForumStats, majorForumPath } from '../lib/majorForum'
+import { samplePosts } from '../lib/sampleData'
+import { useForumStore } from '../stores/forum'
 
 const router = useRouter()
+const forumStore = useForumStore()
 const keyword = ref('')
 const activeCategory = ref('全部')
 const activeType = ref('全部')
@@ -24,6 +28,16 @@ const results = computed(() => {
 
 const setKeyword = (value: string) => {
   keyword.value = value
+}
+
+const statsByMajor = computed(() =>
+  new Map(majorRequirements.map((item) => [item.major, getMajorForumStats(item.major, forumStore, [...forumStore.getCreatedPosts(), ...samplePosts])])),
+)
+
+const statsFor = (major: string) => statsByMajor.value.get(major) ?? getMajorForumStats(major, forumStore, [...forumStore.getCreatedPosts(), ...samplePosts])
+
+const goMajorForum = (major: string) => {
+  router.push(majorForumPath(major))
 }
 </script>
 
@@ -82,11 +96,20 @@ const setKeyword = (value: string) => {
     </section>
 
     <section class="requirement-note-waterfall">
-      <article v-for="(item, index) in results" :key="item.major" class="requirement-note-card">
+      <article
+        v-for="(item, index) in results"
+        :key="item.major"
+        class="requirement-note-card"
+        role="link"
+        tabindex="0"
+        @click="goMajorForum(item.major)"
+        @keydown.enter="goMajorForum(item.major)"
+        @keydown.space.prevent="goMajorForum(item.major)"
+      >
         <div class="requirement-note-cover" :class="`tone-${index % 5}`">
           <small>{{ item.noteType }}</small>
-          <strong>{{ item.popularity }}</strong>
-          <span>热度</span>
+          <strong>{{ formatCompactCount(statsFor(item.major).hotScore) }}</strong>
+          <span>论坛热度</span>
           <div class="cover-bars" aria-hidden="true">
             <i :style="{ height: `${36 + (index % 4) * 10}px` }"></i>
             <i :style="{ height: `${54 + (index % 3) * 12}px` }"></i>
@@ -107,12 +130,13 @@ const setKeyword = (value: string) => {
             <span># 逐校核对</span>
           </div>
           <footer>
-            <a :href="item.sourceUrl" target="_blank" rel="noreferrer"><ShieldCheck :size="15" /> {{ item.source }}</a>
+            <a :href="item.sourceUrl" target="_blank" rel="noreferrer" @click.stop><ShieldCheck :size="15" /> {{ item.source }}</a>
           </footer>
           <div class="note-social-row">
-            <span><ThumbsUp :size="15" /> {{ item.popularity }}</span>
-            <span><MessageCircle :size="15" /> {{ item.discussionCount }}</span>
-            <span><Bookmark :size="15" /> {{ item.saveCount }}</span>
+            <span><Sparkles :size="15" /> {{ statsFor(item.major).postCount }} 篇</span>
+            <span><ThumbsUp :size="15" /> {{ formatCompactCount(statsFor(item.major).likesCount) }}</span>
+            <span><MessageCircle :size="15" /> {{ formatCompactCount(statsFor(item.major).commentsCount) }}</span>
+            <span><Bookmark :size="15" /> {{ formatCompactCount(statsFor(item.major).favoritesCount) }}</span>
           </div>
         </div>
       </article>

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
-import { fetchInsights, fetchPosts, fetchTopics } from '../lib/api'
-import { sampleInsights, samplePosts, sampleTopics } from '../lib/sampleData'
+import { apiDataEnabled, fetchInsights, fetchPosts, fetchTopics } from '../lib/api'
+import { sampleComments, sampleInsights, samplePosts, sampleTopics } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 import type { Post } from '../types/forum'
 
@@ -11,21 +11,25 @@ export function useForumData() {
   const postsQuery = useQuery({
     queryKey: computed(() => ['posts', forumStore.filter, forumStore.page, forumStore.session?.user.id ?? 'guest']),
     queryFn: () => fetchPosts(forumStore.filter, forumStore.page, forumStore.pageSize),
+    enabled: apiDataEnabled,
   })
 
   const insightsQuery = useQuery({
     queryKey: ['insights'],
     queryFn: fetchInsights,
+    enabled: apiDataEnabled,
   })
 
   const topicsQuery = useQuery({
     queryKey: ['topics'],
     queryFn: fetchTopics,
+    enabled: apiDataEnabled,
   })
 
   const localPosts = computed(() => {
     const keyword = forumStore.filter.keyword.trim()
-    const filtered = samplePosts.filter((post) => {
+    const sourcePosts = [...forumStore.getCreatedPosts(), ...samplePosts]
+    const filtered = sourcePosts.filter((post) => {
       const categoryFocused = forumStore.filter.category !== 'all'
       const matchesTrack = categoryFocused || post.track === forumStore.filter.track
       const matchesSubjects = categoryFocused || forumStore.filter.subjects.every((subject) => post.electives.includes(subject))
@@ -33,9 +37,17 @@ export function useForumData() {
         forumStore.filter.category === 'all' || post.category === forumStore.filter.category
       const matchesKeyword =
         !keyword ||
-        post.title.includes(keyword) ||
-        post.content.includes(keyword) ||
-        post.authorName.includes(keyword)
+        [
+          post.title,
+          post.content,
+          post.authorName,
+          post.province,
+          post.grade,
+          post.category,
+          post.track,
+          ...post.tags,
+          ...post.electives,
+        ].some((value) => value.includes(keyword))
       return matchesTrack && matchesSubjects && matchesCategory && matchesKeyword
     })
     const sorted = [...filtered].sort((a, b) => {
@@ -60,7 +72,16 @@ export function useForumData() {
   const posts = computed(() => {
     const apiPosts = postsQuery.data.value ?? []
     const merged = new Map<number, Post>()
-    ;[...apiPosts, ...localPosts.value].forEach((post) => merged.set(post.id, post))
+    ;[...localPosts.value, ...apiPosts].forEach((post) => {
+      const hydrated = forumStore.hydratePost(post)
+      const fallbackComments = sampleComments[post.id]
+      merged.set(post.id, {
+        ...hydrated,
+        commentsCount: fallbackComments
+          ? forumStore.getActualCommentCount(post.id, fallbackComments)
+          : (forumStore.localEngagement.comments[post.id]?.length ?? hydrated.commentsCount),
+      })
+    })
     return Array.from(merged.values())
   })
   const insights = computed(() => {
@@ -74,6 +95,6 @@ export function useForumData() {
     insights,
     topics: computed(() => (topicsQuery.data.value?.length ? topicsQuery.data.value : sampleTopics)),
     source,
-    isLoading: computed(() => postsQuery.isLoading.value && !postsQuery.data.value),
+    isLoading: computed(() => postsQuery.isLoading.value && !localPosts.value.length && !postsQuery.data.value),
   }
 }

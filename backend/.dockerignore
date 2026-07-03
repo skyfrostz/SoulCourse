@@ -1,0 +1,6 @@
+node_modules
+.air.toml
+tmp
+.git
+.gitignore
+*.md

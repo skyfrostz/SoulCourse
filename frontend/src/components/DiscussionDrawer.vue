@@ -2,7 +2,7 @@
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { Bookmark, MessageSquare, Send, Share2, ThumbsUp, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
-import { toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
+import { apiDataEnabled, toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels } from '../lib/labels'
 import { usePostComments } from '../composables/usePostComments'
 import { useForumStore } from '../stores/forum'
@@ -21,7 +21,7 @@ const { comments, submitComment, isSubmitting } = usePostComments(() => props.po
 watch(
   () => props.post,
   (post) => {
-    livePost.value = post
+    livePost.value = forumStore.hydratePost(post)
     draft.value = ''
   },
   { immediate: true },
@@ -47,31 +47,87 @@ const followMutation = useMutation({
   mutationFn: () => toggleFollowAuthor(props.post.authorName),
   onSuccess: (result) => {
     livePost.value = { ...livePost.value, viewerFollowing: result.active }
+    forumStore.setUserFollow({
+      name: props.post.authorName,
+      role: props.post.authorRole,
+      province: props.post.province,
+      grade: props.post.grade,
+      followedAt: new Date().toISOString(),
+    }, result.active)
     queryClient.invalidateQueries({ queryKey: ['posts'] })
   },
 })
 
 const commentCount = computed(() => comments.value.length)
 
+function closeDrawer() {
+  forumStore.closeDetail()
+}
+
 async function submit() {
   if (!forumStore.requireAuth()) return
   const content = draft.value.trim()
   if (!content) return
   await submitComment(content)
-  livePost.value = { ...livePost.value, commentsCount: livePost.value.commentsCount + 1 }
+  livePost.value = { ...livePost.value, commentsCount: commentCount.value }
   draft.value = ''
 }
 
 function like() {
-  if (forumStore.requireAuth()) likeMutation.mutate()
+  if (!forumStore.requireAuth()) return
+  if (!apiDataEnabled) {
+    livePost.value = forumStore.toggleLocalLike(livePost.value)
+    return
+  }
+  likeMutation.mutate(undefined, {
+    onError: () => {
+      livePost.value = forumStore.toggleLocalLike(livePost.value)
+    },
+  })
 }
 
 function favorite() {
-  if (forumStore.requireAuth()) favoriteMutation.mutate()
+  if (!forumStore.requireAuth()) return
+  if (!apiDataEnabled) {
+    livePost.value = forumStore.toggleLocalFavorite(livePost.value)
+    return
+  }
+  favoriteMutation.mutate(undefined, {
+    onError: () => {
+      livePost.value = forumStore.toggleLocalFavorite(livePost.value)
+    },
+  })
 }
 
 function follow() {
-  if (forumStore.requireAuth()) followMutation.mutate()
+  if (!forumStore.requireAuth()) return
+  if (!apiDataEnabled) {
+    livePost.value = forumStore.toggleLocalFollow(livePost.value)
+    return
+  }
+  followMutation.mutate(undefined, {
+    onError: () => {
+      livePost.value = forumStore.toggleLocalFollow(livePost.value)
+    },
+  })
+}
+
+async function sharePost() {
+  const url = `${window.location.origin}/posts/${livePost.value.id}`
+  if (navigator.share) {
+    await navigator.share({ title: livePost.value.title, text: livePost.value.content, url }).catch(() => undefined)
+    return
+  }
+  await navigator.clipboard?.writeText(url).catch(() => undefined)
+  forumStore.refreshHint = '帖子链接已复制，可以发给同学一起讨论。'
+  window.setTimeout(() => {
+    forumStore.refreshHint = ''
+  }, 1600)
+}
+
+function replyTo(author: string) {
+  if (!forumStore.requireAuth()) return
+  draft.value = `@${author} `
 }
 </script>
 
@@ -79,7 +135,7 @@ function follow() {
   <aside class="discussion-drawer">
     <div class="drawer-header">
       <span class="category-chip" :class="livePost.category">{{ categoryLabels[livePost.category] }}</span>
-      <button class="icon-button" aria-label="关闭详情">
+      <button class="icon-button" aria-label="关闭详情" @click="closeDrawer">
         <X :size="18" />
       </button>
     </div>
@@ -87,9 +143,13 @@ function follow() {
     <article class="drawer-post">
       <h1>{{ livePost.title }}</h1>
       <div class="drawer-author">
-        <span class="avatar medium">{{ livePost.authorName.slice(0, 1) }}</span>
+        <RouterLink class="avatar medium user-link-avatar" :to="`/users/${encodeURIComponent(livePost.authorName)}`">
+          {{ livePost.authorName.slice(0, 1) }}
+        </RouterLink>
         <span>
-          <strong>{{ livePost.authorName }}</strong>
+          <RouterLink class="author-name-link" :to="`/users/${encodeURIComponent(livePost.authorName)}`">
+            <strong>{{ livePost.authorName }}</strong>
+          </RouterLink>
           <small>{{ livePost.grade }} · {{ roleLabels[livePost.authorRole] }}</small>
         </span>
         <button class="follow-button" :class="{ active: livePost.viewerFollowing }" @click="follow">
@@ -104,8 +164,8 @@ function follow() {
       </p>
 
       <div class="drawer-actions">
-        <button><Share2 :size="17" /> 分享</button>
-        <button><MessageSquare :size="17" /> {{ livePost.commentsCount }}</button>
+        <button @click="sharePost"><Share2 :size="17" /> 分享</button>
+        <button><MessageSquare :size="17" /> {{ commentCount }}</button>
         <button :class="{ liked: livePost.viewerLiked }" @click="like">
           <ThumbsUp :size="17" /> {{ livePost.likesCount }}
         </button>
@@ -118,7 +178,7 @@ function follow() {
     <section class="comment-section">
       <div class="comment-title-row">
         <h2>评论 {{ commentCount }}</h2>
-        <button>按时间</button>
+        <span class="comment-sort-label">按时间</span>
       </div>
 
       <form class="comment-form" @submit.prevent="submit">
@@ -131,16 +191,20 @@ function follow() {
 
       <div class="comment-list">
         <article v-for="comment in comments" :key="comment.id" class="comment-item">
-          <span class="small-avatar">{{ comment.author.slice(0, 1) }}</span>
+          <RouterLink class="small-avatar user-link-avatar" :to="`/users/${encodeURIComponent(comment.author)}`">
+            {{ comment.author.slice(0, 1) }}
+          </RouterLink>
           <div>
             <div class="comment-meta">
-              <strong>{{ comment.author }}</strong>
+              <RouterLink :to="`/users/${encodeURIComponent(comment.author)}`">
+                <strong>{{ comment.author }}</strong>
+              </RouterLink>
               <span>{{ roleLabels[comment.role] }}</span>
             </div>
             <p>{{ comment.content }}</p>
             <div class="comment-actions">
               <span>{{ new Date(comment.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}</span>
-              <button>回复</button>
+              <button @click="replyTo(comment.author)">回复</button>
             </div>
           </div>
         </article>

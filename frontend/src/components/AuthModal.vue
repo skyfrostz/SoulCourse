@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue'
+import axios from 'axios'
 import { ref } from 'vue'
-import { login, register } from '../lib/api'
+import { apiDataEnabled, login, register } from '../lib/api'
 import { useForumStore } from '../stores/forum'
+import type { AuthSession, Role } from '../types/forum'
 
 const forumStore = useForumStore()
 const mode = ref<'login' | 'register'>('login')
 const email = ref('demo@student.local')
 const password = ref('123456')
 const nickname = ref('高一新用户')
-const role = ref('student')
+const role = ref<Role>('student')
 const province = ref('浙江')
 const grade = ref('高一')
 const error = ref('')
@@ -19,6 +21,10 @@ async function submit() {
   loading.value = true
   error.value = ''
   try {
+    if (!apiDataEnabled) {
+      forumStore.setSession(createLocalSession())
+      return
+    }
     const session =
       mode.value === 'login'
         ? await login(email.value, password.value)
@@ -32,9 +38,30 @@ async function submit() {
           })
     forumStore.setSession(session)
   } catch (err) {
-    error.value = mode.value === 'login' ? '邮箱或密码不正确' : '注册失败，请检查邮箱是否已存在'
+    if (axios.isAxiosError(err) && !err.response) {
+      forumStore.setSession(createLocalSession())
+    } else {
+      error.value = mode.value === 'login' ? '邮箱或密码不正确' : '注册失败，请检查邮箱是否已存在'
+    }
   } finally {
     loading.value = false
+  }
+}
+
+function createLocalSession(): AuthSession {
+  const nicknameFromEmail = email.value.split('@')[0]?.replace(/[._-]+/g, '') || '本地用户'
+  const isDemo = email.value === 'demo@student.local'
+  return {
+    token: `local-${Date.now()}`,
+    user: {
+      id: isDemo ? 1 : Date.now(),
+      email: email.value,
+      nickname: mode.value === 'register' ? nickname.value : isDemo ? '演示同学' : nicknameFromEmail,
+      role: mode.value === 'register' ? role.value : 'student',
+      province: mode.value === 'register' ? province.value : '浙江',
+      grade: mode.value === 'register' ? grade.value : '高一',
+      createdAt: new Date().toISOString(),
+    },
   }
 }
 </script>

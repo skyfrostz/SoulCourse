@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
 import { ChevronLeft, Eye, Hash, MessageSquare, PenLine, Search, TrendingUp } from '@lucide/vue'
 import { useRouter } from 'vue-router'
-import { fetchTopics } from '../lib/api'
+import { apiDataEnabled, fetchTopics } from '../lib/api'
 import { sampleTopics } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 
@@ -12,6 +12,7 @@ const forumStore = useForumStore()
 const topicsQuery = useQuery({
   queryKey: ['topics-overview'],
   queryFn: fetchTopics,
+  enabled: apiDataEnabled,
 })
 const topicCards = computed(() =>
   (topicsQuery.data.value?.length ? topicsQuery.data.value : sampleTopics).map((topic, index) => ({

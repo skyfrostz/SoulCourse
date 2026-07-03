@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Bell, BookOpen, ChevronDown, LogOut, Mail, PenLine, Search, Settings } from '@lucide/vue'
+import { Bell, BookOpen, Bookmark, ChevronDown, LogOut, Mail, PenLine, Search, Settings, Users } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DecisionSearch from './DecisionSearch.vue'
 import { useForumData } from '../composables/useForumData'
 import { useForumStore } from '../stores/forum'
+import { samplePosts } from '../lib/sampleData'
 import type { Category } from '../types/forum'
 
 defineProps<{
@@ -17,13 +18,15 @@ const openPanel = ref<'notifications' | 'profile' | null>(null)
 const searchOpen = ref(false)
 const searchRoot = ref<HTMLElement | null>(null)
 let searchCloseTimer: ReturnType<typeof window.setTimeout> | undefined
+let profileCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 const { posts, topics } = useForumData()
+const favoritePosts = computed(() => forumStore.getFavoritePosts([...forumStore.getCreatedPosts(), ...samplePosts, ...posts.value]).slice(0, 8))
 
 const navItems: Array<{ label: string; category: Category | 'all' }> = [
   { label: '首页', category: 'all' },
   { label: '经验帖', category: 'experience' },
   { label: '数据建议', category: 'data' },
-  { label: '家长提问', category: 'question' },
+  { label: '提问', category: 'question' },
 ]
 
 const activeCategory = computed(() => (route.path === '/' ? forumStore.filter.category : ''))
@@ -33,6 +36,7 @@ function setCategory(category: Category | 'all') {
 }
 
 function togglePanel(panel: 'notifications' | 'profile') {
+  if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
   openPanel.value = openPanel.value === panel ? null : panel
   if (panel === 'notifications') forumStore.markNotificationsRead()
 }
@@ -46,7 +50,18 @@ function closeSearchSoon() {
   if (searchCloseTimer) window.clearTimeout(searchCloseTimer)
   searchCloseTimer = window.setTimeout(() => {
     searchOpen.value = false
-  }, 180)
+  }, 340)
+}
+
+function keepProfilePanelOpen() {
+  if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
+}
+
+function closeProfileSoon() {
+  if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
+  profileCloseTimer = window.setTimeout(() => {
+    if (openPanel.value === 'profile') openPanel.value = null
+  }, 340)
 }
 
 function closeSearchWhenOutside(event: PointerEvent) {
@@ -61,6 +76,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (searchCloseTimer) window.clearTimeout(searchCloseTimer)
+  if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
   window.removeEventListener('pointerdown', closeSearchWhenOutside)
 })
 </script>
@@ -129,31 +145,67 @@ onBeforeUnmount(() => {
       >
         登录 / 注册
       </button>
-      <button v-else class="profile-button" aria-label="个人中心" @click="togglePanel('profile')">
-        <span class="avatar">{{ forumStore.currentUser.nickname.slice(0, 1) }}</span>
-        <span class="profile-name">{{ forumStore.currentUser.nickname }}</span>
-        <ChevronDown :size="15" />
-      </button>
+      <div
+        v-else
+        class="profile-menu-root"
+        @pointerenter="keepProfilePanelOpen"
+        @pointerleave="closeProfileSoon"
+      >
+        <button class="profile-button" aria-label="个人中心" @click="togglePanel('profile')">
+          <span class="avatar">{{ forumStore.currentUser.nickname.slice(0, 1) }}</span>
+          <span class="profile-name">{{ forumStore.currentUser.nickname }}</span>
+          <ChevronDown :size="15" />
+        </button>
+
+        <Transition name="soft-pop">
+          <div
+            v-if="openPanel === 'profile'"
+            class="nav-popover profile-popover"
+            @pointerenter="keepProfilePanelOpen"
+            @pointerleave="closeProfileSoon"
+          >
+            <div>
+              <span class="avatar">{{ forumStore.currentUser?.nickname.slice(0, 1) }}</span>
+              <strong>{{ forumStore.currentUser?.nickname }}</strong>
+              <small>{{ forumStore.currentUser?.grade }} · {{ forumStore.currentUser?.province }}</small>
+            </div>
+            <RouterLink to="/settings" @click="openPanel = null">
+              <Settings :size="16" /> 个人信息与选科画像
+            </RouterLink>
+            <RouterLink
+              v-if="forumStore.currentUser"
+              :to="`/users/${encodeURIComponent(forumStore.currentUser.nickname)}`"
+              @click="openPanel = null"
+            >
+              <Bookmark :size="16" /> 我的主页与收藏
+            </RouterLink>
+            <RouterLink to="/following" @click="openPanel = null">
+              <Users :size="16" /> 我的关注
+            </RouterLink>
+            <section class="profile-favorites">
+              <strong><Bookmark :size="15" /> 我的收藏</strong>
+              <p v-if="!favoritePosts.length">还没有收藏帖子，点进帖子详情收藏后会出现在这里。</p>
+              <RouterLink
+                v-for="post in favoritePosts"
+                :key="post.id"
+                :to="`/posts/${post.id}`"
+                @click="openPanel = null"
+              >
+                {{ post.title }}
+              </RouterLink>
+            </section>
+            <button type="button" @click="forumStore.logout(); openPanel = null">
+              <LogOut :size="16" /> 退出登录
+            </button>
+          </div>
+        </Transition>
+      </div>
 
       <div v-if="openPanel === 'notifications'" class="nav-popover">
         <strong>通知</strong>
         <p>你关注的“物理方向组合怎么选”新增 3 条讨论。</p>
         <p>系统建议你完善 MBTI 和目标专业，提高推荐准确度。</p>
         <RouterLink to="/settings" @click="openPanel = null">去完善资料</RouterLink>
-      </div>
-
-      <div v-if="openPanel === 'profile'" class="nav-popover profile-popover">
-        <div>
-          <span class="avatar">{{ forumStore.currentUser?.nickname.slice(0, 1) }}</span>
-          <strong>{{ forumStore.currentUser?.nickname }}</strong>
-          <small>{{ forumStore.currentUser?.grade }} · {{ forumStore.currentUser?.province }}</small>
-        </div>
-        <RouterLink to="/settings" @click="openPanel = null">
-          <Settings :size="16" /> 个人信息与选科画像
-        </RouterLink>
-        <button type="button" @click="forumStore.logout(); openPanel = null">
-          <LogOut :size="16" /> 退出登录
-        </button>
       </div>
     </div>
   </header>

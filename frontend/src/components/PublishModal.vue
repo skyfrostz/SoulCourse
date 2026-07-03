@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { ImagePlus, Tag, Trash2, X } from '@lucide/vue'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createPost } from '../lib/api'
+import { apiDataEnabled, createPost } from '../lib/api'
 import { subjectLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
 import type { Category, Subject, Track } from '../types/forum'
@@ -26,8 +26,8 @@ const error = ref('')
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']
 
 const publishMutation = useMutation({
-  mutationFn: () =>
-    createPost({
+  mutationFn: async () => {
+    const payload = {
       title: title.value,
       content: content.value,
       imageUrls: imagePreviews.value.slice(0, 9),
@@ -37,7 +37,14 @@ const publishMutation = useMutation({
       category: category.value,
       grade: forumStore.currentUser?.grade ?? '高一',
       province: forumStore.currentUser?.province ?? '全国',
-    }),
+    }
+    if (!apiDataEnabled) return forumStore.createLocalPost(payload)
+    try {
+      return await createPost(payload)
+    } catch {
+      return forumStore.createLocalPost(payload)
+    }
+  },
   onSuccess: (post) => {
     queryClient.invalidateQueries({ queryKey: ['posts'] })
     forumStore.publishOpen = false

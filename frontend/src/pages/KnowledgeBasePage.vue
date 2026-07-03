@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ChevronLeft, ExternalLink, Newspaper, Search, ShieldCheck } from '@lucide/vue'
+import { ChevronLeft, ExternalLink, FileText, MapPin, Newspaper, Search, ShieldCheck } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import {
   knowledgeTakeaways,
@@ -30,6 +30,21 @@ const filteredProvinces = computed(() => {
     return matchRegion && (!q || searchable.includes(q))
   })
 })
+
+function provincePath(province: string) {
+  return `/knowledge/${encodeURIComponent(province)}`
+}
+
+function reformLabel(mode: string) {
+  if (mode === '3+3') return '3+3 新高考'
+  if (mode === '3+1+2') return '3+1+2 新高考'
+  if (mode === 'special') return '特殊招生'
+  return '传统/过渡'
+}
+
+function provinceTone(index: number) {
+  return ['tone-mint', 'tone-blue', 'tone-amber', 'tone-rose', 'tone-violet'][index % 5]
+}
 
 const modeCount = computed(() => ({
   newGaokao: provinceKnowledge.filter((item) => item.reformMode === '3+3' || item.reformMode === '3+1+2').length,
@@ -87,23 +102,43 @@ const modeCount = computed(() => ({
       </article>
     </section>
 
-    <section class="province-knowledge-grid">
-      <article v-for="item in filteredProvinces" :key="item.province" class="province-knowledge-card">
-        <div class="province-card-head">
-          <span>{{ item.province }}</span>
-          <small>{{ item.region }} · {{ item.reformMode }}</small>
-        </div>
-        <h2>{{ item.authority }}</h2>
-        <p>{{ item.status }}</p>
-        <div class="mini-tag-row">
-          <span v-for="tag in item.focus" :key="tag"># {{ tag }}</span>
-        </div>
-        <ol>
-          <li v-for="task in item.checklist" :key="task">{{ task }}</li>
-        </ol>
-        <a :href="item.portalUrl" target="_blank" rel="noreferrer">
-          官方入口 <ExternalLink :size="14" />
-        </a>
+    <section class="province-knowledge-grid xhs-province-waterfall">
+      <article
+        v-for="(item, index) in filteredProvinces"
+        :key="item.province"
+        class="province-knowledge-card xhs-province-card"
+      >
+        <RouterLink class="province-card-main" :to="provincePath(item.province)">
+          <div class="province-note-cover" :class="provinceTone(index)">
+            <div>
+              <small><MapPin :size="14" /> {{ item.region }}</small>
+              <strong>{{ item.province }}</strong>
+              <span>{{ reformLabel(item.reformMode) }}</span>
+            </div>
+            <em>{{ item.focus[0] }}</em>
+          </div>
+          <div class="province-note-body">
+            <div class="province-card-head">
+              <span>{{ item.authority }}</span>
+              <small>{{ item.checklist.length }} 项核对</small>
+            </div>
+            <p>{{ item.status }}</p>
+            <div class="mini-tag-row">
+              <span v-for="tag in item.focus" :key="tag"># {{ tag }}</span>
+            </div>
+            <div class="province-checklist">
+              <span v-for="task in item.checklist.slice(0, 3)" :key="task">
+                <FileText :size="14" /> {{ task }}
+              </span>
+            </div>
+          </div>
+        </RouterLink>
+        <footer class="province-note-footer">
+          <RouterLink :to="provincePath(item.province)">查看资料包</RouterLink>
+          <a :href="item.portalUrl" target="_blank" rel="noreferrer" @click.stop>
+            官方入口 <ExternalLink :size="14" />
+          </a>
+        </footer>
       </article>
     </section>
 

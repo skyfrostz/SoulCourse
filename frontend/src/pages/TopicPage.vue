@@ -4,7 +4,7 @@ import { ChevronLeft, Eye, MessageSquare } from '@lucide/vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
-import { fetchTopic } from '../lib/api'
+import { apiDataEnabled, fetchTopic } from '../lib/api'
 import { sampleTopicDetails } from '../lib/sampleData'
 
 const route = useRoute()
@@ -13,6 +13,7 @@ const slug = computed(() => String(route.params.slug))
 const topicQuery = useQuery({
   queryKey: computed(() => ['topic-detail', slug.value]),
   queryFn: () => fetchTopic(slug.value),
+  enabled: apiDataEnabled,
 })
 const topicDetail = computed(() => topicQuery.data.value ?? sampleTopicDetails[slug.value])
 </script>

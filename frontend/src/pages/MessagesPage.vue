@@ -13,6 +13,7 @@ const threads = reactive([
     name: '王老师',
     role: '高中选科指导',
     unread: 2,
+    starred: false,
     messages: [
       { from: 'them', text: '你现在不用急着定组合，先把近三次大考的物理、化学排名趋势拉出来。' },
       { from: 'them', text: '如果目标仍偏理工农医，建议重点核对物化双选要求，再看孩子能否承受。' },
@@ -22,6 +23,7 @@ const threads = reactive([
     name: '选科研究所',
     role: '数据建议',
     unread: 1,
+    starred: false,
     messages: [
       { from: 'them', text: '我们已根据浙江、上海、甘肃公开目录补充了数据看板。' },
       { from: 'them', text: '你的个人画像还缺少 MBTI 和目标专业，完善后推荐会更具体。' },
@@ -31,6 +33,7 @@ const threads = reactive([
     name: '海淀家长',
     role: '家长互助',
     unread: 0,
+    starred: false,
     messages: [{ from: 'them', text: '我们家最后是用“成绩稳定性 + 专业排除清单”定下来的，比单看覆盖率更安心。' }],
   },
 ])
@@ -53,6 +56,10 @@ function sendMessage() {
   if (!text) return
   threads[activeThread.value].messages.push({ from: 'me', text })
   draft.value = ''
+}
+
+function toggleStarred() {
+  threads[activeThread.value].starred = !threads[activeThread.value].starred
 }
 </script>
 
@@ -88,7 +95,13 @@ function sendMessage() {
             <strong>{{ threads[activeThread].name }}</strong>
             <small>{{ threads[activeThread].role }}</small>
           </span>
-          <button type="button"><Star :size="16" /> 标记重点</button>
+          <button
+            type="button"
+            :class="{ active: threads[activeThread].starred }"
+            @click="toggleStarred"
+          >
+            <Star :size="16" /> {{ threads[activeThread].starred ? '已标重点' : '标记重点' }}
+          </button>
         </header>
 
         <div class="message-bubbles">

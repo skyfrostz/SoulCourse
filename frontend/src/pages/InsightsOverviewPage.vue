@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 import { BarChart3, ChevronLeft, Gauge, Search, ShieldCheck, TrendingUp } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchInsights } from '../lib/api'
+import { apiDataEnabled, fetchInsights } from '../lib/api'
 import { policyTakeaways, requirementData } from '../lib/realData'
 import { sampleInsights } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
@@ -14,6 +14,7 @@ const forumStore = useForumStore()
 const insightsQuery = useQuery({
   queryKey: ['insights-overview'],
   queryFn: fetchInsights,
+  enabled: apiDataEnabled,
 })
 const mode = ref<'heat' | 'match' | 'coverage'>(
   route.query.mode === 'match' || route.query.mode === 'coverage' ? route.query.mode : 'heat',

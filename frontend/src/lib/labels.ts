@@ -14,7 +14,7 @@ export const subjectLabels: Record<Subject, string> = {
 
 export const categoryLabels: Record<Category, string> = {
   experience: '经验帖',
-  question: '家长提问',
+  question: '提问',
   data: '数据建议',
 }
 

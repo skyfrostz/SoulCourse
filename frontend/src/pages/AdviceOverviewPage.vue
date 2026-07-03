@@ -2,11 +2,13 @@
 import { computed, ref } from 'vue'
 import { Bookmark, ChevronLeft, Heart, MessageCircle, PenLine, Search, ShieldCheck, Sparkles, ThumbsUp } from '@lucide/vue'
 import { useRouter } from 'vue-router'
+import { useAdviceEngagement } from '../composables/useAdviceEngagement'
 import { adviceNotes } from '../lib/adviceNotes'
 import { useForumStore } from '../stores/forum'
 
 const router = useRouter()
 const forumStore = useForumStore()
+const adviceEngagement = useAdviceEngagement()
 
 const keyword = ref('')
 const activeLens = ref<'all' | 'coverage' | 'pressure' | 'risk' | 'timeline' | 'parent'>('all')
@@ -28,6 +30,26 @@ const adviceList = computed(() => {
         .some((value) => value.includes(q))),
   )
 })
+
+function openNote(id: string) {
+  router.push(`/advice/${id}`)
+}
+
+function toggleLike(event: MouseEvent, note: (typeof adviceNotes)[number]) {
+  event.stopPropagation()
+  adviceEngagement.toggleLike(note.id, note.likes)
+}
+
+function toggleSave(event: MouseEvent, note: (typeof adviceNotes)[number]) {
+  event.stopPropagation()
+  if (!forumStore.requireAuth()) return
+  adviceEngagement.toggleSave(note.id, note.saves)
+}
+
+function openComments(event: MouseEvent, note: (typeof adviceNotes)[number]) {
+  event.stopPropagation()
+  router.push(`/advice/${note.id}#comments`)
+}
 </script>
 
 <template>
@@ -72,6 +94,10 @@ const adviceList = computed(() => {
         v-for="note in adviceList"
         :key="note.id"
         class="advice-note-card"
+        role="button"
+        tabindex="0"
+        @click="openNote(note.id)"
+        @keydown.enter="openNote(note.id)"
       >
         <div class="advice-note-visual" :class="`tone-${note.cover}`">
           <span>{{ note.metricLabel }}</span>
@@ -88,13 +114,27 @@ const adviceList = computed(() => {
           <ol>
             <li v-for="action in note.actions.slice(0, 3)" :key="action">{{ action }}</li>
           </ol>
-          <a class="note-source-link" :href="note.sourceUrl" target="_blank" rel="noreferrer">
+          <a class="note-source-link" :href="note.sourceUrl" target="_blank" rel="noreferrer" @click.stop>
             <ShieldCheck :size="14" /> {{ note.source }}
           </a>
           <div class="note-social-row">
-            <span><ThumbsUp :size="15" /> {{ note.likes }}</span>
-            <span><MessageCircle :size="15" /> {{ note.comments }}</span>
-            <span><Bookmark :size="15" /> {{ note.saves }}</span>
+            <button
+              type="button"
+              :class="{ active: adviceEngagement.getStats(note.id, note.likes, note.saves).liked }"
+              @click="toggleLike($event, note)"
+            >
+              <ThumbsUp :size="15" /> {{ adviceEngagement.getStats(note.id, note.likes, note.saves).likes }}
+            </button>
+            <button type="button" @click="openComments($event, note)">
+              <MessageCircle :size="15" /> {{ adviceEngagement.getStats(note.id, note.likes, note.saves).comments }}
+            </button>
+            <button
+              type="button"
+              :class="{ active: adviceEngagement.getStats(note.id, note.likes, note.saves).saved }"
+              @click="toggleSave($event, note)"
+            >
+              <Bookmark :size="15" /> {{ adviceEngagement.getStats(note.id, note.likes, note.saves).saves }}
+            </button>
           </div>
         </div>
       </article>

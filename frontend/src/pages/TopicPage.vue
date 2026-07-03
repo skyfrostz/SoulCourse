@@ -5,7 +5,6 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
 import { apiDataEnabled, fetchTopic } from '../lib/api'
-import { sampleTopicDetails } from '../lib/sampleData'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,7 +14,7 @@ const topicQuery = useQuery({
   queryFn: () => fetchTopic(slug.value),
   enabled: apiDataEnabled,
 })
-const topicDetail = computed(() => topicQuery.data.value ?? sampleTopicDetails[slug.value])
+const topicDetail = computed(() => topicQuery.data.value)
 </script>
 
 <template>
@@ -29,6 +28,11 @@ const topicDetail = computed(() => topicQuery.data.value ?? sampleTopicDetails[s
         <span><Eye :size="17" /> {{ topicDetail.topic.viewsCount }} 浏览</span>
         <span><MessageSquare :size="17" /> {{ topicDetail.topic.postsCount }} 篇讨论</span>
       </div>
+    </section>
+
+    <section v-else-if="!topicQuery.isLoading.value" class="empty-state detail-empty-state">
+      <h1>话题暂时无法加载</h1>
+      <p>请返回话题广场刷新，或稍后重试。</p>
     </section>
 
     <section class="feed-panel topic-feed-panel">

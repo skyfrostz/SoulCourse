@@ -6,11 +6,10 @@ import DecisionSearch from './DecisionSearch.vue'
 import { useForumData } from '../composables/useForumData'
 import { notificationSeeds, notificationTypeLabels } from '../lib/notifications'
 import { useForumStore } from '../stores/forum'
-import { samplePosts } from '../lib/sampleData'
 import type { Category } from '../types/forum'
 
 defineProps<{
-  source: 'api' | 'local'
+  source: 'api'
 }>()
 
 const forumStore = useForumStore()
@@ -21,7 +20,7 @@ const searchRoot = ref<HTMLElement | null>(null)
 let searchCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 let profileCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 const { posts, topics } = useForumData()
-const favoritePosts = computed(() => forumStore.getFavoritePosts([...forumStore.getCreatedPosts(), ...samplePosts, ...posts.value]).slice(0, 8))
+const favoritePosts = computed(() => forumStore.getFavoritePosts(posts.value).slice(0, 8))
 const notificationItems = computed(() =>
   notificationSeeds.map((item) => ({
     ...item,
@@ -137,7 +136,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="nav-actions">
-      <span class="source-dot" :class="source">{{ source === 'api' ? 'API' : '本地' }}</span>
+      <span class="source-dot api">API</span>
       <button class="write-button" type="button" @click="forumStore.openPublish('question')">
         <PenLine :size="16" /> 发帖
       </button>

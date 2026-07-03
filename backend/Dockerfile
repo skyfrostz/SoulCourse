@@ -1,6 +1,8 @@
 FROM golang:1.26-alpine AS base
 
 WORKDIR /app
+ENV GOPROXY=https://goproxy.cn,direct \
+    GOSUMDB=sum.golang.google.cn
 RUN apk add --no-cache ca-certificates git tzdata
 
 FROM base AS dev

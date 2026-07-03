@@ -5,8 +5,8 @@ import { BarChart3, ChevronLeft, Gauge, Search, ShieldCheck, TrendingUp } from '
 import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, fetchInsights } from '../lib/api'
 import { policyTakeaways, requirementData } from '../lib/realData'
-import { sampleInsights } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
+import type { SubjectInsight } from '../types/forum'
 
 const router = useRouter()
 const route = useRoute()
@@ -20,24 +20,39 @@ const mode = ref<'heat' | 'match' | 'coverage'>(
   route.query.mode === 'match' || route.query.mode === 'coverage' ? route.query.mode : 'heat',
 )
 const modes = [
-  { value: 'heat', label: '热度' },
-  { value: 'match', label: '匹配度' },
-  { value: 'coverage', label: '专业覆盖' },
+  { value: 'heat', label: '热度排序', shortLabel: '热度', icon: TrendingUp },
+  { value: 'match', label: '匹配度', shortLabel: '匹配', icon: Gauge },
+  { value: 'coverage', label: '专业覆盖', shortLabel: '覆盖', icon: BarChart3 },
 ] as const
+
+function coverageRate(insight: SubjectInsight) {
+  return insight.coverageRate ?? insight.matchRate
+}
+
+function scoreFor(insight: SubjectInsight) {
+  if (mode.value === 'heat') return insight.heat
+  if (mode.value === 'coverage') return coverageRate(insight)
+  return insight.matchRate
+}
+
 const insightCards = computed(() => {
-  const apiInsights = insightsQuery.data.value ?? []
-  const source = [...apiInsights, ...sampleInsights.filter((item) => !apiInsights.some((apiItem) => apiItem.id === item.id))]
+  const source = [...(insightsQuery.data.value ?? [])]
   if (mode.value === 'match') return source.sort((a, b) => b.matchRate - a.matchRate)
-  if (mode.value === 'coverage') return source.sort((a, b) => b.matchRate + b.heat * 0.2 - (a.matchRate + a.heat * 0.2))
+  if (mode.value === 'coverage') return source.sort((a, b) => coverageRate(b) - coverageRate(a))
   return source.sort((a, b) => b.heat - a.heat)
 })
 
 watch(
   () => route.query.mode,
   (value) => {
-    if (value === 'match' || value === 'coverage' || value === 'heat') mode.value = value
+    mode.value = value === 'match' || value === 'coverage' || value === 'heat' ? value : 'heat'
   },
 )
+
+function setMode(value: 'heat' | 'match' | 'coverage') {
+  mode.value = value
+  router.replace({ path: '/insights', query: value === 'heat' ? {} : { mode: value } })
+}
 
 function donutStyle(index: number) {
   const data = requirementData[index]
@@ -59,28 +74,31 @@ function searchCombination(combination: string) {
 <template>
   <main class="detail-page">
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
-    <section class="overview-hero">
-      <div class="breadcrumb">首页 / 选科组合趋势</div>
-      <h1>选科组合趋势中心</h1>
-      <p>把组合热度、专业覆盖、学习强度和后续讨论放在同一个页面里比较，避免只凭“热门”做决定。</p>
-      <div class="overview-metrics">
-        <RouterLink :to="{ path: '/insights', query: { mode: 'heat' } }"><TrendingUp :size="18" /> 热度排序</RouterLink>
-        <RouterLink :to="{ path: '/insights', query: { mode: 'match' } }"><Gauge :size="18" /> 匹配度</RouterLink>
-        <RouterLink :to="{ path: '/insights', query: { mode: 'coverage' } }"><BarChart3 :size="18" /> 专业覆盖</RouterLink>
+    <section class="overview-hero insights-overview-hero">
+      <div class="insights-hero-copy">
+        <div class="breadcrumb">首页 / 选科组合趋势</div>
+        <h1>选科组合趋势中心</h1>
+        <p>把组合热度、专业覆盖、学习强度和后续讨论放在同一个页面里比较，避免只凭“热门”做决定。</p>
+      </div>
+      <div class="insights-sort-panel" aria-label="趋势排序">
+        <span>排序方式</span>
+        <div class="insights-sort-control">
+          <button
+            v-for="item in modes"
+            :key="item.value"
+            type="button"
+            :class="{ active: mode === item.value }"
+            @click="setMode(item.value)"
+          >
+            <component :is="item.icon" :size="17" />
+            {{ item.label }}
+          </button>
+        </div>
+        <div class="insights-sort-summary">
+          当前按 <strong>{{ modes.find((item) => item.value === mode)?.shortLabel }}</strong> 展示
+        </div>
       </div>
     </section>
-
-    <nav class="content-lens-tabs" aria-label="趋势排序">
-      <button
-        v-for="item in modes"
-        :key="item.value"
-        type="button"
-        :class="{ active: mode === item.value }"
-        @click="mode = item.value"
-      >
-        {{ item.label }}
-      </button>
-    </nav>
 
     <section id="trend-board" class="insight-feature-grid xhs-trend-grid">
       <article v-for="insight in insightCards" :key="insight.id" class="insight-feature-card">
@@ -89,11 +107,12 @@ function searchCombination(combination: string) {
           <h2>{{ insight.combination }}</h2>
           <p>{{ insight.advice }}</p>
           <div class="feature-meter">
-            <span :style="{ width: `${Math.min(insight.matchRate, 100)}%` }"></span>
+            <span :style="{ width: `${Math.min(scoreFor(insight), 100)}%` }"></span>
           </div>
           <div class="overview-score">
             <span>热度 {{ insight.heat }}</span>
             <span>匹配 {{ insight.matchRate }}%</span>
+            <span>覆盖 {{ coverageRate(insight) }}%</span>
           </div>
         </RouterLink>
         <button type="button" @click="searchCombination(insight.combination)">

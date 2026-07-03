@@ -32,9 +32,6 @@ interface LocalPostEngagement {
 
 interface LocalEngagementState {
   posts: Record<number, LocalPostEngagement>
-  createdPosts: Record<number, Post>
-  comments: Record<number, Comment[]>
-  favoritePosts: Record<number, Post>
   follows: LocalFollowState
 }
 
@@ -192,15 +189,8 @@ export const useForumStore = defineStore('forum', {
       return posts.map((post) => this.hydratePost(post))
     },
     getPostComments(postId: number, fallback: Comment[] = []): Comment[] {
-      return [...fallback, ...(this.localEngagement.comments[postId] ?? [])]
-    },
-    getLocalComments(): Comment[] {
-      return Object.values(this.localEngagement.comments).flat()
-    },
-    getCreatedPosts(): Post[] {
-      return Object.values(this.localEngagement.createdPosts).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      )
+      void postId
+      return fallback
     },
     getActualCommentCount(postId: number, fallback: Comment[] = []): number {
       return this.getPostComments(postId, fallback).length
@@ -254,118 +244,7 @@ export const useForumStore = defineStore('forum', {
         const hydrated = this.hydratePost(post)
         if (hydrated.viewerFavorited) merged.set(post.id, hydrated)
       })
-      Object.values(this.localEngagement.favoritePosts).forEach((post) => {
-        const hydrated = this.hydratePost(post)
-        if (hydrated.viewerFavorited) merged.set(post.id, hydrated)
-      })
       return Array.from(merged.values()).sort((a, b) => b.id - a.id)
-    },
-    toggleLocalLike(post: Post): Post {
-      const current = this.hydratePost(post)
-      const nextLiked = !current.viewerLiked
-      const nextPost = {
-        ...current,
-        viewerLiked: nextLiked,
-        likesCount: Math.max(0, current.likesCount + (nextLiked ? 1 : -1)),
-      }
-      this.localEngagement.posts[post.id] = pickLocalPostEngagement(nextPost)
-      persistLocalEngagement(this.localEngagement)
-      return nextPost
-    },
-    toggleLocalFavorite(post: Post): Post {
-      const current = this.hydratePost(post)
-      const nextFavorited = !current.viewerFavorited
-      const nextPost = {
-        ...current,
-        viewerFavorited: nextFavorited,
-        favoritesCount: Math.max(0, current.favoritesCount + (nextFavorited ? 1 : -1)),
-      }
-      this.localEngagement.posts[post.id] = pickLocalPostEngagement(nextPost)
-      if (nextFavorited) {
-        this.localEngagement.favoritePosts[post.id] = nextPost
-      } else {
-        delete this.localEngagement.favoritePosts[post.id]
-      }
-      persistLocalEngagement(this.localEngagement)
-      return nextPost
-    },
-    toggleLocalFollow(post: Post): Post {
-      const current = this.hydratePost(post)
-      const active = this.toggleUserFollow({
-        name: post.authorName,
-        role: post.authorRole,
-        province: post.province,
-        grade: post.grade,
-        followedAt: new Date().toISOString(),
-      })
-      const nextPost = { ...current, viewerFollowing: active }
-      this.localEngagement.posts[post.id] = pickLocalPostEngagement(nextPost)
-      persistLocalEngagement(this.localEngagement)
-      return nextPost
-    },
-    addLocalComment(postId: number, content: string, basePost?: Post): Comment {
-      const author = this.currentUser?.nickname ?? '演示同学'
-      const role = this.currentUser?.role ?? 'student'
-      const comment: Comment = {
-        id: Date.now(),
-        postId,
-        userId: this.currentUser?.id,
-        author,
-        role,
-        content,
-        createdAt: new Date().toISOString(),
-      }
-      this.localEngagement.comments[postId] = [...(this.localEngagement.comments[postId] ?? []), comment]
-      const current = this.localEngagement.posts[postId] ?? {}
-      const currentCount = current.commentsCount ?? basePost?.commentsCount ?? 0
-      this.localEngagement.posts[postId] = {
-        ...current,
-        commentsCount: currentCount + 1,
-      }
-      persistLocalEngagement(this.localEngagement)
-      return comment
-    },
-    createLocalPost(payload: {
-      title: string
-      content: string
-      imageUrls: string[]
-      tags: string[]
-      track: Track
-      electives: Subject[]
-      category: Category
-      grade: string
-      province: string
-    }): Post {
-      const now = new Date().toISOString()
-      const id = Date.now() + Math.floor(Math.random() * 1000)
-      const current = this.currentUser
-      const post: Post = {
-        id,
-        userId: current?.id,
-        authorName: current?.nickname ?? '演示同学',
-        authorRole: current?.role ?? 'student',
-        title: payload.title.trim(),
-        content: payload.content.trim(),
-        imageUrls: payload.imageUrls.slice(0, 9),
-        tags: payload.tags.slice(0, 8),
-        track: payload.track,
-        electives: payload.electives.slice(0, 2),
-        category: payload.category,
-        grade: payload.grade,
-        province: payload.province,
-        likesCount: 0,
-        commentsCount: 0,
-        favoritesCount: 0,
-        viewerLiked: false,
-        viewerFavorited: false,
-        viewerFollowing: false,
-        createdAt: now,
-        updatedAt: now,
-      }
-      this.localEngagement.createdPosts[id] = post
-      this.localEngagement.posts[id] = pickLocalPostEngagement(post)
-      persistLocalEngagement(this.localEngagement)
-      return post
     },
     closeDetail() {
       this.detailPanel = { kind: 'none' }
@@ -430,17 +309,6 @@ function readStoredNotificationReads(): Record<string, boolean> {
 
 export const localEngagementStorageKey = 'scf_local_engagement'
 
-function pickLocalPostEngagement(post: Post): LocalPostEngagement {
-  return {
-    viewerLiked: post.viewerLiked,
-    viewerFavorited: post.viewerFavorited,
-    viewerFollowing: post.viewerFollowing,
-    likesCount: post.likesCount,
-    favoritesCount: post.favoritesCount,
-    commentsCount: post.commentsCount,
-  }
-}
-
 function persistLocalEngagement(state: LocalEngagementState) {
   localStorage.setItem(localEngagementStorageKey, JSON.stringify(state))
 }
@@ -452,9 +320,6 @@ function readStoredLocalEngagement(): LocalEngagementState {
     const parsed = JSON.parse(raw) as LocalEngagementState
     return {
       posts: parsed.posts ?? {},
-      createdPosts: parsed.createdPosts ?? {},
-      comments: parsed.comments ?? {},
-      favoritePosts: parsed.favoritePosts ?? {},
       follows: {
         following: parsed.follows?.following ?? {},
         followers: parsed.follows?.followers ?? {},
@@ -467,5 +332,5 @@ function readStoredLocalEngagement(): LocalEngagementState {
 }
 
 function createEmptyLocalEngagement(): LocalEngagementState {
-  return { posts: {}, createdPosts: {}, comments: {}, favoritePosts: {}, follows: { following: {}, followers: {} } }
+  return { posts: {}, follows: { following: {}, followers: {} } }
 }

@@ -96,7 +96,7 @@ export function useAdviceEngagement() {
     const comment: AdviceComment = {
       id: Date.now(),
       noteId,
-      author: forumStore.currentUser?.nickname ?? '演示同学',
+      author: forumStore.currentUser?.nickname ?? '匿名用户',
       role: forumStore.currentUser ? `${forumStore.currentUser.grade} · ${forumStore.currentUser.role}` : '学生',
       content,
       createdAt: new Date().toISOString(),

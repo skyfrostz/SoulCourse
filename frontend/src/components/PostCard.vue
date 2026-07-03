@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { Bookmark, MessageSquare, ThumbsUp } from '@lucide/vue'
 import { computed } from 'vue'
+import { togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels, trackLabels } from '../lib/labels'
-import { sampleComments } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 import type { Post } from '../types/forum'
 
@@ -11,15 +12,23 @@ const props = defineProps<{
 }>()
 
 const forumStore = useForumStore()
-const livePost = computed(() => {
-  const hydrated = forumStore.hydratePost(props.post)
-  const fallbackComments = sampleComments[props.post.id]
-  return {
-    ...hydrated,
-    commentsCount: fallbackComments
-      ? forumStore.getActualCommentCount(props.post.id, fallbackComments)
-      : (forumStore.localEngagement.comments[props.post.id]?.length ?? hydrated.commentsCount),
-  }
+const queryClient = useQueryClient()
+const livePost = computed(() => forumStore.hydratePost(props.post))
+
+const likeMutation = useMutation({
+  mutationFn: () => togglePostLike(props.post.id),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['posts'] }),
+  onError: () => {
+    forumStore.refreshHint = '点赞失败，请检查登录状态或稍后重试。'
+  },
+})
+
+const favoriteMutation = useMutation({
+  mutationFn: () => togglePostFavorite(props.post.id),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['posts'] }),
+  onError: () => {
+    forumStore.refreshHint = '收藏失败，请检查登录状态或稍后重试。'
+  },
 })
 
 function formatCount(value: number) {
@@ -29,12 +38,12 @@ function formatCount(value: number) {
 
 function toggleLike() {
   if (!forumStore.requireAuth()) return
-  forumStore.toggleLocalLike(livePost.value)
+  likeMutation.mutate()
 }
 
 function toggleFavorite() {
   if (!forumStore.requireAuth()) return
-  forumStore.toggleLocalFavorite(livePost.value)
+  favoriteMutation.mutate()
 }
 </script>
 

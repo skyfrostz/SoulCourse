@@ -1666,6 +1666,28 @@ textarea {
   outline: 0;
 }
 
+.verification-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.verification-code-row button {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 159, 122, 0.26);
+  border-radius: 7px;
+  background: #ecfdf5;
+  color: #0f766e;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.verification-code-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2294,6 +2316,76 @@ textarea {
   line-height: 1.8;
 }
 
+.insights-overview-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.insights-hero-copy {
+  min-width: 0;
+}
+
+.insights-sort-panel {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+  min-width: 360px;
+}
+
+.insights-sort-panel > span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.insights-sort-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, auto));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.insights-sort-control button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  min-width: 104px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.insights-sort-control button:hover {
+  color: #0f766e;
+  background: #ffffff;
+}
+
+.insights-sort-control button.active {
+  color: #ffffff;
+  background: #0f9f7a;
+  box-shadow: 0 8px 20px rgba(15, 159, 122, 0.2);
+}
+
+.insights-sort-summary {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.insights-sort-summary strong {
+  color: #0f766e;
+}
+
 .overview-metrics {
   display: flex;
   flex-wrap: wrap;
@@ -2386,6 +2478,7 @@ textarea {
 
 .overview-score {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: auto;
 }
@@ -3505,9 +3598,14 @@ textarea {
 
 .province-note-cover {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 128px;
   min-height: 164px;
   overflow: hidden;
-  padding: 18px;
+  padding: 18px 16px;
   color: #0f766e;
   background: #ecfdf5;
 }
@@ -3526,7 +3624,10 @@ textarea {
 .province-note-cover > div {
   position: relative;
   z-index: 1;
-  display: grid;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -3539,28 +3640,38 @@ textarea {
 }
 
 .province-note-cover strong {
+  display: block;
+  max-width: 100%;
   color: currentColor;
   font-size: 42px;
-  line-height: 1;
+  line-height: 1.08;
   font-weight: 950;
+  overflow-wrap: anywhere;
 }
 
 .province-note-cover span {
+  display: block;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1.35;
   font-weight: 900;
+  overflow-wrap: anywhere;
 }
 
 .province-note-cover em {
-  position: absolute;
-  right: 16px;
-  bottom: 14px;
+  position: relative;
+  align-self: flex-end;
   z-index: 1;
+  max-width: 100%;
   padding: 6px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
   color: currentColor;
   font-size: 12px;
+  line-height: 1.25;
   font-style: normal;
   font-weight: 900;
+  text-align: center;
 }
 
 .province-note-cover.tone-blue {
@@ -4404,6 +4515,26 @@ textarea {
     display: grid;
   }
 
+  .insights-overview-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .insights-sort-panel {
+    justify-items: start;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .insights-sort-control {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .insights-sort-control button {
+    min-width: 0;
+    padding: 0 8px;
+  }
+
   .overview-hero h1,
   .knowledge-hero h1,
   .requirements-xhs-hero h1,
@@ -4581,6 +4712,8 @@ textarea {
 
 .province-card-main {
   display: grid;
+  grid-template-columns: minmax(128px, 0.34fr) minmax(0, 1fr);
+  align-items: stretch;
   gap: 10px;
   color: inherit;
   text-decoration: none;
@@ -5447,6 +5580,10 @@ textarea {
 
   .xhs-province-waterfall {
     column-count: 1;
+  }
+
+  .province-card-main {
+    grid-template-columns: 1fr;
   }
 
   .province-detail-hero {

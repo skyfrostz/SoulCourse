@@ -53,7 +53,8 @@ func main() {
 	defer redisClient.Close()
 
 	forumRepo := postgres.NewForumRepository(db)
-	forumService := service.NewForumService(forumRepo, cfg)
+	emailSender := service.NewSMTPEmailSender(cfg)
+	forumService := service.NewForumService(forumRepo, cfg, emailSender)
 
 	server := httpserver.NewServer(cfg, logger, db, redisClient, forumService)
 

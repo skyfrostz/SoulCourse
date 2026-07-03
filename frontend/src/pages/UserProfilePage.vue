@@ -14,12 +14,9 @@ const forumStore = useForumStore()
 
 const profileName = computed(() => decodeURIComponent(String(route.params.name ?? '')))
 const isCurrentUser = computed(() => forumStore.currentUser?.nickname === profileName.value)
-const allPosts = computed(() => [...forumStore.getCreatedPosts(), ...samplePosts].map((post) => forumStore.hydratePost(post)))
+const allPosts = computed(() => samplePosts.map((post) => forumStore.hydratePost(post)))
 const authoredPosts = computed(() => allPosts.value.filter((post) => post.authorName === profileName.value))
-const allComments = computed(() => [
-  ...Object.values(sampleComments).flat(),
-  ...forumStore.getLocalComments(),
-])
+const allComments = computed(() => Object.values(sampleComments).flat())
 const authoredComments = computed(() => allComments.value.filter((comment) => comment.author === profileName.value))
 
 const profile = computed(() => {

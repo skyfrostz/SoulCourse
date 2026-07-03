@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"subject-choice-forum/backend/internal/domain"
 
@@ -292,6 +293,46 @@ func (r *ForumRepository) GetUserByID(ctx context.Context, id int64) (domain.Use
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL
 	`, id))
+}
+
+func (r *ForumRepository) CreateEmailVerificationCode(ctx context.Context, email string, codeHash string, expiresAt time.Time) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE email_verification_codes
+		SET used_at = now()
+		WHERE email = $1 AND used_at IS NULL
+	`, email)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec(ctx, `
+		INSERT INTO email_verification_codes (email, code_hash, expires_at)
+		VALUES ($1, $2, $3)
+	`, email, codeHash, expiresAt)
+	return err
+}
+
+func (r *ForumRepository) ConsumeEmailVerificationCode(ctx context.Context, email string, codeHash string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE email_verification_codes
+		SET used_at = now()
+		WHERE id = (
+			SELECT id
+			FROM email_verification_codes
+			WHERE email = $1
+			  AND code_hash = $2
+			  AND used_at IS NULL
+			  AND expires_at > now()
+			ORDER BY created_at DESC
+			LIMIT 1
+		)
+	`, email, codeHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }
 
 func (r *ForumRepository) TogglePostLike(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error) {

@@ -2,8 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -16,6 +20,7 @@ import (
 
 var ErrInvalidElectives = errors.New("electives must contain two different subjects")
 var ErrInvalidCredentials = errors.New("invalid email or password")
+var ErrInvalidEmailVerificationCode = errors.New("invalid or expired email verification code")
 
 type ForumRepository interface {
 	ListPosts(ctx context.Context, viewerID *int64, filter domain.FeedFilter) ([]domain.Post, error)
@@ -29,18 +34,33 @@ type ForumRepository interface {
 	CreateUser(ctx context.Context, input domain.RegisterInput, passwordHash string) (domain.User, error)
 	GetUserByEmail(ctx context.Context, email string) (domain.User, string, error)
 	GetUserByID(ctx context.Context, id int64) (domain.User, error)
+	CreateEmailVerificationCode(ctx context.Context, email string, codeHash string, expiresAt time.Time) error
+	ConsumeEmailVerificationCode(ctx context.Context, email string, codeHash string) error
 	TogglePostLike(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error)
 	TogglePostFavorite(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error)
 	ToggleFollowAuthor(ctx context.Context, followerID int64, authorName string) (bool, error)
 }
 
 type ForumService struct {
-	repo      ForumRepository
-	jwtSecret []byte
+	repo                 ForumRepository
+	jwtSecret            []byte
+	emailSender          EmailSender
+	emailVerificationTTL time.Duration
+	emailDebugMode       bool
 }
 
-func NewForumService(repo ForumRepository, cfg config.Config) *ForumService {
-	return &ForumService{repo: repo, jwtSecret: []byte(cfg.JWTSecret)}
+func NewForumService(repo ForumRepository, cfg config.Config, emailSender EmailSender) *ForumService {
+	ttl := time.Duration(cfg.EmailVerificationTTLMinutes) * time.Minute
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	return &ForumService{
+		repo:                 repo,
+		jwtSecret:            []byte(cfg.JWTSecret),
+		emailSender:          emailSender,
+		emailVerificationTTL: ttl,
+		emailDebugMode:       cfg.AppEnv == "local" || cfg.AppEnv == "development",
+	}
 }
 
 func (s *ForumService) ListPosts(ctx context.Context, viewerID *int64, filter domain.FeedFilter) ([]domain.Post, error) {
@@ -89,6 +109,10 @@ func (s *ForumService) GetTopic(ctx context.Context, viewerID *int64, slug strin
 
 func (s *ForumService) Register(ctx context.Context, input domain.RegisterInput) (domain.AuthSession, error) {
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
+	input.VerificationCode = strings.TrimSpace(input.VerificationCode)
+	if err := s.repo.ConsumeEmailVerificationCode(ctx, input.Email, hashVerificationCode(input.Email, input.VerificationCode)); err != nil {
+		return domain.AuthSession{}, ErrInvalidEmailVerificationCode
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return domain.AuthSession{}, err
@@ -102,6 +126,33 @@ func (s *ForumService) Register(ctx context.Context, input domain.RegisterInput)
 		return domain.AuthSession{}, err
 	}
 	return domain.AuthSession{User: user, Token: token}, nil
+}
+
+func (s *ForumService) SendEmailVerificationCode(ctx context.Context, input domain.EmailVerificationCodeInput) (domain.EmailVerificationCodeResult, error) {
+	email := strings.ToLower(strings.TrimSpace(input.Email))
+	code, err := generateVerificationCode()
+	if err != nil {
+		return domain.EmailVerificationCodeResult{}, err
+	}
+	expiresAt := time.Now().Add(s.emailVerificationTTL)
+	if err := s.repo.CreateEmailVerificationCode(ctx, email, hashVerificationCode(email, code), expiresAt); err != nil {
+		return domain.EmailVerificationCodeResult{}, err
+	}
+	if s.emailSender != nil && s.emailSender.Enabled() {
+		if err := s.emailSender.SendVerificationCode(ctx, email, code, s.emailVerificationTTL); err != nil {
+			return domain.EmailVerificationCodeResult{}, err
+		}
+		return domain.EmailVerificationCodeResult{Email: email, ExpiresInSeconds: int(s.emailVerificationTTL.Seconds())}, nil
+	}
+	if !s.emailDebugMode {
+		return domain.EmailVerificationCodeResult{}, errors.New("email sender is not configured")
+	}
+
+	return domain.EmailVerificationCodeResult{
+		Email:            email,
+		ExpiresInSeconds: int(s.emailVerificationTTL.Seconds()),
+		DebugCode:        code,
+	}, nil
 }
 
 func (s *ForumService) Login(ctx context.Context, input domain.LoginInput) (domain.AuthSession, error) {
@@ -166,4 +217,18 @@ func parseInt64(value string) (int64, error) {
 	var id int64
 	_, err := fmt.Sscanf(value, "%d", &id)
 	return id, err
+}
+
+func generateVerificationCode() (string, error) {
+	max := big.NewInt(1000000)
+	value, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", value.Int64()), nil
+}
+
+func hashVerificationCode(email string, code string) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(email)) + ":" + strings.TrimSpace(code)))
+	return hex.EncodeToString(sum[:])
 }

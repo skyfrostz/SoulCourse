@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { ImagePlus, Tag, Trash2, X } from '@lucide/vue'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { apiDataEnabled, createPost } from '../lib/api'
+import { createPost } from '../lib/api'
 import { subjectLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
 import type { Category, Subject, Track } from '../types/forum'
@@ -38,12 +38,7 @@ const publishMutation = useMutation({
       grade: forumStore.currentUser?.grade ?? '高一',
       province: forumStore.currentUser?.province ?? '全国',
     }
-    if (!apiDataEnabled) return forumStore.createLocalPost(payload)
-    try {
-      return await createPost(payload)
-    } catch {
-      return forumStore.createLocalPost(payload)
-    }
+    return createPost(payload)
   },
   onSuccess: (post) => {
     queryClient.invalidateQueries({ queryKey: ['posts'] })
@@ -51,7 +46,7 @@ const publishMutation = useMutation({
     router.push(`/posts/${post.id}`)
   },
   onError: () => {
-    error.value = '发布失败，请检查标题、正文和两个再选科目是否完整。'
+    error.value = '发布失败，请确认已登录、后端服务可用，且标题、正文和两个再选科目完整。'
   },
 })
 

@@ -4,7 +4,6 @@ import { computed } from 'vue'
 import { ChevronLeft, Eye, Hash, MessageSquare, PenLine, Search, TrendingUp } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { apiDataEnabled, fetchTopics } from '../lib/api'
-import { sampleTopics } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 
 const router = useRouter()
@@ -15,7 +14,7 @@ const topicsQuery = useQuery({
   enabled: apiDataEnabled,
 })
 const topicCards = computed(() =>
-  (topicsQuery.data.value?.length ? topicsQuery.data.value : sampleTopics).map((topic, index) => ({
+  (topicsQuery.data.value ?? []).map((topic, index) => ({
     ...topic,
     tone: index % 4,
     prompts: [

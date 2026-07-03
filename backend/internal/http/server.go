@@ -1,7 +1,9 @@
 package httpserver
 
 import (
+	"crypto/subtle"
 	"net/http"
+	"strings"
 	"time"
 
 	"subject-choice-forum/backend/internal/config"
@@ -34,7 +36,7 @@ func NewServer(
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSAllowedOrigins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Admin-Token", "X-Request-ID"},
 		ExposeHeaders:    []string{"X-Request-ID"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -43,6 +45,7 @@ func NewServer(
 	healthHandler := handler.NewHealthHandler(db, redisClient)
 	aiService := service.NewAIService(cfg)
 	forumHandler := handler.NewForumHandler(forumService, aiService)
+	adminHandler := handler.NewAdminHandler(cfg, forumService, db)
 
 	router.GET("/healthz", healthHandler.Live)
 	router.GET("/readyz", healthHandler.Ready)
@@ -50,10 +53,12 @@ func NewServer(
 	api := router.Group("/api/v1")
 	api.Use(middleware.OptionalAuth(forumService))
 	{
+		api.POST("/auth/email-verification-code", forumHandler.SendEmailVerificationCode)
 		api.POST("/auth/register", forumHandler.Register)
 		api.POST("/auth/login", forumHandler.Login)
 		api.GET("/me", middleware.RequireAuth(forumService), forumHandler.Me)
 		api.GET("/taxonomy", forumHandler.Taxonomy)
+		api.GET("/content", adminHandler.ListPublishedContent)
 		api.GET("/insights", forumHandler.ListInsights)
 		api.GET("/insights/:id", forumHandler.GetInsight)
 		api.GET("/topics", forumHandler.ListTopics)
@@ -66,6 +71,22 @@ func NewServer(
 		api.POST("/posts/:id/favorite", middleware.RequireAuth(forumService), forumHandler.TogglePostFavorite)
 		api.POST("/authors/:name/follow", middleware.RequireAuth(forumService), forumHandler.ToggleFollowAuthor)
 		api.POST("/ai/choice-advice", middleware.RequireAuth(forumService), forumHandler.ChoiceAdvice)
+
+		api.POST("/admin/login", adminHandler.Login)
+
+		admin := api.Group("/admin")
+		admin.Use(requireAdmin(cfg))
+		{
+			admin.GET("/email-config", adminHandler.EmailConfig)
+			admin.POST("/email-test", adminHandler.SendTestEmail)
+			admin.GET("/content", adminHandler.ListContent)
+			admin.POST("/content", adminHandler.CreateContent)
+			admin.PUT("/content/:id", adminHandler.UpdateContent)
+			admin.POST("/content/:id/workflow", adminHandler.WorkflowContent)
+			admin.DELETE("/content/:id", adminHandler.DeleteContent)
+			admin.GET("/content-summary", adminHandler.ContentSummary)
+			admin.GET("/audit-logs", adminHandler.AuditLogs)
+		}
 	}
 
 	return &http.Server{
@@ -75,5 +96,33 @@ func NewServer(
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
+	}
+}
+
+func requireAdmin(cfg config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if cfg.AdminToken == "" {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error": gin.H{
+					"code":    "admin_disabled",
+					"message": "ADMIN_TOKEN is not configured",
+				},
+			})
+			return
+		}
+		token := c.GetHeader("X-Admin-Token")
+		if token == "" {
+			token = strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+		}
+		if subtle.ConstantTimeCompare([]byte(token), []byte(cfg.AdminToken)) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": gin.H{
+					"code":    "unauthorized",
+					"message": "invalid admin token",
+				},
+			})
+			return
+		}
+		c.Next()
 	}
 }

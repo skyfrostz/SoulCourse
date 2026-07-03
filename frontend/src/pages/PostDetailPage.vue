@@ -6,7 +6,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, createComment, fetchPostDetail, toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels, trackLabels } from '../lib/labels'
 import { requirementData, sourcedDataPosts } from '../lib/realData'
-import { sampleComments, samplePosts } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 
 const route = useRoute()
@@ -24,10 +23,9 @@ const detailQuery = useQuery({
   enabled: apiDataEnabled,
 })
 
-const fallbackPost = computed(() => forumStore.localEngagement.createdPosts[postId.value] ?? samplePosts.find((item) => item.id === postId.value))
-const rawPost = computed(() => detailQuery.data.value?.post ?? fallbackPost.value)
+const rawPost = computed(() => detailQuery.data.value?.post)
 const post = computed(() => rawPost.value ? forumStore.hydratePost(rawPost.value) : undefined)
-const comments = computed(() => forumStore.getPostComments(postId.value, detailQuery.data.value?.comments?.length ? detailQuery.data.value.comments : sampleComments[postId.value] ?? []))
+const comments = computed(() => detailQuery.data.value?.comments ?? [])
 const displayedCommentCount = computed(() => comments.value.length)
 const dataEvidence = computed(() => {
   if (post.value?.category !== 'data') return null
@@ -77,36 +75,19 @@ const commentMutation = useMutation({
   },
 })
 
-
-function isLocalOnlyPost() {
-  return Boolean(fallbackPost.value && !detailQuery.data.value?.post)
-}
-
 function toggleLike() {
   if (!post.value || !forumStore.requireAuth()) return
-  if (isLocalOnlyPost()) {
-    forumStore.toggleLocalLike(post.value)
-    return
-  }
-  likeMutation.mutate(undefined, { onError: () => post.value && forumStore.toggleLocalLike(post.value) })
+  likeMutation.mutate(undefined, { onError: () => { commentError.value = '点赞失败，请稍后重试。' } })
 }
 
 function toggleFavorite() {
   if (!post.value || !forumStore.requireAuth()) return
-  if (isLocalOnlyPost()) {
-    forumStore.toggleLocalFavorite(post.value)
-    return
-  }
-  favoriteMutation.mutate(undefined, { onError: () => post.value && forumStore.toggleLocalFavorite(post.value) })
+  favoriteMutation.mutate(undefined, { onError: () => { commentError.value = '收藏失败，请稍后重试。' } })
 }
 
 function toggleFollow() {
   if (!post.value || !forumStore.requireAuth()) return
-  if (isLocalOnlyPost()) {
-    forumStore.toggleLocalFollow(post.value)
-    return
-  }
-  followMutation.mutate(undefined, { onError: () => post.value && forumStore.toggleLocalFollow(post.value) })
+  followMutation.mutate(undefined, { onError: () => { commentError.value = '关注失败，请稍后重试。' } })
 }
 
 function submitComment() {
@@ -117,16 +98,9 @@ function submitComment() {
     return
   }
   commentError.value = ''
-  if (isLocalOnlyPost()) {
-    forumStore.addLocalComment(postId.value, content, post.value)
-    draft.value = ''
-    return
-  }
   commentMutation.mutate(content, {
     onError: () => {
-      forumStore.addLocalComment(postId.value, content, post.value)
-      draft.value = ''
-      commentError.value = ''
+      commentError.value = '评论发布失败，请确认已登录，且后端服务可用。'
     },
   })
 }
@@ -225,6 +199,12 @@ function replyTo(author: string) {
           <button type="button" @click="router.push('/settings')">先完善画像</button>
         </div>
       </aside>
+    </section>
+
+    <section v-else-if="!detailQuery.isLoading.value" class="empty-state detail-empty-state">
+      <h1>帖子不存在或暂时无法加载</h1>
+      <p>请返回论坛刷新列表，或稍后重试。</p>
+      <button class="primary-wide compact" type="button" @click="router.push('/')">返回论坛</button>
     </section>
 
     <section v-if="post" class="comment-board">

@@ -5,7 +5,7 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
 import { apiDataEnabled, fetchInsight } from '../lib/api'
-import { sampleInsights, samplePosts } from '../lib/sampleData'
+import { samplePosts } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 
 const route = useRoute()
@@ -17,12 +17,12 @@ const insightQuery = useQuery({
   queryFn: () => fetchInsight(insightId.value),
   enabled: apiDataEnabled,
 })
-const insight = computed(() =>
-  insightQuery.data.value ?? sampleInsights.find((item) => item.id === insightId.value) ?? sampleInsights[0],
-)
-const relatedPosts = computed(() =>
-  samplePosts.filter((post) => post.tags.includes(insight.value.combination) || post.content.includes(insight.value.combination)).slice(0, 6),
-)
+const insight = computed(() => insightQuery.data.value)
+const relatedPosts = computed(() => {
+  const current = insight.value
+  if (!current) return []
+  return samplePosts.filter((post) => post.tags.includes(current.combination) || post.content.includes(current.combination)).slice(0, 6)
+})
 </script>
 
 <template>
@@ -43,6 +43,11 @@ const relatedPosts = computed(() =>
         <button class="primary-wide" @click="forumStore.openPublish('question')">发布提问</button>
       </div>
     </article>
+
+    <section v-else-if="!insightQuery.isLoading.value" class="empty-state detail-empty-state">
+      <h1>趋势数据暂时无法加载</h1>
+      <p>请返回趋势中心刷新，或稍后重试。</p>
+    </section>
 
     <section class="feed-panel topic-feed-panel">
       <div class="feed-toolbar">

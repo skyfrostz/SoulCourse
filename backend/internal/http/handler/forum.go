@@ -23,6 +23,21 @@ func NewForumHandler(forumService *service.ForumService, aiService *service.AISe
 	return &ForumHandler{service: forumService, ai: aiService}
 }
 
+func (h *ForumHandler) SendEmailVerificationCode(c *gin.Context) {
+	var input domain.EmailVerificationCodeInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		fail(c, http.StatusBadRequest, "invalid_payload", err.Error())
+		return
+	}
+
+	result, err := h.service.SendEmailVerificationCode(c.Request.Context(), input)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "email_send_failed", "could not send verification code")
+		return
+	}
+	ok(c, result)
+}
+
 func (h *ForumHandler) Register(c *gin.Context) {
 	var input domain.RegisterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -32,6 +47,10 @@ func (h *ForumHandler) Register(c *gin.Context) {
 
 	session, err := h.service.Register(c.Request.Context(), input)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidEmailVerificationCode) {
+			fail(c, http.StatusBadRequest, "invalid_verification_code", "verification code is invalid or expired")
+			return
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			fail(c, http.StatusConflict, "email_exists", "email already registered")

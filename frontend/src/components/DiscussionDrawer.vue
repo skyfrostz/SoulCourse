@@ -2,7 +2,7 @@
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { Bookmark, MessageSquare, Send, Share2, ThumbsUp, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
-import { apiDataEnabled, toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
+import { toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels } from '../lib/labels'
 import { usePostComments } from '../composables/usePostComments'
 import { useForumStore } from '../stores/forum'
@@ -75,39 +75,27 @@ async function submit() {
 
 function like() {
   if (!forumStore.requireAuth()) return
-  if (!apiDataEnabled) {
-    livePost.value = forumStore.toggleLocalLike(livePost.value)
-    return
-  }
   likeMutation.mutate(undefined, {
     onError: () => {
-      livePost.value = forumStore.toggleLocalLike(livePost.value)
+      forumStore.refreshHint = '点赞失败，请稍后重试。'
     },
   })
 }
 
 function favorite() {
   if (!forumStore.requireAuth()) return
-  if (!apiDataEnabled) {
-    livePost.value = forumStore.toggleLocalFavorite(livePost.value)
-    return
-  }
   favoriteMutation.mutate(undefined, {
     onError: () => {
-      livePost.value = forumStore.toggleLocalFavorite(livePost.value)
+      forumStore.refreshHint = '收藏失败，请稍后重试。'
     },
   })
 }
 
 function follow() {
   if (!forumStore.requireAuth()) return
-  if (!apiDataEnabled) {
-    livePost.value = forumStore.toggleLocalFollow(livePost.value)
-    return
-  }
   followMutation.mutate(undefined, {
     onError: () => {
-      livePost.value = forumStore.toggleLocalFollow(livePost.value)
+      forumStore.refreshHint = '关注失败，请稍后重试。'
     },
   })
 }

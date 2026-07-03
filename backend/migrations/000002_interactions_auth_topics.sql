@@ -46,12 +46,6 @@ CREATE TABLE IF NOT EXISTS topic_posts (
   PRIMARY KEY (topic_id, post_id)
 );
 
-INSERT INTO users (email, password_hash, nickname, role, province, grade)
-VALUES
-  ('demo@student.local', '$2a$10$t/JFyW/YAZz4Vj.XyAkkAeQWgPniZgyo6UtQrqs3Don7bpUBp3ZHO', '演示同学', 'student', '浙江', '高一'),
-  ('demo@parent.local', '$2a$10$t/JFyW/YAZz4Vj.XyAkkAeQWgPniZgyo6UtQrqs3Don7bpUBp3ZHO', '演示家长', 'parent', '江苏', '高一')
-ON CONFLICT DO NOTHING;
-
 UPDATE subject_insights
 SET details = CASE combination
   WHEN '物理 + 化学 + 生物' THEN '物化生通常拥有较高专业覆盖度，尤其适合目标仍在理工、医学、农学、生物科学等方向间摇摆的学生。它的真实门槛在于三科都需要持续投入：物理看模型，化学看体系，生物看细节记忆。建议用最近三次校内考试排名稳定性、错题修复速度和每天可投入时间共同判断。'

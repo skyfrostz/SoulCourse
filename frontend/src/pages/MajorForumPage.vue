@@ -19,7 +19,7 @@ const activeSort = ref<'hot' | 'latest' | 'saved'>('hot')
 const majorName = computed(() => decodeURIComponent(String(route.params.major ?? '')))
 const requirement = computed(() => findMajorRequirement(majorName.value))
 const displayMajor = computed(() => requirement.value?.major ?? majorName.value)
-const forumPosts = computed(() => [...forumStore.getCreatedPosts(), ...samplePosts])
+const forumPosts = computed(() => samplePosts)
 const relatedPosts = computed(() => hydrateMajorPosts(displayMajor.value, forumStore, forumPosts.value))
 const stats = computed(() => getMajorForumStats(displayMajor.value, forumStore, forumPosts.value))
 const categoryTabs: Array<{ label: string; value: Category | 'all' }> = [

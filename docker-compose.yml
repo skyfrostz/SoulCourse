@@ -70,6 +70,18 @@ services:
     depends_on:
       - backend
 
+  admin:
+    image: python:3.13-alpine
+    container_name: scf-admin
+    working_dir: /app
+    ports:
+      - "${ADMIN_PORT:-5175}:5175"
+    volumes:
+      - ./admin:/app:ro
+    command: python3 -m http.server 5175 --bind 0.0.0.0
+    depends_on:
+      - backend
+
 volumes:
   postgres-data:
   redis-data:

@@ -44,6 +44,7 @@ export interface SubjectInsight {
   trend: string
   heat: number
   matchRate: number
+  coverageRate?: number
   advice: string
   details: string
   updatedAt: string

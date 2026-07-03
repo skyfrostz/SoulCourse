@@ -14,12 +14,11 @@ import type {
 } from '../types/forum'
 
 export const authStorageKey = 'scf_auth_session'
-export const apiDataEnabled =
-  Boolean(import.meta.env.VITE_API_BASE_URL) || import.meta.env.VITE_ENABLE_DEFAULT_API === 'true'
+export const apiDataEnabled = true
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081/api/v1',
-  timeout: 2500,
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
+  timeout: 8000,
 })
 
 api.interceptors.request.use((config) => {
@@ -38,12 +37,25 @@ interface ApiEnvelope<T> {
 export async function register(payload: {
   email: string
   password: string
+  verificationCode: string
   nickname: string
   role: string
   province: string
   grade: string
 }): Promise<AuthSession> {
   const response = await api.post<ApiEnvelope<AuthSession>>('/auth/register', payload)
+  return response.data.data
+}
+
+export async function sendEmailVerificationCode(email: string): Promise<{
+  email: string
+  expiresInSeconds: number
+  debugCode?: string
+}> {
+  const response = await api.post<ApiEnvelope<{ email: string; expiresInSeconds: number; debugCode?: string }>>(
+    '/auth/email-verification-code',
+    { email },
+  )
   return response.data.data
 }
 

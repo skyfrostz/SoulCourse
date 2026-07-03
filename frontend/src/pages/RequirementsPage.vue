@@ -31,10 +31,10 @@ const setKeyword = (value: string) => {
 }
 
 const statsByMajor = computed(() =>
-  new Map(majorRequirements.map((item) => [item.major, getMajorForumStats(item.major, forumStore, [...forumStore.getCreatedPosts(), ...samplePosts])])),
+  new Map(majorRequirements.map((item) => [item.major, getMajorForumStats(item.major, forumStore, samplePosts)])),
 )
 
-const statsFor = (major: string) => statsByMajor.value.get(major) ?? getMajorForumStats(major, forumStore, [...forumStore.getCreatedPosts(), ...samplePosts])
+const statsFor = (major: string) => statsByMajor.value.get(major) ?? getMajorForumStats(major, forumStore, samplePosts)
 
 const goMajorForum = (major: string) => {
   router.push(majorForumPath(major))

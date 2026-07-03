@@ -109,17 +109,28 @@ type User struct {
 }
 
 type RegisterInput struct {
-	Email    string `json:"email" binding:"required,email,max=120"`
-	Password string `json:"password" binding:"required,min=6,max=72"`
-	Nickname string `json:"nickname" binding:"required,min=1,max=40"`
-	Role     string `json:"role" binding:"required,oneof=student parent teacher counselor"`
-	Province string `json:"province" binding:"required,max=30"`
-	Grade    string `json:"grade" binding:"required,max=20"`
+	Email            string `json:"email" binding:"required,email,max=120"`
+	Password         string `json:"password" binding:"required,min=6,max=72"`
+	VerificationCode string `json:"verificationCode" binding:"required,len=6,numeric"`
+	Nickname         string `json:"nickname" binding:"required,min=1,max=40"`
+	Role             string `json:"role" binding:"required,oneof=student parent teacher counselor"`
+	Province         string `json:"province" binding:"required,max=30"`
+	Grade            string `json:"grade" binding:"required,max=20"`
 }
 
 type LoginInput struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+type EmailVerificationCodeInput struct {
+	Email string `json:"email" binding:"required,email,max=120"`
+}
+
+type EmailVerificationCodeResult struct {
+	Email            string `json:"email"`
+	ExpiresInSeconds int    `json:"expiresInSeconds"`
+	DebugCode        string `json:"debugCode,omitempty"`
 }
 
 type AuthSession struct {

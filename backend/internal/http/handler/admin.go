@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -307,6 +308,11 @@ func (h *AdminHandler) CreateContent(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "content_create_failed", "could not create admin content")
 		return
 	}
+	record, err = h.syncContentRecord(c, record)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "content_sync_failed", "could not sync admin content")
+		return
+	}
 	h.logAudit(c, "create", record.ID, record.Module, "新建后台内容："+record.Title)
 	ok(c, record)
 }
@@ -327,6 +333,11 @@ func (h *AdminHandler) UpdateContent(c *gin.Context) {
 			return
 		}
 		fail(c, http.StatusInternalServerError, "content_update_failed", "could not update admin content")
+		return
+	}
+	record, err = h.syncContentRecord(c, record)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "content_sync_failed", "could not sync admin content")
 		return
 	}
 	h.logAudit(c, "update", record.ID, record.Module, "保存后台内容："+record.Title)
@@ -366,6 +377,11 @@ func (h *AdminHandler) WorkflowContent(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "workflow_update_failed", "could not update admin workflow")
 		return
 	}
+	record, err = h.syncContentRecord(c, record)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "content_sync_failed", "could not sync admin workflow")
+		return
+	}
 
 	detail := input.ActionLabel + "：" + record.Title
 	if input.Note != "" {
@@ -379,12 +395,13 @@ func (h *AdminHandler) DeleteContent(c *gin.Context) {
 	id := c.Param("id")
 	var module string
 	var title string
+	var payload []byte
 	err := h.db.QueryRow(c.Request.Context(), `
 		UPDATE admin_content_records
 		SET deleted_at = now(), updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
-		RETURNING module, title
-	`, id).Scan(&module, &title)
+		RETURNING module, title, payload
+	`, id).Scan(&module, &title, &payload)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			fail(c, http.StatusNotFound, "content_not_found", "admin content record was not found")
@@ -393,8 +410,308 @@ func (h *AdminHandler) DeleteContent(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "content_delete_failed", "could not delete admin content")
 		return
 	}
+	if module == "posts" {
+		if err := h.softDeleteSyncedPost(c, payload); err != nil {
+			fail(c, http.StatusInternalServerError, "content_sync_failed", "could not remove synced post")
+			return
+		}
+	}
 	h.logAudit(c, "delete", id, module, "删除后台内容："+title)
 	ok(c, envelope{"deleted": true})
+}
+
+type syncedPostPayload struct {
+	PostID    int64
+	Content   string
+	Track     string
+	Electives []string
+	Category  string
+	Grade     string
+	Province  string
+	ImageURLs []string
+}
+
+func (h *AdminHandler) syncContentRecord(c *gin.Context, record AdminContentRecord) (AdminContentRecord, error) {
+	if record.Module != "posts" {
+		return record, nil
+	}
+
+	payloadMap := decodePayloadMap(record.Payload)
+	postPayload := buildSyncedPostPayload(record, payloadMap)
+	postID := postPayload.PostID
+
+	if postID == 0 {
+		_ = h.db.QueryRow(c.Request.Context(), `
+			SELECT id
+			FROM posts
+			WHERE title = $1 AND deleted_at IS NULL
+			ORDER BY created_at DESC
+			LIMIT 1
+		`, record.Title).Scan(&postID)
+	}
+
+	if postID > 0 {
+		err := h.db.QueryRow(c.Request.Context(), `
+			UPDATE posts
+			SET author_name = $2,
+			    author_role = $3,
+			    title = $4,
+			    content = $5,
+			    image_urls = $6,
+			    tags = $7,
+			    track = $8,
+			    electives = $9,
+			    category = $10,
+			    grade = $11,
+			    province = $12,
+			    deleted_at = NULL,
+			    updated_at = now()
+			WHERE id = $1 AND deleted_at IS NULL
+			RETURNING id
+		`, postID, record.Owner, inferAuthorRole(record), record.Title, postPayload.Content, postPayload.ImageURLs, record.Tags, postPayload.Track, postPayload.Electives, postPayload.Category, postPayload.Grade, postPayload.Province).Scan(&postID)
+		if err != nil && err != pgx.ErrNoRows {
+			return AdminContentRecord{}, err
+		}
+		if err == pgx.ErrNoRows {
+			postID = 0
+		}
+	}
+
+	if postID == 0 {
+		err := h.db.QueryRow(c.Request.Context(), `
+			INSERT INTO posts (author_name, author_role, title, content, image_urls, tags, track, electives, category, grade, province)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			RETURNING id
+		`, record.Owner, inferAuthorRole(record), record.Title, postPayload.Content, postPayload.ImageURLs, record.Tags, postPayload.Track, postPayload.Electives, postPayload.Category, postPayload.Grade, postPayload.Province).Scan(&postID)
+		if err != nil {
+			return AdminContentRecord{}, err
+		}
+	}
+
+	payloadMap["postId"] = strconv.FormatInt(postID, 10)
+	payloadMap["content"] = postPayload.Content
+	payloadMap["track"] = postPayload.Track
+	payloadMap["electives"] = postPayload.Electives
+	payloadMap["category"] = postPayload.Category
+	payloadMap["grade"] = postPayload.Grade
+	payloadMap["province"] = postPayload.Province
+	payloadMap["imageUrls"] = postPayload.ImageURLs
+
+	payloadBytes, err := json.Marshal(payloadMap)
+	if err != nil {
+		return AdminContentRecord{}, err
+	}
+	return scanAdminContent(h.db.QueryRow(c.Request.Context(), `
+		UPDATE admin_content_records
+		SET payload = $2,
+		    url = $3,
+		    updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING id, module, title, content_type, status, scope, owner, tags, summary, url,
+		          priority, sort_order, payload, created_at, updated_at
+	`, record.ID, payloadBytes, fmt.Sprintf("/posts/%d", postID)))
+}
+
+func (h *AdminHandler) softDeleteSyncedPost(c *gin.Context, payload []byte) error {
+	payloadMap := decodePayloadMap(payload)
+	postID := payloadInt64(payloadMap, "postId")
+	if postID == 0 {
+		return nil
+	}
+	_, err := h.db.Exec(c.Request.Context(), `
+		UPDATE posts
+		SET deleted_at = now(), updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL
+	`, postID)
+	return err
+}
+
+func decodePayloadMap(raw []byte) map[string]any {
+	payload := map[string]any{}
+	if len(raw) == 0 {
+		return payload
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return map[string]any{}
+	}
+	return payload
+}
+
+func buildSyncedPostPayload(record AdminContentRecord, payload map[string]any) syncedPostPayload {
+	content := payloadString(payload, "content")
+	if content == "" {
+		content = strings.TrimSpace(record.Summary)
+	}
+	if content == "" {
+		content = "这条内容来自后台内容库，请补充正文、来源和审核说明。"
+	}
+
+	return syncedPostPayload{
+		PostID:    payloadInt64(payload, "postId"),
+		Content:   content,
+		Track:     normalizeTrack(payloadString(payload, "track"), record),
+		Electives: normalizeElectives(payloadStringSlice(payload, "electives"), record),
+		Category:  normalizeCategory(payloadString(payload, "category"), record),
+		Grade:     defaultString(payloadString(payload, "grade"), "高一"),
+		Province:  normalizeProvince(defaultString(payloadString(payload, "province"), record.Scope)),
+		ImageURLs: payloadStringSlice(payload, "imageUrls"),
+	}
+}
+
+func payloadString(payload map[string]any, key string) string {
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case float64:
+		if typed == float64(int64(typed)) {
+			return strconv.FormatInt(int64(typed), 10)
+		}
+		return fmt.Sprintf("%g", typed)
+	default:
+		return strings.TrimSpace(fmt.Sprint(typed))
+	}
+}
+
+func payloadInt64(payload map[string]any, key string) int64 {
+	value := payloadString(payload, key)
+	if value == "" {
+		return 0
+	}
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return id
+}
+
+func payloadStringSlice(payload map[string]any, key string) []string {
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case []string:
+		return cleanStringSlice(typed)
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text := strings.TrimSpace(fmt.Sprint(item)); text != "" {
+				values = append(values, text)
+			}
+		}
+		return cleanStringSlice(values)
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return nil
+		}
+		return cleanStringSlice(strings.Split(typed, ","))
+	default:
+		return nil
+	}
+}
+
+func cleanStringSlice(values []string) []string {
+	cleaned := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		cleaned = append(cleaned, value)
+	}
+	return cleaned
+}
+
+func inferAuthorRole(record AdminContentRecord) string {
+	text := record.Type + " " + record.Owner + " " + strings.Join(record.Tags, " ")
+	switch {
+	case strings.Contains(text, "老师") || strings.Contains(text, "教师"):
+		return "teacher"
+	case strings.Contains(text, "规划") || strings.Contains(text, "顾问") || strings.Contains(text, "研究") || strings.Contains(text, "数据"):
+		return "counselor"
+	case strings.Contains(text, "家长") || strings.Contains(text, "妈妈") || strings.Contains(text, "爸爸"):
+		return "parent"
+	default:
+		return "student"
+	}
+}
+
+func normalizeTrack(value string, record AdminContentRecord) string {
+	if value == "physics" || value == "history" {
+		return value
+	}
+	text := record.Title + " " + record.Summary + " " + strings.Join(record.Tags, " ")
+	if strings.Contains(text, "历史") || strings.Contains(text, "史政") || strings.Contains(text, "文科") {
+		return "history"
+	}
+	return "physics"
+}
+
+func normalizeElectives(values []string, record AdminContentRecord) []string {
+	allowed := map[string]bool{"chemistry": true, "biology": true, "politics": true, "geography": true}
+	cleaned := make([]string, 0, 2)
+	seen := map[string]bool{}
+	for _, value := range values {
+		if allowed[value] && !seen[value] {
+			seen[value] = true
+			cleaned = append(cleaned, value)
+		}
+	}
+	if len(cleaned) == 2 {
+		return cleaned
+	}
+
+	text := record.Title + " " + record.Summary + " " + strings.Join(record.Tags, " ")
+	switch {
+	case strings.Contains(text, "物化政"):
+		return []string{"chemistry", "politics"}
+	case strings.Contains(text, "物化地"):
+		return []string{"chemistry", "geography"}
+	case strings.Contains(text, "物生地"):
+		return []string{"biology", "geography"}
+	case strings.Contains(text, "史政地"):
+		return []string{"politics", "geography"}
+	case strings.Contains(text, "史化生"):
+		return []string{"chemistry", "biology"}
+	default:
+		return []string{"chemistry", "biology"}
+	}
+}
+
+func normalizeCategory(value string, record AdminContentRecord) string {
+	if value == "experience" || value == "question" || value == "data" {
+		return value
+	}
+	text := record.Type + " " + record.Title + " " + strings.Join(record.Tags, " ")
+	switch {
+	case strings.Contains(text, "数据") || strings.Contains(text, "政策") || strings.Contains(text, "要求"):
+		return "data"
+	case strings.Contains(text, "提问") || strings.Contains(text, "问") || strings.Contains(text, "纠结"):
+		return "question"
+	default:
+		return "experience"
+	}
+}
+
+func normalizeProvince(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "全站" || value == "首页" {
+		return "全国"
+	}
+	return value
+}
+
+func defaultString(value string, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }
 
 func (h *AdminHandler) AuditLogs(c *gin.Context) {

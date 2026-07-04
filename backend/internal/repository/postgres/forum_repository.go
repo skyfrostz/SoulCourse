@@ -24,7 +24,7 @@ func NewForumRepository(db *pgxpool.Pool) *ForumRepository {
 
 func (r *ForumRepository) ListPosts(ctx context.Context, viewerID *int64, filter domain.FeedFilter) ([]domain.Post, error) {
 	args := []any{}
-	clauses := []string{"deleted_at IS NULL"}
+	clauses := []string{"deleted_at IS NULL", adminPublishedPostClause("posts")}
 
 	addArg := func(value any) string {
 		args = append(args, value)
@@ -50,7 +50,7 @@ func (r *ForumRepository) ListPosts(ctx context.Context, viewerID *int64, filter
 	}
 	if filter.Keyword != "" {
 		keywordArg := addArg("%" + filter.Keyword + "%")
-		clauses = append(clauses, "(title ILIKE "+keywordArg+" OR content ILIKE "+keywordArg+")")
+		clauses = append(clauses, "(title ILIKE "+keywordArg+" OR content ILIKE "+keywordArg+" OR author_name ILIKE "+keywordArg+" OR province ILIKE "+keywordArg+" OR grade ILIKE "+keywordArg+" OR array_to_string(tags, ',') ILIKE "+keywordArg+")")
 	}
 
 	limitArg := addArg(filter.Limit)
@@ -116,9 +116,10 @@ func (r *ForumRepository) GetPost(ctx context.Context, viewerID *int64, id int64
 		       CASE WHEN $2::bigint IS NULL THEN false ELSE EXISTS(SELECT 1 FROM post_favorites WHERE post_id = posts.id AND user_id = $2::bigint) END,
 		       CASE WHEN $2::bigint IS NULL THEN false ELSE EXISTS(SELECT 1 FROM follows WHERE author_name = posts.author_name AND follower_id = $2::bigint) END,
 		       created_at, updated_at
-		FROM posts
-		WHERE id = $1 AND deleted_at IS NULL
-	`, id, viewerID)
+			FROM posts
+			WHERE id = $1 AND deleted_at IS NULL
+			  AND `+adminPublishedPostClause("posts")+`
+		`, id, viewerID)
 
 	post, err := scanPost(postRow)
 	if err != nil {
@@ -152,14 +153,45 @@ func (r *ForumRepository) GetPost(ctx context.Context, viewerID *int64, id int64
 }
 
 func (r *ForumRepository) CreatePost(ctx context.Context, user domain.User, input domain.CreatePostInput) (domain.Post, error) {
-	row := r.db.QueryRow(ctx, `
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	row := tx.QueryRow(ctx, `
 		INSERT INTO posts (user_id, author_name, author_role, title, content, image_urls, tags, track, electives, category, grade, province)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, user_id, author_name, author_role, title, content, image_urls, tags, track, electives, category, grade,
 		          province, likes_count, comments_count, favorites_count, false, false, false, created_at, updated_at
 	`, user.ID, user.Nickname, user.Role, input.Title, input.Content, input.ImageURLs, input.Tags, input.Track, subjectStrings(input.Electives), input.Category, user.Grade, user.Province)
 
-	return scanPost(row)
+	post, err := scanPost(row)
+	if err != nil {
+		return domain.Post{}, err
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO admin_content_records (id, module, title, content_type, status, scope, owner, tags, summary, url, priority, sort_order, payload)
+		VALUES ($1, 'posts', $2, $3, '已上架', $4, $5, $6, $7, $8, '常规', 0,
+		        jsonb_build_object(
+		          'postId', $9::text,
+		          'content', $7,
+		          'track', $10,
+		          'electives', $11::text[],
+		          'category', $12,
+		          'grade', $13,
+		          'province', $4,
+		          'imageUrls', $14::text[],
+		          'createdByUserId', $15::text
+		        ))
+		ON CONFLICT (id) DO NOTHING
+	`, fmt.Sprintf("post-user-%d", post.ID), post.Title, postContentType(post.Category), post.Province, post.AuthorName, post.Tags, post.Content, fmt.Sprintf("/posts/%d", post.ID), post.ID, post.Track, subjectStrings(post.Electives), post.Category, post.Grade, post.ImageURLs, user.ID)
+	if err != nil {
+		return domain.Post{}, err
+	}
+
+	return post, tx.Commit(ctx)
 }
 
 func (r *ForumRepository) CreateComment(ctx context.Context, user domain.User, postID int64, input domain.CreateCommentInput) (domain.Comment, error) {
@@ -170,7 +202,7 @@ func (r *ForumRepository) CreateComment(ctx context.Context, user domain.User, p
 	defer tx.Rollback(ctx)
 
 	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)`, postID).Scan(&exists); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL AND `+adminPublishedPostClause("posts")+`)`, postID).Scan(&exists); err != nil {
 		return domain.Comment{}, err
 	}
 	if !exists {
@@ -351,7 +383,7 @@ func (r *ForumRepository) ToggleFollowAuthor(ctx context.Context, followerID int
 	defer tx.Rollback(ctx)
 
 	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM posts WHERE author_name = $1 AND deleted_at IS NULL)`, authorName).Scan(&exists); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM posts WHERE author_name = $1 AND deleted_at IS NULL AND `+adminPublishedPostClause("posts")+`)`, authorName).Scan(&exists); err != nil {
 		return false, err
 	}
 	if !exists {
@@ -505,7 +537,7 @@ func (r *ForumRepository) togglePostRelation(ctx context.Context, table string, 
 	defer tx.Rollback(ctx)
 
 	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)`, postID).Scan(&exists); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL AND `+adminPublishedPostClause("posts")+`)`, postID).Scan(&exists); err != nil {
 		return domain.ToggleResult{}, err
 	}
 	if !exists {
@@ -546,11 +578,12 @@ func (r *ForumRepository) listTopicPosts(ctx context.Context, tx pgx.Tx, viewerI
 		       CASE WHEN $2::bigint IS NULL THEN false ELSE EXISTS(SELECT 1 FROM post_favorites WHERE post_id = p.id AND user_id = $2::bigint) END,
 		       CASE WHEN $2::bigint IS NULL THEN false ELSE EXISTS(SELECT 1 FROM follows WHERE author_name = p.author_name AND follower_id = $2::bigint) END,
 		       p.created_at, p.updated_at
-		FROM posts p
-		JOIN topic_posts tp ON tp.post_id = p.id
-		WHERE tp.topic_id = $1 AND p.deleted_at IS NULL
-		ORDER BY p.created_at DESC
-	`, topicID, viewerID)
+			FROM posts p
+			JOIN topic_posts tp ON tp.post_id = p.id
+			WHERE tp.topic_id = $1 AND p.deleted_at IS NULL
+			  AND `+adminPublishedPostClause("p")+`
+			ORDER BY p.created_at DESC
+		`, topicID, viewerID)
 	if err != nil {
 		return nil, err
 	}
@@ -567,6 +600,17 @@ func (r *ForumRepository) listTopicPosts(ctx context.Context, tx pgx.Tx, viewerI
 	return posts, rows.Err()
 }
 
+func adminPublishedPostClause(alias string) string {
+	return `NOT EXISTS (
+		SELECT 1
+		FROM admin_content_records acr
+		WHERE acr.module = 'posts'
+		  AND acr.deleted_at IS NULL
+		  AND acr.payload->>'postId' = ` + alias + `.id::text
+		  AND acr.status NOT IN ('已上架', '正常')
+	)`
+}
+
 func subjectStrings(subjects []domain.Subject) []string {
 	values := make([]string, 0, len(subjects))
 	for _, subject := range subjects {
@@ -581,4 +625,15 @@ func subjectsFromStrings(values []string) []domain.Subject {
 		subjects = append(subjects, domain.Subject(value))
 	}
 	return subjects
+}
+
+func postContentType(category domain.PostCategory) string {
+	switch category {
+	case domain.CategoryQuestion:
+		return "家长提问"
+	case domain.CategoryData:
+		return "数据建议"
+	default:
+		return "经验帖"
+	}
 }

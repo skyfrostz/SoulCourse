@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -51,6 +52,14 @@ func registerSPA(router *gin.Engine, logger *logx.Logger, distDir string, basePa
 		candidate := strings.TrimPrefix(appPath, "/")
 		if existsInFS(assets.filesystem, candidate) {
 			serveFSFile(c, assets.filesystem, candidate)
+			return
+		}
+
+		// Static asset requests should fail fast when the file is missing.
+		// Returning index.html here causes browsers to report confusing MIME errors
+		// for JS/CSS requests and hides deployment sync problems.
+		if filepath.Ext(candidate) != "" {
+			c.Status(http.StatusNotFound)
 			return
 		}
 

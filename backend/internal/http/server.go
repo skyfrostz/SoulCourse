@@ -2,6 +2,8 @@ package httpserver
 
 import (
 	"crypto/subtle"
+	"database/sql"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -13,16 +15,12 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 func NewServer(
 	cfg config.Config,
-	logger *zap.Logger,
-	db *pgxpool.Pool,
-	redisClient *redis.Client,
+	logger *slog.Logger,
+	db *sql.DB,
 	forumService *service.ForumService,
 ) *http.Server {
 	if cfg.AppEnv == "production" {
@@ -42,7 +40,7 @@ func NewServer(
 		MaxAge:           12 * time.Hour,
 	}))
 
-	healthHandler := handler.NewHealthHandler(db, redisClient)
+	healthHandler := handler.NewHealthHandler(db)
 	aiService := service.NewAIService(cfg)
 	forumHandler := handler.NewForumHandler(forumService, aiService)
 	adminHandler := handler.NewAdminHandler(cfg, forumService, db)

@@ -1,11 +1,11 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 type envelope gin.H
@@ -28,7 +28,7 @@ func fail(c *gin.Context, status int, code string, message string) {
 }
 
 func failNotFoundOrInternal(c *gin.Context, err error, resource string) {
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) {
 		fail(c, http.StatusNotFound, "not_found", resource+" not found")
 		return
 	}

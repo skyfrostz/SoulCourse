@@ -1039,10 +1039,7 @@ async function adminFetch(path, options = {}) {
 }
 
 function defaultApiBase() {
-  const isLocalAdmin =
-    ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname) &&
-    ['5175', ''].includes(window.location.port)
-  return isLocalAdmin ? 'http://localhost:8081/api/v1' : '/api/v1'
+  return '/api/v1'
 }
 
 async function loadConfig() {

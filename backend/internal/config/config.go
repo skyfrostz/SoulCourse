@@ -2,9 +2,8 @@ package config
 
 import (
 	"errors"
-	"fmt"
-	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -15,17 +14,7 @@ type Config struct {
 	HTTPPort           string
 	CORSAllowedOrigins []string
 	MediaUploadDir     string
-
-	PostgresHost     string
-	PostgresPort     string
-	PostgresUser     string
-	PostgresPassword string
-	PostgresDB       string
-	PostgresSSLMode  string
-
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
+	SQLitePath         string
 
 	JWTSecret         string
 	AdminToken        string
@@ -50,40 +39,29 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	redisDB, err := strconv.Atoi(getEnv("REDIS_DB", "0"))
-	if err != nil {
-		return Config{}, fmt.Errorf("REDIS_DB must be an integer: %w", err)
-	}
 	smtpPort, err := strconv.Atoi(getEnv("SMTP_PORT", "465"))
 	if err != nil {
-		return Config{}, fmt.Errorf("SMTP_PORT must be an integer: %w", err)
+		return Config{}, errors.New("SMTP_PORT must be an integer")
 	}
 	emailVerificationTTLMinutes, err := strconv.Atoi(getEnv("EMAIL_VERIFICATION_TTL_MINUTES", "10"))
 	if err != nil {
-		return Config{}, fmt.Errorf("EMAIL_VERIFICATION_TTL_MINUTES must be an integer: %w", err)
+		return Config{}, errors.New("EMAIL_VERIFICATION_TTL_MINUTES must be an integer")
 	}
+
+	sqlitePath := getEnv("SQLITE_PATH", filepath.Join("data", "soulcourse.db"))
+	mediaUploadDir := getEnv("MEDIA_UPLOAD_DIR", filepath.Join("data", "uploads"))
 
 	cfg := Config{
 		AppEnv:             getEnv("APP_ENV", "local"),
 		AppName:            getEnv("APP_NAME", "选科π"),
-		HTTPPort:           getEnv("HTTP_PORT", "8080"),
-		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175")),
-		MediaUploadDir:     getEnv("MEDIA_UPLOAD_DIR", "uploads"),
-
-		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:     getEnv("POSTGRES_PORT", "5432"),
-		PostgresUser:     getEnv("POSTGRES_USER", "forum"),
-		PostgresPassword: getEnv("POSTGRES_PASSWORD", "forum_dev_password"),
-		PostgresDB:       getEnv("POSTGRES_DB", "forum"),
-		PostgresSSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
-
-		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword: os.Getenv("REDIS_PASSWORD"),
-		RedisDB:       redisDB,
+		HTTPPort:           getEnv("HTTP_PORT", "1309"),
+		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5712,http://127.0.0.1:5712")),
+		MediaUploadDir:     mediaUploadDir,
+		SQLitePath:         sqlitePath,
 
 		JWTSecret:         getEnv("JWT_SECRET", "replace-me-before-production"),
-		AdminToken:        os.Getenv("ADMIN_TOKEN"),
-		AdminEmail:        strings.ToLower(os.Getenv("ADMIN_EMAIL")),
+		AdminToken:        strings.TrimSpace(os.Getenv("ADMIN_TOKEN")),
+		AdminEmail:        strings.ToLower(strings.TrimSpace(os.Getenv("ADMIN_EMAIL"))),
 		AdminPassword:     os.Getenv("ADMIN_PASSWORD"),
 		AdminPasswordHash: os.Getenv("ADMIN_PASSWORD_HASH"),
 
@@ -91,11 +69,11 @@ func Load() (Config, error) {
 		AIBaseURL: getEnv("AI_BASE_URL", "https://api.deepseek.com/v1"),
 		AIModel:   getEnv("AI_MODEL", "deepseek-chat"),
 
-		SMTPHost:                    os.Getenv("SMTP_HOST"),
+		SMTPHost:                    strings.TrimSpace(os.Getenv("SMTP_HOST")),
 		SMTPPort:                    smtpPort,
-		SMTPUsername:                os.Getenv("SMTP_USERNAME"),
+		SMTPUsername:                strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
 		SMTPPassword:                os.Getenv("SMTP_PASSWORD"),
-		SMTPFromEmail:               os.Getenv("SMTP_FROM_EMAIL"),
+		SMTPFromEmail:               strings.TrimSpace(os.Getenv("SMTP_FROM_EMAIL")),
 		SMTPFromName:                getEnv("SMTP_FROM_NAME", getEnv("APP_NAME", "选科π")),
 		SMTPUseTLS:                  getEnvBool("SMTP_USE_TLS", true),
 		SMTPStartTLS:                getEnvBool("SMTP_START_TLS", false),
@@ -107,25 +85,13 @@ func Load() (Config, error) {
 		return Config{}, errors.New("JWT_SECRET is required")
 	}
 
+	cfg.SQLitePath = filepath.Clean(cfg.SQLitePath)
+	cfg.MediaUploadDir = filepath.Clean(cfg.MediaUploadDir)
 	return cfg, nil
 }
 
 func (c Config) HTTPAddress() string {
 	return ":" + c.HTTPPort
-}
-
-func (c Config) PostgresDSN() string {
-	values := url.Values{}
-	values.Set("sslmode", c.PostgresSSLMode)
-
-	u := url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(c.PostgresUser, c.PostgresPassword),
-		Host:     c.PostgresHost + ":" + c.PostgresPort,
-		Path:     c.PostgresDB,
-		RawQuery: values.Encode(),
-	}
-	return u.String()
 }
 
 func (c Config) SMTPEnabled() bool {

@@ -2,21 +2,19 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 )
 
 type HealthHandler struct {
-	db    *pgxpool.Pool
-	redis *redis.Client
+	db *sql.DB
 }
 
-func NewHealthHandler(db *pgxpool.Pool, redisClient *redis.Client) *HealthHandler {
-	return &HealthHandler{db: db, redis: redisClient}
+func NewHealthHandler(db *sql.DB) *HealthHandler {
+	return &HealthHandler{db: db}
 }
 
 func (h *HealthHandler) Live(c *gin.Context) {
@@ -31,19 +29,12 @@ func (h *HealthHandler) Ready(c *gin.Context) {
 	defer cancel()
 
 	checks := envelope{}
-	if err := h.db.Ping(ctx); err != nil {
-		checks["postgres"] = "down"
-		fail(c, http.StatusServiceUnavailable, "dependency_unavailable", "postgres is unavailable")
+	if err := h.db.PingContext(ctx); err != nil {
+		checks["sqlite"] = "down"
+		fail(c, http.StatusServiceUnavailable, "dependency_unavailable", "sqlite is unavailable")
 		return
 	}
-	checks["postgres"] = "ok"
-
-	if err := h.redis.Ping(ctx).Err(); err != nil {
-		checks["redis"] = "down"
-		fail(c, http.StatusServiceUnavailable, "dependency_unavailable", "redis is unavailable")
-		return
-	}
-	checks["redis"] = "ok"
+	checks["sqlite"] = "ok"
 
 	c.JSON(http.StatusOK, envelope{
 		"status": "ready",

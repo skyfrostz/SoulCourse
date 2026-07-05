@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,57 +12,42 @@ import (
 
 	"subject-choice-forum/backend/internal/config"
 	httpserver "subject-choice-forum/backend/internal/http"
-	"subject-choice-forum/backend/internal/repository/postgres"
+	"subject-choice-forum/backend/internal/repository/sqlite"
 	"subject-choice-forum/backend/internal/service"
 	"subject-choice-forum/backend/internal/storage"
-
-	"go.uber.org/zap"
 )
 
 func main() {
-	logger, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
-	defer logger.Sync()
-
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Fatal("load config", zap.Error(err))
+		slog.Error("load config", "error", err)
+		os.Exit(1)
 	}
-
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
 	if cfg.AppEnv == "local" || cfg.AppEnv == "development" {
-		if devLogger, err := zap.NewDevelopment(); err == nil {
-			logger = devLogger
-			defer logger.Sync()
-		}
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	db, err := storage.NewPostgresPool(ctx, cfg)
+	db, err := storage.NewSQLiteDB(cfg)
 	if err != nil {
-		logger.Fatal("connect postgres", zap.Error(err))
+		logger.Error("open sqlite", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
-	redisClient, err := storage.NewRedisClient(ctx, cfg)
-	if err != nil {
-		logger.Fatal("connect redis", zap.Error(err))
-	}
-	defer redisClient.Close()
-
-	forumRepo := postgres.NewForumRepository(db)
+	forumRepo := sqlite.NewForumRepository(db)
 	emailSender := service.NewSMTPEmailSender(cfg)
 	forumService := service.NewForumService(forumRepo, cfg, emailSender)
-
-	server := httpserver.NewServer(cfg, logger, db, redisClient, forumService)
+	server := httpserver.NewServer(cfg, logger, db, forumService)
 
 	go func() {
-		logger.Info("api listening", zap.String("addr", server.Addr))
+		logger.Info("api listening", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Fatal("api server failed", zap.Error(err))
+			logger.Error("api server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -70,6 +56,6 @@ func main() {
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Error("graceful shutdown failed", zap.Error(err))
+		logger.Error("graceful shutdown failed", "error", err)
 	}
 }

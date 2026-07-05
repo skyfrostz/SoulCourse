@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"subject-choice-forum/backend/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type ForumHandler struct {
@@ -51,8 +51,7 @@ func (h *ForumHandler) Register(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "invalid_verification_code", "verification code is invalid or expired")
 			return
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			fail(c, http.StatusConflict, "email_exists", "email already registered")
 			return
 		}
@@ -269,6 +268,10 @@ func (h *ForumHandler) ToggleFollowAuthor(c *gin.Context) {
 	user, _ := middleware.CurrentUser(c)
 	active, err := h.service.ToggleFollowAuthor(c.Request.Context(), user.ID, c.Param("name"))
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			fail(c, http.StatusNotFound, "not_found", "author not found")
+			return
+		}
 		fail(c, http.StatusBadRequest, "follow_failed", err.Error())
 		return
 	}

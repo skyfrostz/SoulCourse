@@ -4,6 +4,7 @@ import { Bookmark, MessageSquare, Send, Share2, ThumbsUp, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels } from '../lib/labels'
+import { buildAppUrl } from '../lib/runtime'
 import { usePostComments } from '../composables/usePostComments'
 import { useForumStore } from '../stores/forum'
 import type { Post } from '../types/forum'
@@ -101,7 +102,7 @@ function follow() {
 }
 
 async function sharePost() {
-  const url = `${window.location.origin}/posts/${livePost.value.id}`
+  const url = buildAppUrl(`/posts/${livePost.value.id}`)
   if (navigator.share) {
     await navigator.share({ title: livePost.value.title, text: livePost.value.content, url }).catch(() => undefined)
     return

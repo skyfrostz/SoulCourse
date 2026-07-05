@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { defaultApiBasePath } from './runtime'
 
 export const SETTINGS_KEY = 'scf_admin_settings'
 export const SESSION_KEY = 'scf_admin_session'
@@ -253,7 +254,7 @@ const tagOptions: Record<EditableModuleId, string[]> = {
 }
 
 export function defaultApiBase() {
-  return (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '')
+  return (import.meta.env.VITE_API_BASE_URL ?? defaultApiBasePath()).replace(/\/$/, '')
 }
 
 export function loadAdminSettings(): AdminSettings {

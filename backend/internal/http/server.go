@@ -3,7 +3,6 @@ package httpserver
 import (
 	"crypto/subtle"
 	"database/sql"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"subject-choice-forum/backend/internal/config"
 	"subject-choice-forum/backend/internal/http/handler"
 	"subject-choice-forum/backend/internal/http/middleware"
+	"subject-choice-forum/backend/internal/logx"
 	"subject-choice-forum/backend/internal/service"
 
 	"github.com/gin-contrib/cors"
@@ -19,16 +19,14 @@ import (
 
 func NewServer(
 	cfg config.Config,
-	logger *slog.Logger,
+	logger *logx.Logger,
 	db *sql.DB,
 	forumService *service.ForumService,
 ) *http.Server {
-	if cfg.AppEnv == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
-	router.Use(gin.Recovery())
+	router.Use(middleware.RecoveryLogger(logger))
 	router.Use(middleware.RequestLogger(logger))
 	router.Use(middleware.SecurityHeaders())
 	router.Use(cors.New(cors.Config{
@@ -45,11 +43,25 @@ func NewServer(
 	forumHandler := handler.NewForumHandler(forumService, aiService)
 	adminHandler := handler.NewAdminHandler(cfg, forumService, db)
 
-	router.GET("/healthz", healthHandler.Live)
-	router.GET("/readyz", healthHandler.Ready)
-	router.Static("/uploads", cfg.MediaUploadDir)
+	if cfg.AppBasePath != "" {
+		redirectToBasePath := func(c *gin.Context) {
+			target := cfg.AppBasePath + "/"
+			if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
+				target += "?" + rawQuery
+			}
+			c.Redirect(http.StatusPermanentRedirect, target)
+		}
+		router.GET("/", redirectToBasePath)
+		router.HEAD("/", redirectToBasePath)
+	}
 
-	api := router.Group("/api/v1")
+	baseRouter := router.Group(cfg.AppBasePath)
+
+	baseRouter.GET("/healthz", healthHandler.Live)
+	baseRouter.GET("/readyz", healthHandler.Ready)
+	baseRouter.Static("/uploads", cfg.MediaUploadDir)
+
+	api := baseRouter.Group("/api/v1")
 	api.Use(middleware.OptionalAuth(forumService))
 	{
 		api.POST("/auth/email-verification-code", forumHandler.SendEmailVerificationCode)
@@ -88,6 +100,8 @@ func NewServer(
 			admin.GET("/audit-logs", adminHandler.AuditLogs)
 		}
 	}
+
+	registerSPA(router, logger, cfg.FrontendDistDir, cfg.AppBasePath)
 
 	return &http.Server{
 		Addr:              cfg.HTTPAddress(),

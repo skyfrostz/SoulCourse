@@ -198,7 +198,7 @@ func (h *AdminHandler) UploadImage(c *gin.Context) {
 	}
 
 	ok(c, envelope{
-		"url":         "/uploads/images/" + dateDir + "/" + fileName,
+		"url":         h.cfg.RoutePath("/uploads/images/" + dateDir + "/" + fileName),
 		"contentType": contentType,
 		"size":        fileHeader.Size,
 		"name":        fileHeader.Filename,
@@ -502,7 +502,7 @@ func (h *AdminHandler) syncContentRecord(ctx context.Context, record AdminConten
 		UPDATE admin_content_records
 		SET payload = ?, url = ?, updated_at = ?
 		WHERE id = ? AND deleted_at IS NULL
-	`, marshalJSON(payloadMap), fmt.Sprintf("/posts/%d", postID), now, record.ID); err != nil {
+	`, marshalJSON(payloadMap), h.cfg.RoutePath(fmt.Sprintf("/posts/%d", postID)), now, record.ID); err != nil {
 		return AdminContentRecord{}, err
 	}
 	return h.getContentByID(ctx, record.ID)

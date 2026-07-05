@@ -22,6 +22,8 @@ backend/coverage.out
 backend/uploads/
 
 outputs/
-backend/data/soulcourse.db-wal
+backend/data/*
+backend/data/
+/release
 backend/data/soulcourse.db-shm
-backend/data/soulcourse.db
+backend/data/soulcourse.db-wal

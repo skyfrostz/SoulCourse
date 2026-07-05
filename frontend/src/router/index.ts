@@ -20,7 +20,7 @@ import UserProfilePage from '../pages/UserProfilePage.vue'
 import AdminConsolePage from '../pages/AdminConsolePage.vue'
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomePage },
     { path: '/posts/:id', name: 'post-detail', component: PostDetailPage },

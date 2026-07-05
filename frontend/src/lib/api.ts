@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { defaultApiBasePath } from './runtime'
 import type {
   AuthSession,
   ChoiceAdvice,
@@ -17,7 +18,7 @@ export const authStorageKey = 'scf_auth_session'
 export const apiDataEnabled = true
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? defaultApiBasePath(),
   timeout: 8000,
 })
 

@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router'
 import DecisionSearch from './DecisionSearch.vue'
 import { useForumData } from '../composables/useForumData'
 import { notificationSeeds, notificationTypeLabels } from '../lib/notifications'
+import { appAssetUrl } from '../lib/runtime'
 import { useForumStore } from '../stores/forum'
 import type { Category } from '../types/forum'
 
@@ -96,7 +97,7 @@ onBeforeUnmount(() => {
   <header class="top-nav">
     <div class="brand-block">
       <div class="brand-mark" aria-hidden="true">
-        <img src="/brand/logo-mark.png" alt="" />
+        <img :src="appAssetUrl('/brand/logo-mark.png')" alt="" />
       </div>
       <span class="brand-name">选科π</span>
     </div>

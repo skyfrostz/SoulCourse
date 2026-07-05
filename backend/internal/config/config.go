@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -11,8 +12,10 @@ import (
 type Config struct {
 	AppEnv             string
 	AppName            string
+	AppBasePath        string
 	HTTPPort           string
 	CORSAllowedOrigins []string
+	FrontendDistDir    string
 	MediaUploadDir     string
 	SQLitePath         string
 
@@ -49,13 +52,16 @@ func Load() (Config, error) {
 	}
 
 	sqlitePath := getEnv("SQLITE_PATH", filepath.Join("data", "soulcourse.db"))
+	frontendDistDir := resolveFrontendDistDir(strings.TrimSpace(os.Getenv("FRONTEND_DIST_DIR")))
 	mediaUploadDir := getEnv("MEDIA_UPLOAD_DIR", filepath.Join("data", "uploads"))
 
 	cfg := Config{
 		AppEnv:             getEnv("APP_ENV", "local"),
 		AppName:            getEnv("APP_NAME", "选科π"),
+		AppBasePath:        normalizeBasePath(os.Getenv("APP_BASE_PATH")),
 		HTTPPort:           getEnv("HTTP_PORT", "1309"),
 		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5712,http://127.0.0.1:5712")),
+		FrontendDistDir:    frontendDistDir,
 		MediaUploadDir:     mediaUploadDir,
 		SQLitePath:         sqlitePath,
 
@@ -86,12 +92,26 @@ func Load() (Config, error) {
 	}
 
 	cfg.SQLitePath = filepath.Clean(cfg.SQLitePath)
+	if cfg.FrontendDistDir != "" {
+		cfg.FrontendDistDir = filepath.Clean(cfg.FrontendDistDir)
+	}
 	cfg.MediaUploadDir = filepath.Clean(cfg.MediaUploadDir)
 	return cfg, nil
 }
 
 func (c Config) HTTPAddress() string {
 	return ":" + c.HTTPPort
+}
+
+func (c Config) RoutePath(relativePath string) string {
+	normalized := normalizeRoutePath(relativePath)
+	if c.AppBasePath == "" {
+		return normalized
+	}
+	if normalized == "/" {
+		return c.AppBasePath
+	}
+	return c.AppBasePath + normalized
 }
 
 func (c Config) SMTPEnabled() bool {
@@ -128,4 +148,36 @@ func splitCSV(value string) []string {
 		}
 	}
 	return items
+}
+
+func resolveFrontendDistDir(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	candidates := []string{
+		filepath.Join("frontend", "dist"),
+		filepath.Join("..", "frontend", "dist"),
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func normalizeBasePath(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || trimmed == "/" {
+		return ""
+	}
+	return "/" + strings.Trim(strings.TrimSpace(trimmed), "/")
+}
+
+func normalizeRoutePath(value string) string {
+	cleaned := path.Clean("/" + strings.TrimSpace(value))
+	if cleaned == "." {
+		return "/"
+	}
+	return cleaned
 }

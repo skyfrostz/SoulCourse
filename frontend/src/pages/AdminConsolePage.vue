@@ -8,6 +8,7 @@ import type {
   EditableModuleId,
   ModuleId,
 } from '../lib/admin'
+import { appAssetUrl } from '../lib/runtime'
 import {
   adminLogin,
   clearAdminSession,
@@ -552,7 +553,7 @@ function toErrorMessage(error: unknown) {
   <main v-if="!isLoggedIn" class="login-shell">
     <section class="login-panel">
       <div class="login-brand">
-        <span class="admin-logo-frame"><img src="/brand/logo-mark.png" alt="选科π logo" /></span>
+        <span class="admin-logo-frame"><img :src="appAssetUrl('/brand/logo-mark.png')" alt="选科π logo" /></span>
         <div>
           <small>Admin Console</small>
           <h1>选科π管理后台</h1>
@@ -585,7 +586,7 @@ function toErrorMessage(error: unknown) {
   <div v-else class="admin-console-page">
     <aside class="sidebar">
       <div class="brand">
-        <span class="admin-logo-frame"><img src="/brand/logo-mark.png" alt="选科π logo" /></span>
+        <span class="admin-logo-frame"><img :src="appAssetUrl('/brand/logo-mark.png')" alt="选科π logo" /></span>
         <div>
           <strong>选科π</strong>
           <small>Admin Console</small>

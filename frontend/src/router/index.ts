@@ -17,6 +17,7 @@ import FollowingPage from '../pages/FollowingPage.vue'
 import TopicPage from '../pages/TopicPage.vue'
 import TopicsOverviewPage from '../pages/TopicsOverviewPage.vue'
 import UserProfilePage from '../pages/UserProfilePage.vue'
+import AdminConsolePage from '../pages/AdminConsolePage.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -30,6 +31,7 @@ export const router = createRouter({
     { path: '/insights/:id', name: 'insight-detail', component: InsightPage },
     { path: '/advice', name: 'advice-overview', component: AdviceOverviewPage },
     { path: '/advice/:id', name: 'advice-detail', component: AdviceDetailPage },
+    { path: '/admin', alias: '/admin/', name: 'admin-console', component: AdminConsolePage, meta: { layout: 'admin' } },
     { path: '/following', name: 'following', component: FollowingPage },
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/messages', name: 'messages', component: MessagesPage },

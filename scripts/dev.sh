@@ -7,4 +7,4 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
-docker compose up --build
+DOCKER_BUILDKIT=1 docker compose up --build

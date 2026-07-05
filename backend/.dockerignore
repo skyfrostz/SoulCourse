@@ -1,6 +1,10 @@
 node_modules
 .air.toml
 tmp
+uploads
+bin
+coverage.out
 .git
 .gitignore
 *.md
+.DS_Store

@@ -1,6 +1,10 @@
 node_modules
 dist
+.pnpm-store
+.tmp
+.cache
 .git
 .gitignore
 *.md
 .vscode
+.DS_Store

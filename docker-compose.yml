@@ -34,6 +34,7 @@ services:
       retries: 20
 
   backend:
+    image: subject-choice-forum-backend:dev
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -49,6 +50,7 @@ services:
     volumes:
       - ./backend:/app
       - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,17 +58,23 @@ services:
         condition: service_healthy
 
   frontend:
-    image: node:24-alpine
+    image: subject-choice-forum-frontend:dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
     container_name: scf-frontend
     working_dir: /app
     environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8081/api/v1}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+      VITE_DEV_PROXY_TARGET: http://backend:8080
     ports:
-      - "5173:5173"
+      - "${FRONTEND_HOST_PORT:-5173}:5173"
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules
-    command: sh -c "corepack enable && corepack prepare pnpm@11.7.0 --activate && pnpm install && pnpm dev --host 0.0.0.0"
+      - frontend-pnpm-store:/pnpm/store
+    command: pnpm dev --host 0.0.0.0
     depends_on:
       - backend
 
@@ -75,7 +83,7 @@ services:
     container_name: scf-admin
     working_dir: /app
     ports:
-      - "${ADMIN_PORT:-5175}:5175"
+      - "${ADMIN_HOST_PORT:-5175}:5175"
     volumes:
       - ./admin:/app:ro
     command: python3 -m http.server 5175 --bind 0.0.0.0
@@ -86,4 +94,6 @@ volumes:
   postgres-data:
   redis-data:
   go-mod-cache:
+  go-build-cache:
   frontend-node-modules:
+  frontend-pnpm-store:

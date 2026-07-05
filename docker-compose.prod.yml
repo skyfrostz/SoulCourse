@@ -36,6 +36,7 @@ services:
       retries: 5
 
   backend:
+    image: subject-choice-forum-backend:prod
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -58,6 +59,7 @@ services:
         condition: service_healthy
 
   frontend:
+    image: subject-choice-forum-frontend:prod
     build:
       context: ./frontend
       dockerfile: Dockerfile

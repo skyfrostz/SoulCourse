@@ -14,6 +14,7 @@ type Config struct {
 	AppName            string
 	HTTPPort           string
 	CORSAllowedOrigins []string
+	MediaUploadDir     string
 
 	PostgresHost     string
 	PostgresPort     string
@@ -64,9 +65,10 @@ func Load() (Config, error) {
 
 	cfg := Config{
 		AppEnv:             getEnv("APP_ENV", "local"),
-		AppName:            getEnv("APP_NAME", "subject-choice-forum"),
+		AppName:            getEnv("APP_NAME", "选科π"),
 		HTTPPort:           getEnv("HTTP_PORT", "8080"),
 		CORSAllowedOrigins: splitCSV(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175")),
+		MediaUploadDir:     getEnv("MEDIA_UPLOAD_DIR", "uploads"),
 
 		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:     getEnv("POSTGRES_PORT", "5432"),
@@ -94,11 +96,11 @@ func Load() (Config, error) {
 		SMTPUsername:                os.Getenv("SMTP_USERNAME"),
 		SMTPPassword:                os.Getenv("SMTP_PASSWORD"),
 		SMTPFromEmail:               os.Getenv("SMTP_FROM_EMAIL"),
-		SMTPFromName:                getEnv("SMTP_FROM_NAME", getEnv("APP_NAME", "选科知谈")),
+		SMTPFromName:                getEnv("SMTP_FROM_NAME", getEnv("APP_NAME", "选科π")),
 		SMTPUseTLS:                  getEnvBool("SMTP_USE_TLS", true),
 		SMTPStartTLS:                getEnvBool("SMTP_START_TLS", false),
 		EmailVerificationTTLMinutes: emailVerificationTTLMinutes,
-		EmailVerificationSubject:    getEnv("EMAIL_VERIFICATION_SUBJECT", "选科知谈邮箱验证码"),
+		EmailVerificationSubject:    getEnv("EMAIL_VERIFICATION_SUBJECT", "选科π邮箱验证码"),
 	}
 
 	if cfg.JWTSecret == "" {

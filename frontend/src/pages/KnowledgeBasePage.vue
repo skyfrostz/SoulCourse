@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { ChevronLeft, ExternalLink, FileText, MapPin, Newspaper, Search, ShieldCheck } from '@lucide/vue'
 import { useRouter } from 'vue-router'
+import { apiDataEnabled, fetchPublishedContent, type PublishedContentRecord } from '../lib/api'
 import {
   knowledgeTakeaways,
   mediaInsightSources,
@@ -13,6 +15,11 @@ const router = useRouter()
 const keyword = ref('')
 const activeRegion = ref<'全部' | '华北' | '东北' | '华东' | '华中' | '华南' | '西南' | '西北' | '港澳台'>('全部')
 const regions = ['全部', '华北', '东北', '华东', '华中', '华南', '西南', '西北', '港澳台'] as const
+const policyRecordsQuery = useQuery({
+  queryKey: ['content', 'policies'],
+  queryFn: () => fetchPublishedContent('policies'),
+  enabled: apiDataEnabled,
+})
 
 const filteredProvinces = computed(() => {
   const q = keyword.value.trim()
@@ -52,6 +59,39 @@ const modeCount = computed(() => ({
   special: provinceKnowledge.filter((item) => item.reformMode === 'special').length,
   provinces: provinceKnowledge.length,
 }))
+
+const policyImagesByScope = computed(() => {
+  const map = new Map<string, string>()
+  ;(policyRecordsQuery.data.value ?? []).forEach((record) => {
+    const image = firstRecordImage(record)
+    if (!image) return
+    if (record.scope) map.set(record.scope, image)
+    const province = provinceKnowledge.find((item) => record.title.includes(item.province))
+    if (province) map.set(province.province, image)
+  })
+  return map
+})
+
+const policyImagesByUrl = computed(() => {
+  const map = new Map<string, string>()
+  ;(policyRecordsQuery.data.value ?? []).forEach((record) => {
+    const image = firstRecordImage(record)
+    if (image && record.url) map.set(record.url, image)
+  })
+  return map
+})
+
+function firstRecordImage(record: PublishedContentRecord) {
+  return Array.isArray(record.payload?.imageUrls) ? record.payload.imageUrls.find(Boolean) || '' : ''
+}
+
+function provinceCover(province: string) {
+  return policyImagesByScope.value.get(province) || ''
+}
+
+function sourceCover(url: string) {
+  return policyImagesByUrl.value.get(url) || ''
+}
 </script>
 
 <template>
@@ -90,6 +130,7 @@ const modeCount = computed(() => ({
 
     <section class="knowledge-source-grid">
       <article v-for="source in nationalOfficialSources" :key="source.url" class="knowledge-source-card">
+        <img v-if="sourceCover(source.url)" class="knowledge-source-cover" :src="sourceCover(source.url)" :alt="source.title" />
         <small>官方来源</small>
         <h2>{{ source.title }}</h2>
         <p>{{ source.summary }}</p>
@@ -109,7 +150,13 @@ const modeCount = computed(() => ({
         class="province-knowledge-card xhs-province-card"
       >
         <RouterLink class="province-card-main" :to="provincePath(item.province)">
-          <div class="province-note-cover" :class="provinceTone(index)">
+          <div class="province-note-cover" :class="[provinceTone(index), { 'has-image': provinceCover(item.province) }]">
+            <img
+              v-if="provinceCover(item.province)"
+              class="province-note-image"
+              :src="provinceCover(item.province)"
+              :alt="`${item.province}资料包图片`"
+            />
             <div>
               <small><MapPin :size="14" /> {{ item.region }}</small>
               <strong>{{ item.province }}</strong>

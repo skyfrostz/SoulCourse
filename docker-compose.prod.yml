@@ -49,6 +49,8 @@ services:
       REDIS_ADDR: redis:6379
     ports:
       - "${HTTP_HOST_PORT:-8080}:8080"
+    volumes:
+      - backend-uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,3 +83,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  backend-uploads:

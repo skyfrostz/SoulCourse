@@ -1,9 +1,15 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -84,6 +90,8 @@ type AdminContentSummary struct {
 	Review    int    `json:"review"`
 }
 
+const maxAdminImageUploadBytes int64 = 8 * 1024 * 1024
+
 func (h *AdminHandler) Login(c *gin.Context) {
 	var input AdminLoginInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -153,6 +161,47 @@ func (h *AdminHandler) SendTestEmail(c *gin.Context) {
 		return
 	}
 	ok(c, result)
+}
+
+func (h *AdminHandler) UploadImage(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAdminImageUploadBytes+1024*1024)
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		fail(c, http.StatusBadRequest, "missing_file", "please choose an image file")
+		return
+	}
+	if fileHeader.Size <= 0 || fileHeader.Size > maxAdminImageUploadBytes {
+		fail(c, http.StatusBadRequest, "file_too_large", "image must be smaller than 8MB")
+		return
+	}
+
+	contentType, ext, err := detectImageUpload(fileHeader)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "unsupported_file_type", err.Error())
+		return
+	}
+
+	dateDir := time.Now().UTC().Format("20060102")
+	fileName := randomHex(16) + ext
+	targetDir := filepath.Join(h.cfg.MediaUploadDir, "images", dateDir)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		fail(c, http.StatusInternalServerError, "upload_dir_failed", "could not prepare upload directory")
+		return
+	}
+
+	targetPath := filepath.Join(targetDir, fileName)
+	if err := saveUploadedFile(fileHeader, targetPath); err != nil {
+		fail(c, http.StatusInternalServerError, "upload_save_failed", "could not save uploaded image")
+		return
+	}
+
+	ok(c, envelope{
+		"url":         "/uploads/images/" + dateDir + "/" + fileName,
+		"contentType": contentType,
+		"size":        fileHeader.Size,
+		"name":        fileHeader.Filename,
+	})
 }
 
 func (h *AdminHandler) ListContent(c *gin.Context) {
@@ -819,6 +868,68 @@ func normalizeAdminContentInput(input *AdminContentInput) {
 		}
 	}
 	input.Tags = tags
+}
+
+func detectImageUpload(fileHeader *multipart.FileHeader) (string, string, error) {
+	file, err := fileHeader.Open()
+	if err != nil {
+		return "", "", fmt.Errorf("could not read uploaded image")
+	}
+	defer file.Close()
+
+	buffer := make([]byte, 512)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return "", "", fmt.Errorf("could not inspect uploaded image")
+	}
+
+	if n >= 12 && string(buffer[0:4]) == "RIFF" && string(buffer[8:12]) == "WEBP" {
+		return "image/webp", ".webp", nil
+	}
+
+	switch contentType := http.DetectContentType(buffer[:n]); contentType {
+	case "image/jpeg":
+		return contentType, ".jpg", nil
+	case "image/png":
+		return contentType, ".png", nil
+	case "image/gif":
+		return contentType, ".gif", nil
+	case "image/webp":
+		return contentType, ".webp", nil
+	default:
+		return "", "", fmt.Errorf("only JPG, PNG, GIF, and WebP images are supported")
+	}
+}
+
+func saveUploadedFile(fileHeader *multipart.FileHeader, targetPath string) error {
+	src, err := fileHeader.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	written, err := io.Copy(dst, io.LimitReader(src, maxAdminImageUploadBytes+1))
+	if err != nil {
+		return err
+	}
+	if written > maxAdminImageUploadBytes {
+		return fmt.Errorf("uploaded image is too large")
+	}
+	return nil
+}
+
+func randomHex(byteCount int) string {
+	bytes := make([]byte, byteCount)
+	if _, err := rand.Read(bytes); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return hex.EncodeToString(bytes)
 }
 
 type adminContentScanner interface {

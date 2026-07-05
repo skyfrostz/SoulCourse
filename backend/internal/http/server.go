@@ -49,6 +49,7 @@ func NewServer(
 
 	router.GET("/healthz", healthHandler.Live)
 	router.GET("/readyz", healthHandler.Ready)
+	router.Static("/uploads", cfg.MediaUploadDir)
 
 	api := router.Group("/api/v1")
 	api.Use(middleware.OptionalAuth(forumService))
@@ -84,6 +85,7 @@ func NewServer(
 			admin.PUT("/content/:id", adminHandler.UpdateContent)
 			admin.POST("/content/:id/workflow", adminHandler.WorkflowContent)
 			admin.DELETE("/content/:id", adminHandler.DeleteContent)
+			admin.POST("/uploads/images", adminHandler.UploadImage)
 			admin.GET("/content-summary", adminHandler.ContentSummary)
 			admin.GET("/audit-logs", adminHandler.AuditLogs)
 		}

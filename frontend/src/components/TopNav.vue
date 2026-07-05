@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, BookOpen, Bookmark, ChevronDown, LogOut, Mail, PenLine, Search, Settings, Users } from '@lucide/vue'
+import { Bell, Bookmark, ChevronDown, LogOut, Mail, PenLine, Search, Settings, Users } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DecisionSearch from './DecisionSearch.vue'
@@ -96,9 +96,9 @@ onBeforeUnmount(() => {
   <header class="top-nav">
     <div class="brand-block">
       <div class="brand-mark" aria-hidden="true">
-        <BookOpen :size="28" :stroke-width="2.4" />
+        <img src="/brand/logo-mark.png" alt="" />
       </div>
-      <span class="brand-name">选科知谈</span>
+      <span class="brand-name">选科π</span>
     </div>
 
     <nav class="main-tabs" aria-label="主导航">

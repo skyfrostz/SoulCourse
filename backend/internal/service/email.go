@@ -122,7 +122,7 @@ func (s *SMTPEmailSender) message(to string, code string, ttl time.Duration) []b
 
 验证码 %d 分钟内有效。若不是你本人操作，请忽略这封邮件。
 
-选科知谈`, code, int(ttl.Minutes()))
+选科π`, code, int(ttl.Minutes()))
 
 	var buffer bytes.Buffer
 	headers := map[string]string{

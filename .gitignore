@@ -19,5 +19,6 @@ logs/
 backend/bin/
 backend/tmp/
 backend/coverage.out
+backend/uploads/
 
 outputs/

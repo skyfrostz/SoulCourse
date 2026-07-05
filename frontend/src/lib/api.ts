@@ -34,6 +34,25 @@ interface ApiEnvelope<T> {
   data: T
 }
 
+export interface PublishedContentRecord {
+  id: string
+  module: string
+  title: string
+  type: string
+  status: string
+  scope: string
+  owner: string
+  tags: string[]
+  summary: string
+  url: string
+  priority: string
+  sortOrder: number
+  payload: {
+    imageUrls?: string[]
+    [key: string]: unknown
+  }
+}
+
 export async function register(payload: {
   email: string
   password: string
@@ -97,6 +116,13 @@ export async function createPost(payload: {
 }): Promise<Post> {
   const response = await api.post<ApiEnvelope<Post>>('/posts', payload)
   return response.data.data
+}
+
+export async function fetchPublishedContent(module?: string): Promise<PublishedContentRecord[]> {
+  const response = await api.get<ApiEnvelope<{ records: PublishedContentRecord[] }>>('/content', {
+    params: { module },
+  })
+  return response.data.data.records
 }
 
 export async function fetchInsights(): Promise<SubjectInsight[]> {

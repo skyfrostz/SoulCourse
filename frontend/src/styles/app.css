@@ -131,13 +131,21 @@ textarea {
 
 .brand-mark {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   place-items: center;
-  color: #0f9f7a;
-  border: 1px solid rgba(15, 159, 122, 0.22);
-  border-radius: 8px;
-  background: #eefdf8;
+  overflow: hidden;
+  border: 1px solid rgba(67, 97, 238, 0.16);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(67, 97, 238, 0.12);
+}
+
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brand-name {
@@ -3528,6 +3536,15 @@ textarea {
   font-size: 18px;
 }
 
+.knowledge-source-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 12px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
 .province-knowledge-card h2,
 .media-source-stack h3 {
   font-size: 16px;
@@ -3621,9 +3638,36 @@ textarea {
   content: "";
 }
 
+.province-note-cover.has-image {
+  color: #fff;
+  background: #0f172a;
+}
+
+.province-note-cover.has-image::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.32), rgba(15, 23, 42, 0.72));
+  content: "";
+}
+
+.province-note-cover.has-image::after {
+  display: none;
+}
+
+.province-note-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .province-note-cover > div {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -3661,7 +3705,7 @@ textarea {
 .province-note-cover em {
   position: relative;
   align-self: flex-end;
-  z-index: 1;
+  z-index: 2;
   max-width: 100%;
   padding: 6px 10px;
   border-radius: 999px;
@@ -3672,6 +3716,11 @@ textarea {
   font-style: normal;
   font-weight: 900;
   text-align: center;
+}
+
+.province-note-cover.has-image em {
+  background: rgba(15, 23, 42, 0.58);
+  color: #fff;
 }
 
 .province-note-cover.tone-blue {

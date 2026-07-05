@@ -203,9 +203,9 @@ function render() {
   }
   document.querySelector('#app').innerHTML = `
     <aside class="sidebar">
-      <div class="brand"><span>选</span><div><strong>选科知谈</strong><small>Admin Console</small></div></div>
+      <div class="brand"><span class="admin-logo-frame"><img src="./assets/logo-mark.png" alt="选科π logo" /></span><div><strong>选科π</strong><small>Admin Console</small></div></div>
       <nav>${state.modules.map((item) => `<button class="${activeModule === item.id ? 'active' : ''}" data-module="${item.id}"><i>${item.icon}</i><span>${item.label}</span></button>`).join('')}</nav>
-      <div class="sidebar-foot"><span>独立后台</span><strong>127.0.0.1:5175</strong></div>
+      <div class="sidebar-foot"><span>独立后台</span><strong>subject314</strong></div>
     </aside>
     <main class="main">
       ${renderTopbar()}
@@ -222,7 +222,7 @@ function renderLogin() {
   return `
     <main class="login-shell">
       <section class="login-panel">
-        <div class="login-brand"><span>选</span><div><small>Admin Console</small><h1>选科知谈管理后台</h1><p>登录后可管理内容上架、用户认证、政策库、建议库和系统配置。</p></div></div>
+        <div class="login-brand"><span class="admin-logo-frame"><img src="./assets/logo-mark.png" alt="选科π logo" /></span><div><small>Admin Console</small><h1>选科π管理后台</h1><p>登录后可管理内容上架、用户认证、政策库、建议库和系统配置。</p></div></div>
         <label>账号邮箱<input id="login-email" type="email" autocomplete="username" value="${escapeHTML(cfg.adminEmail || '')}" placeholder="admin@example.com" /></label>
         <label>登录密码<input id="login-password" type="password" autocomplete="current-password" placeholder="请输入后台登录密码" /></label>
         <details class="login-advanced"><summary>连接设置</summary><label>API 地址<input id="login-api-base" value="${escapeHTML(cfg.apiBase || defaultApiBase())}" /></label></details>
@@ -339,6 +339,7 @@ function renderDrawer() {
       ${renderWorkflowPanel(item)}
       ${renderEditableFields(item)}
       ${activeModule === 'users' ? renderPermissionPanel(item) : ''}
+      ${activeModule === 'users' ? '' : renderMediaPanel(item)}
       <label>摘要<textarea id="edit-summary">${escapeHTML(item.summary)}</textarea></label>
       <label>来源链接<input id="edit-url" value="${escapeHTML(item.url || '')}" /></label>
       <div class="drawer-actions"><button id="save-record" class="primary">保存基础信息</button><button id="delete-record" class="danger">删除</button></div>
@@ -354,6 +355,26 @@ function renderEditableFields(item) {
     <label>${activeModule === 'users' ? '所属省份/服务范围' : '范围/地区'}${renderSelect('edit-scope', optionsFor('scope', activeModule, item.scope), item.scope)}</label>
     <label>${activeModule === 'users' ? '账号来源' : '负责人/来源'}${renderSelect('edit-owner', optionsFor('owner', activeModule, item.owner), item.owner)}</label>
     <label>标签${renderMultiSelect('edit-tags', optionsFor('tags', activeModule, item.tags), item.tags || [])}</label>
+  `
+}
+
+function renderMediaPanel(item) {
+  const images = mediaUrls(item)
+  return `
+    <section class="media-card">
+      <div class="media-head"><strong>本地图片</strong><span>${images.length}/9</span></div>
+      <input id="media-upload-input" type="file" accept="image/*" multiple hidden />
+      <div class="media-actions">
+        <button id="upload-media" type="button">选择本地图片</button>
+        <small>上传后会保存到当前条目的图片列表。</small>
+      </div>
+      ${images.length ? `<div class="media-preview-grid">${images.map((url, index) => `
+        <figure>
+          <img src="${escapeHTML(resolveMediaUrl(url))}" alt="内容图片 ${index + 1}" />
+          <button type="button" data-remove-media="${index}" aria-label="移除图片">×</button>
+        </figure>
+      `).join('')}</div>` : '<p class="media-empty">还没有本地图片。</p>'}
+    </section>
   `
 }
 
@@ -445,6 +466,9 @@ function bindEvents() {
   document.querySelector('#save-record')?.addEventListener('click', saveRecord)
   document.querySelector('#toggle-publish')?.addEventListener('click', togglePublish)
   document.querySelector('#delete-record')?.addEventListener('click', deleteRecord)
+  document.querySelector('#upload-media')?.addEventListener('click', () => document.querySelector('#media-upload-input')?.click())
+  document.querySelector('#media-upload-input')?.addEventListener('change', uploadMediaFiles)
+  document.querySelectorAll('[data-remove-media]').forEach((button) => button.addEventListener('click', () => removeMediaImage(Number(button.dataset.removeMedia))))
   document.querySelectorAll('[data-workflow-action]').forEach((button) => button.addEventListener('click', () => openWorkflowConfirm(button.dataset.workflowAction)))
   document.querySelectorAll('[data-permission-preset]').forEach((button) => button.addEventListener('click', () => applyPermissionPreset(button.dataset.permissionPreset)))
   document.querySelector('#cancel-workflow')?.addEventListener('click', () => { pendingWorkflowAction = null; render() })
@@ -719,6 +743,79 @@ async function saveRecord() {
   render()
 }
 
+async function uploadMediaFiles(event) {
+  const item = recordsFor().find((row) => row.id === selectedId)
+  if (!item) return
+  const input = event.target
+  const files = Array.from(input.files || [])
+  input.value = ''
+  if (!files.length) return
+  if (!settings().adminToken) {
+    apiConnected = false
+    lastSyncMessage = '未登录后台，不能上传图片'
+    render()
+    return
+  }
+
+  const remaining = Math.max(0, 9 - mediaUrls(item).length)
+  const imageFiles = files.filter((file) => file.type.startsWith('image/')).slice(0, remaining)
+  if (!imageFiles.length) {
+    lastSyncMessage = remaining ? '请选择图片文件' : '最多只能保存 9 张图片'
+    render()
+    return
+  }
+  const oversized = imageFiles.find((file) => file.size > 8 * 1024 * 1024)
+  if (oversized) {
+    lastSyncMessage = '单张图片不能超过 8MB'
+    render()
+    return
+  }
+
+  const snapshot = structuredClone(item)
+  try {
+    const uploadedUrls = []
+    for (const file of imageFiles) {
+      const formData = new FormData()
+      formData.append('file', file)
+      const uploaded = await adminFetch('/admin/uploads/images', { method: 'POST', body: formData })
+      if (uploaded?.url) uploadedUrls.push(uploaded.url)
+    }
+
+    item.payload = {
+      ...(item.payload || {}),
+      imageUrls: [...mediaUrls(item), ...uploadedUrls].slice(0, 9),
+    }
+    item.updatedAt = new Date().toLocaleString('zh-CN', { hour12: false })
+    state.audit.push(`上传 ${uploadedUrls.length} 张图片到「${item.title}」`)
+    const saved = await saveContentRecord(item)
+    if (!saved) Object.assign(item, snapshot)
+    if (saved) lastSyncMessage = `已上传并保存 ${uploadedUrls.length} 张图片`
+  } catch (error) {
+    Object.assign(item, snapshot)
+    apiConnected = false
+    lastSyncMessage = `图片上传失败：${error.message}`
+  }
+  render()
+}
+
+async function removeMediaImage(index) {
+  const item = recordsFor().find((row) => row.id === selectedId)
+  if (!item) return
+  const images = mediaUrls(item)
+  if (index < 0 || index >= images.length) return
+  const snapshot = structuredClone(item)
+  item.payload = {
+    ...(item.payload || {}),
+    imageUrls: images.filter((_, itemIndex) => itemIndex !== index),
+  }
+  item.updatedAt = new Date().toLocaleString('zh-CN', { hour12: false })
+  state.audit.push(`移除「${item.title}」的一张图片`)
+  const saved = await saveContentRecord(item)
+  if (!saved) Object.assign(item, snapshot)
+  if (saved) lastSyncMessage = '已移除图片并保存'
+  render()
+}
+
 async function togglePublish() {
   const item = recordsFor().find((row) => row.id === selectedId)
   if (!item) return
@@ -869,6 +966,22 @@ function toAPIRecord(item) {
   }
 }
 
+function mediaUrls(item) {
+  const urls = item?.payload?.imageUrls
+  return Array.isArray(urls) ? urls.filter((url) => typeof url === 'string' && url.trim()) : []
+}
+
+function resolveMediaUrl(url) {
+  if (!url || /^(https?:|data:|blob:)/i.test(url)) return url
+  const normalized = url.startsWith('/') ? url : `/${url}`
+  try {
+    const apiOrigin = new URL(settings().apiBase || defaultApiBase(), window.location.href).origin
+    return `${apiOrigin}${normalized}`
+  } catch {
+    return normalized
+  }
+}
+
 function formatDate(value) {
   if (!value) return new Date().toLocaleString('zh-CN', { hour12: false })
   const date = new Date(value)
@@ -913,9 +1026,12 @@ function saveSettings() {
 
 async function adminFetch(path, options = {}) {
   const cfg = settings()
+  const isFormData = options.body instanceof FormData
+  const headers = { 'X-Admin-Token': cfg.adminToken || '', ...(options.headers || {}) }
+  if (!isFormData) headers['Content-Type'] = 'application/json'
   const response = await fetch(`${cfg.apiBase || defaultApiBase()}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': cfg.adminToken || '', ...(options.headers || {}) },
+    headers,
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.error?.message || `请求失败：${response.status}`)

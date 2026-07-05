@@ -422,7 +422,7 @@ export const adviceNotes: AdviceNote[] = [
     id: 'final-review-before-submit',
     title: '提交选科前 24 小时，做这张核对表',
     combination: '全部组合',
-    author: '选科知谈编辑部',
+    author: '选科π编辑部',
     role: '平台编辑',
     cover: 'violet',
     lens: 'timeline',

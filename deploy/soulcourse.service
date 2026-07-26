@@ -1,0 +1,21 @@
+[Unit]
+Description=SoulCourse web application
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/www/wwwroot/Soulcourse
+Environment=APP_ENV=production
+Environment=HTTP_PORT=1309
+Environment=SQLITE_PATH=data/soulcourse.db
+Environment=MEDIA_UPLOAD_DIR=data/uploads
+Environment=CORS_ALLOWED_ORIGINS=https://www.soulcourse.cn
+Environment=GOMEMLIMIT=1536MiB
+ExecStart=/www/wwwroot/Soulcourse/deploy/run-production.sh
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

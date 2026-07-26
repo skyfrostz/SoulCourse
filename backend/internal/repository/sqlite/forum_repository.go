@@ -22,8 +22,22 @@ func NewForumRepository(db *sql.DB) *ForumRepository {
 }
 
 func (r *ForumRepository) ListPosts(ctx context.Context, viewerID *int64, filter domain.FeedFilter) ([]domain.Post, error) {
-	posts, err := r.fetchPosts(ctx)
+	query, args := buildPostListQuery(filter)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	posts := make([]domain.Post, 0, filter.Limit)
+	for rows.Next() {
+		post, err := scanPost(rows)
+		if err != nil {
+			return nil, err
+		}
+		posts = append(posts, post)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -32,22 +46,76 @@ func (r *ForumRepository) ListPosts(ctx context.Context, viewerID *int64, filter
 		return nil, err
 	}
 
-	filtered := make([]domain.Post, 0, len(posts))
-	for _, post := range posts {
-		if !matchesPostFilter(post, filter) {
-			continue
-		}
+	for i := range posts {
+		post := &posts[i]
 		post.ViewerLiked = liked[post.ID]
 		post.ViewerFavorited = favorited[post.ID]
 		post.ViewerFollowing = followed[post.AuthorName]
-		filtered = append(filtered, post)
+	}
+	return posts, nil
+}
+
+func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
+	query := `
+		SELECT id, user_id, author_name, author_role, title, content, image_urls, tags, track, electives,
+		       category, grade, province, likes_count, comments_count, favorites_count, created_at, updated_at
+		FROM posts
+		WHERE deleted_at IS NULL`
+	args := make([]any, 0, 8)
+
+	if filter.Track != "" {
+		query += " AND track = ?"
+		args = append(args, string(filter.Track))
+	}
+	if filter.Category != "" {
+		query += " AND category = ?"
+		args = append(args, string(filter.Category))
+	}
+	if province := strings.TrimSpace(filter.Province); province != "" {
+		query += " AND province = ?"
+		args = append(args, province)
 	}
 
-	sortPosts(filtered, filter.Sort)
+	subjects := make([]domain.Subject, 0, len(filter.Subjects)+1)
+	subjects = append(subjects, filter.Subjects...)
+	if filter.Subject != "" {
+		subjects = append(subjects, filter.Subject)
+	}
+	for _, subject := range subjects {
+		if subject == "" {
+			continue
+		}
+		query += ` AND electives LIKE ? ESCAPE '\'`
+		args = append(args, `%"`+escapeLike(string(subject))+`"%`)
+	}
 
-	start := minInt(filter.Offset, len(filtered))
-	end := minInt(start+filter.Limit, len(filtered))
-	return filtered[start:end], nil
+	if keyword := strings.ToLower(strings.TrimSpace(filter.Keyword)); keyword != "" {
+		query += ` AND LOWER(title || ' ' || content || ' ' || author_name || ' ' || province || ' ' || grade || ' ' || tags) LIKE ? ESCAPE '\'`
+		args = append(args, "%"+escapeLike(keyword)+"%")
+	}
+
+	switch filter.Sort {
+	case domain.SortLatest:
+		query += " ORDER BY created_at DESC, id DESC"
+	case domain.SortHot:
+		query += " ORDER BY likes_count + comments_count * 4 DESC, updated_at DESC, id DESC"
+	default:
+		query += ` ORDER BY
+			(MIN(likes_count, 300) * 0.8 + MIN(comments_count, 80) * 4 + MIN(favorites_count, 120) * 3
+			 + CASE WHEN author_role IN ('teacher', 'counselor') THEN 45 ELSE 0 END
+			 + CASE WHEN likes_count < 150 THEN 65 ELSE 0 END) DESC,
+			created_at DESC, id DESC`
+	}
+
+	query += " LIMIT ? OFFSET ?"
+	args = append(args, filter.Limit, filter.Offset)
+	return query, args
+}
+
+func escapeLike(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, "%", `\%`)
+	return strings.ReplaceAll(value, "_", `\_`)
 }
 
 func (r *ForumRepository) GetPost(ctx context.Context, viewerID *int64, id int64) (domain.Post, []domain.Comment, error) {
@@ -449,29 +517,6 @@ func (r *ForumRepository) togglePostRelation(ctx context.Context, table string, 
 	return domain.ToggleResult{Active: active, Count: count}, nil
 }
 
-func (r *ForumRepository) fetchPosts(ctx context.Context) ([]domain.Post, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, user_id, author_name, author_role, title, content, image_urls, tags, track, electives,
-		       category, grade, province, likes_count, comments_count, favorites_count, created_at, updated_at
-		FROM posts
-		WHERE deleted_at IS NULL
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	posts := make([]domain.Post, 0)
-	for rows.Next() {
-		post, err := scanPost(rows)
-		if err != nil {
-			return nil, err
-		}
-		posts = append(posts, post)
-	}
-	return posts, rows.Err()
-}
-
 func (r *ForumRepository) fetchPostByID(ctx context.Context, id int64) (domain.Post, error) {
 	return scanPost(r.db.QueryRowContext(ctx, `
 		SELECT id, user_id, author_name, author_role, title, content, image_urls, tags, track, electives,
@@ -687,51 +732,6 @@ func parseStringSlice(raw string) []string {
 		return []string{}
 	}
 	return values
-}
-
-func matchesPostFilter(post domain.Post, filter domain.FeedFilter) bool {
-	if filter.Track != "" && post.Track != filter.Track {
-		return false
-	}
-	if filter.Category != "" && post.Category != filter.Category {
-		return false
-	}
-	if strings.TrimSpace(filter.Province) != "" && post.Province != filter.Province {
-		return false
-	}
-	subjects := append([]domain.Subject{}, filter.Subjects...)
-	if filter.Subject != "" {
-		subjects = append(subjects, filter.Subject)
-	}
-	for _, subject := range subjects {
-		if subject == "" {
-			continue
-		}
-		found := false
-		for _, elective := range post.Electives {
-			if elective == subject {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	if keyword := strings.ToLower(strings.TrimSpace(filter.Keyword)); keyword != "" {
-		text := strings.ToLower(strings.Join([]string{
-			post.Title,
-			post.Content,
-			post.AuthorName,
-			post.Province,
-			post.Grade,
-			strings.Join(post.Tags, ","),
-		}, " "))
-		if !strings.Contains(text, keyword) {
-			return false
-		}
-	}
-	return true
 }
 
 func sortPosts(posts []domain.Post, sortMode domain.FeedSort) {

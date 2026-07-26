@@ -129,7 +129,7 @@ go run .
 
 ```bash
 cd backend
-go build -o soulcourse .
+go build -trimpath -ldflags="-s -w" -o soulcourse .
 ```
 
 如果已经将前端构建产物复制到 `backend/internal/http/webdist/dist`，该二进制会直接内嵌前端页面。
@@ -184,6 +184,30 @@ chmod +x soulcourse-linux-amd64
 ```powershell
 .\soulcourse-windows-amd64.exe
 ```
+
+## 2 核 2G 服务器部署
+
+服务器只需要构建目标平台，不必执行跨平台打包：
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm build
+
+cd ../backend
+rm -rf internal/http/webdist/dist
+mkdir -p internal/http/webdist/dist
+cp -R ../frontend/dist/. internal/http/webdist/dist/
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o soulcourse .
+```
+
+将 `.env.production.example` 复制为 `.env` 并填写生产密钥后运行：
+
+```bash
+GOMEMLIMIT=1536MiB ./soulcourse
+```
+
+`GOMEMLIMIT` 给 SQLite、系统和反向代理预留内存；应用自身已使用 SQLite WAL、单写连接和有限 HTTP 超时，适合小规格服务器。
 
 建议将 `.env.example` 复制为 `.env` 后，按需修改以下变量：
 

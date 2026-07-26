@@ -1,15 +1,12 @@
 package httpserver
 
 import (
-	"bytes"
 	"io/fs"
-	"mime"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"subject-choice-forum/backend/internal/http/webdist"
 	"subject-choice-forum/backend/internal/logx"
@@ -138,13 +135,12 @@ func skipSPAPath(requestPath string) bool {
 }
 
 func serveFSFile(c *gin.Context, filesystem fs.FS, filePath string) {
-	content, err := fs.ReadFile(filesystem, filePath)
-	if err != nil {
-		c.Status(http.StatusNotFound)
-		return
+	if filePath == "index.html" {
+		c.Header("Cache-Control", "no-cache")
+	} else if strings.HasPrefix(filePath, "assets/") {
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		c.Header("Cache-Control", "public, max-age=86400")
 	}
-	if contentType := mime.TypeByExtension(path.Ext(filePath)); contentType != "" {
-		c.Header("Content-Type", contentType)
-	}
-	http.ServeContent(c.Writer, c.Request, filePath, time.Time{}, bytes.NewReader(content))
+	http.ServeFileFS(c.Writer, c.Request, filesystem, filePath)
 }

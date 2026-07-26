@@ -25,11 +25,15 @@ func NewSQLiteDB(cfg config.Config) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 
 	for _, statement := range []string{
 		"PRAGMA foreign_keys = ON;",
 		"PRAGMA journal_mode = WAL;",
+		"PRAGMA synchronous = NORMAL;",
 		"PRAGMA busy_timeout = 5000;",
+		"PRAGMA temp_store = MEMORY;",
+		"PRAGMA cache_size = -4096;",
 	} {
 		if _, err := db.Exec(statement); err != nil {
 			_ = db.Close()
@@ -182,6 +186,18 @@ func initSQLiteSchema(db *sql.DB) error {
 			actor TEXT NOT NULL DEFAULT 'admin',
 			created_at TEXT NOT NULL
 		);`,
+		`CREATE INDEX IF NOT EXISTS idx_posts_feed
+			ON posts (deleted_at, track, category, province, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_posts_author
+			ON posts (author_name, deleted_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_comments_post
+			ON comments (post_id, deleted_at, created_at ASC);`,
+		`CREATE INDEX IF NOT EXISTS idx_email_verification_lookup
+			ON email_verification_codes (email, used_at, expires_at, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_admin_content_listing
+			ON admin_content_records (deleted_at, module, status, sort_order, updated_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_admin_audit_created
+			ON admin_audit_logs (created_at DESC);`,
 	}
 	for _, statement := range statements {
 		if _, err := db.Exec(statement); err != nil {

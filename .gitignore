@@ -11,6 +11,9 @@ node_modules/
 .pnpm-store/
 **/.pnpm-store/
 dist/
+!backend/internal/http/webdist/dist/
+backend/internal/http/webdist/dist/*
+!backend/internal/http/webdist/dist/.gitkeep
 coverage/
 
 tmp/

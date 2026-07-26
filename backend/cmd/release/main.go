@@ -65,7 +65,7 @@ func buildBinary(backendDir string, releaseDir string, item target) {
 	}
 	outputPath := filepath.Join(releaseDir, fileName)
 
-	cmd := exec.Command("go", "build", "-trimpath", "-o", outputPath, ".")
+	cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", outputPath, ".")
 	cmd.Dir = backendDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

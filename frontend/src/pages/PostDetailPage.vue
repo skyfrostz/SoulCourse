@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, createComment, fetchPostDetail, toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels, trackLabels } from '../lib/labels'
 import { requirementData, sourcedDataPosts } from '../lib/realData'
+import { appAssetUrl } from '../lib/runtime'
 import { useForumStore } from '../stores/forum'
 
 const route = useRoute()
@@ -152,7 +153,7 @@ function replyTo(author: string) {
         <p class="article-body">{{ post.content }}</p>
 
         <div v-if="post.imageUrls?.length" class="article-gallery">
-          <img v-for="url in post.imageUrls" :key="url" :src="url" :alt="post.title" />
+          <img v-for="url in post.imageUrls" :key="url" :src="appAssetUrl(url)" :alt="post.title" />
         </div>
 
         <section v-if="dataEvidence" class="post-data-evidence">

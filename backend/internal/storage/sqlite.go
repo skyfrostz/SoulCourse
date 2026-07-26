@@ -186,6 +186,26 @@ func initSQLiteSchema(db *sql.DB) error {
 			actor TEXT NOT NULL DEFAULT 'admin',
 			created_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS content_sources (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			post_id INTEGER NOT NULL UNIQUE,
+			source_platform TEXT NOT NULL,
+			source_url TEXT NOT NULL UNIQUE,
+			source_note_id TEXT NOT NULL DEFAULT '',
+			source_title TEXT NOT NULL DEFAULT '',
+			source_author TEXT NOT NULL DEFAULT '',
+			source_likes INTEGER NOT NULL DEFAULT 0,
+			source_comments INTEGER NOT NULL DEFAULT 0,
+			source_favorites INTEGER NOT NULL DEFAULT 0,
+			source_format TEXT NOT NULL DEFAULT '图文',
+			transformation_note TEXT NOT NULL DEFAULT '',
+			captured_at TEXT NOT NULL,
+			FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS app_migrations (
+			name TEXT PRIMARY KEY,
+			applied_at TEXT NOT NULL
+		);`,
 		`CREATE INDEX IF NOT EXISTS idx_posts_feed
 			ON posts (deleted_at, track, category, province, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_posts_author
@@ -209,45 +229,42 @@ func initSQLiteSchema(db *sql.DB) error {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL`).Scan(&count); err != nil {
 		return err
 	}
-	if count > 0 {
-		return nil
-	}
-
-	now := sqliteNow()
-	seeds := []string{
-		fmt.Sprintf(`INSERT INTO posts
+	if count == 0 {
+		now := sqliteNow()
+		seeds := []string{
+			fmt.Sprintf(`INSERT INTO posts
 			(author_name, author_role, title, content, image_urls, tags, track, electives, category, grade, province, likes_count, comments_count, favorites_count, created_at, updated_at)
 			VALUES
 			('小周同学', 'student', '物化生适合目标不太明确的人吗？', '我现在数学和物理还可以，化学中上，生物背诵压力能接受。想听听大家对物化生后续专业覆盖和学习强度的真实感受。', '[]', '["物化生","专业覆盖"]', 'physics', '["chemistry","biology"]', 'question', '高一', '浙江', 128, 3, 42, '%[1]s', '%[1]s'),
 			('林妈妈', 'parent', '孩子想选史政地，家长应该怎么判断风险？', '孩子文科表达不错，但我们担心专业选择变窄。想请教史政地在赋分和未来专业方向上要提前注意什么。', '[]', '["史政地","风险核对"]', 'history', '["politics","geography"]', 'question', '高一', '山东', 96, 2, 31, '%[1]s', '%[1]s'),
 			('陈老师', 'teacher', '从最近三届学生看物化地的优劣势', '物化地通常适合物理基础稳、空间理解强、但不想承受生物记忆量的学生。它的优势是工科覆盖较好，地理赋分在部分地区也较友好。', '[]', '["物化地","工科"]', 'physics', '["chemistry","geography"]', 'experience', '高一', '广东', 212, 4, 88, '%[1]s', '%[1]s'),
 			('选科研究所', 'counselor', '2026届各组合专业覆盖率汇总', '基于多省教育考试院公开数据整理。选科前一定要把目标专业组、学校层次、赋分规则一起看，不要只看一个覆盖率数字。', '[]', '["数据建议","专业覆盖率"]', 'physics', '["chemistry","biology"]', 'data', '高一', '全国', 1100, 2, 480, '%[1]s', '%[1]s');`, now),
-		fmt.Sprintf(`INSERT INTO comments (post_id, author, role, content, created_at)
+			fmt.Sprintf(`INSERT INTO comments (post_id, author, role, content, created_at)
 			VALUES
 			(1, '一只铅笔', 'student', '我也是物化生，最大感受是节奏很满，但专业覆盖确实安心。', '%[1]s'),
 			(1, '王老师', 'teacher', '可以先看校内排名稳定性，不要只看一次月考。', '%[1]s'),
 			(2, '周顾问', 'counselor', '建议先列出不能报考的专业清单，再判断能否接受。', '%[1]s'),
 			(3, '高一新生', 'student', '感谢分享，终于看到不是只讲覆盖率的经验。', '%[1]s');`, now),
-		fmt.Sprintf(`INSERT INTO subject_insights (combination, trend, heat, match_rate, advice, details, updated_at)
+			fmt.Sprintf(`INSERT INTO subject_insights (combination, trend, heat, match_rate, advice, details, updated_at)
 			VALUES
 			('物理 + 化学 + 生物', '专业覆盖高，学习强度高', 96, 91.5, '适合数理基础稳定、能承受连续刷题和记忆任务的学生。', '物化生通常拥有较高专业覆盖度，但三科都需要持续投入。', '%[1]s'),
 			('物理 + 化学 + 地理', '工科友好，地理赋分需看省份', 88, 84.2, '适合物理化学较稳且喜欢图表、空间分析的学生。', '适合物理化学基础较稳，但不希望承担大量生物记忆任务的学生。', '%[1]s'),
 			('物理 + 生物 + 地理', '压力相对均衡，专业覆盖中高', 74, 78.4, '适合想保留理工方向但化学压力较大的学生。', '选择前应重点核对目标专业组选科要求。', '%[1]s'),
 			('历史 + 政治 + 地理', '人文社科清晰，专业边界明确', 81, 73.1, '适合表达、记忆、材料分析能力强的学生。', '政治和地理都不是短期背诵型科目。', '%[1]s');`, now),
-		fmt.Sprintf(`INSERT INTO topics (slug, title, summary, views_count, posts_count, created_at)
+			fmt.Sprintf(`INSERT INTO topics (slug, title, summary, views_count, posts_count, created_at)
 			VALUES
 			('physics-track-how-to-choose', '物理方向组合怎么选', '围绕物理方向下物化生、物化地、物生地等组合的专业覆盖、学习强度和赋分风险展开讨论。', 7600, 3, '%[1]s'),
 			('history-track-careers', '历史方向就业前景', '讨论史政地等历史方向组合与专业选择、就业想象之间的真实关系。', 6200, 1, '%[1]s'),
 			('is-chemistry-important', '化学到底有多重要', '集中讨论化学在专业限制、学习难度和长期提分中的作用。', 5100, 3, '%[1]s'),
 			('grade-eleven-timeline', '高二选科时间线', '汇总选科后分班、适应、补弱和阶段复盘的时间安排。', 4300, 4, '%[1]s'),
 			('after-selection-score-up', '选科后如何提分', '分享选科完成后各科提分方法、错题管理和复盘节奏。', 3800, 1, '%[1]s');`, now),
-		`INSERT INTO topic_posts (topic_id, post_id) VALUES
+			`INSERT INTO topic_posts (topic_id, post_id) VALUES
 			(1, 1), (1, 3), (1, 4),
 			(2, 2),
 			(3, 1), (3, 3), (3, 4),
 			(4, 1), (4, 2), (4, 3), (4, 4),
 			(5, 3);`,
-		fmt.Sprintf(`INSERT INTO admin_content_records
+			fmt.Sprintf(`INSERT INTO admin_content_records
 			(id, module, title, content_type, status, scope, owner, tags, summary, url, priority, sort_order, payload, created_at, updated_at)
 			VALUES
 			('category-experience', 'categories', '经验帖', '帖子分类', '已上架', '全站', '内容运营', '["首页可见","社区内容"]', '学生、老师、规划师的真实经验分享。', '', '常规', 10, '{"frontendRoute":"/","category":"experience"}', '%[1]s', '%[1]s'),
@@ -258,15 +275,16 @@ func initSQLiteSchema(db *sql.DB) error {
 			('insight-physics-chemistry-biology', 'insights', '物理 + 化学 + 生物', '组合趋势', '已上架', '全国', '数据运营', '["热度 96","覆盖 91.5%%"]', '专业覆盖高，学习强度高。', '/insights/1', '常规', 10, '{"heat":96,"matchRate":91.5}', '%[1]s', '%[1]s'),
 			('post-existing-1', 'posts', '物化生适合目标不太明确的人吗？', '提问', '已上架', '浙江', '小周同学', '["物化生","专业覆盖"]', '我现在数学和物理还可以，化学中上，生物背诵压力能接受。', '/posts/1', '常规', 101, '{"postId":"1","content":"我现在数学和物理还可以，化学中上，生物背诵压力能接受。想听听大家对物化生后续专业覆盖和学习强度的真实感受。","track":"physics","electives":["chemistry","biology"],"category":"question","grade":"高一","province":"浙江","imageUrls":[]}', '%[1]s', '%[1]s'),
 			('post-existing-2', 'posts', '孩子想选史政地，家长应该怎么判断风险？', '家长提问', '待审核', '山东', '林妈妈', '["史政地","风险核对"]', '孩子文科表达不错，但我们担心专业选择变窄。', '/posts/2', '中', 102, '{"postId":"2","content":"孩子文科表达不错，但我们担心专业选择变窄。想请教史政地在赋分和未来专业方向上要提前注意什么。","track":"history","electives":["politics","geography"],"category":"question","grade":"高一","province":"山东","imageUrls":[]}', '%[1]s', '%[1]s');`, now),
-		fmt.Sprintf(`INSERT INTO admin_audit_logs (action, record_id, module, detail, actor, created_at)
+			fmt.Sprintf(`INSERT INTO admin_audit_logs (action, record_id, module, detail, actor, created_at)
 			VALUES ('bootstrap', '', 'system', 'SQLite 初始内容库已完成导入', 'system', '%[1]s');`, now),
-	}
-	for _, statement := range seeds {
-		if _, err := db.Exec(statement); err != nil {
-			return fmt.Errorf("seed sqlite database: %w", err)
+		}
+		for _, statement := range seeds {
+			if _, err := db.Exec(statement); err != nil {
+				return fmt.Errorf("seed sqlite database: %w", err)
+			}
 		}
 	}
-	return nil
+	return seedGuangdongPhaseOne(db)
 }
 
 func sqliteNow() string {

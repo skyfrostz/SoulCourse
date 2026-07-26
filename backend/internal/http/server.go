@@ -98,6 +98,7 @@ func NewServer(
 			admin.POST("/uploads/images", adminHandler.UploadImage)
 			admin.GET("/content-summary", adminHandler.ContentSummary)
 			admin.GET("/audit-logs", adminHandler.AuditLogs)
+			admin.PUT("/users/:id/password", adminHandler.ResetUserPassword)
 		}
 	}
 

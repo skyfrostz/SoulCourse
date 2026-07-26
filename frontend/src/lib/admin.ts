@@ -605,6 +605,14 @@ export async function deleteAdminContent(apiBase: string, token: string, id: str
   })
 }
 
+export async function resetAdminUserPassword(apiBase: string, token: string, userId: number, password: string) {
+  return requestAdmin<{ updated: boolean; userId: number }>(apiBase, `/admin/users/${userId}/password`, {
+    method: 'PUT',
+    token,
+    data: { password },
+  })
+}
+
 export async function uploadAdminImage(apiBase: string, token: string, file: File) {
   const formData = new FormData()
   formData.append('file', file)

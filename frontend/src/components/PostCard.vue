@@ -4,6 +4,7 @@ import { Bookmark, MessageSquare, ThumbsUp } from '@lucide/vue'
 import { computed } from 'vue'
 import { togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels, trackLabels } from '../lib/labels'
+import { appAssetUrl } from '../lib/runtime'
 import { useForumStore } from '../stores/forum'
 import type { Post } from '../types/forum'
 
@@ -59,7 +60,7 @@ function toggleFavorite() {
       <p>{{ livePost.content }}</p>
 
       <div v-if="livePost.imageUrls?.length" class="post-image-strip">
-        <img :src="livePost.imageUrls[0]" :alt="livePost.title" />
+        <img :src="appAssetUrl(livePost.imageUrls[0])" :alt="livePost.title" />
         <span v-if="livePost.imageUrls.length > 1">{{ livePost.imageUrls.length }} 图</span>
       </div>
 

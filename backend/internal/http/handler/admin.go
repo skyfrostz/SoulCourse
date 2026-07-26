@@ -74,6 +74,10 @@ type AdminLoginInput struct {
 	Password string `json:"password" binding:"required,min=1,max=120"`
 }
 
+type AdminUserPasswordInput struct {
+	Password string `json:"password" binding:"required,min=8,max=72"`
+}
+
 type AdminWorkflowInput struct {
 	Action      string          `json:"action" binding:"required,max=80"`
 	ActionLabel string          `json:"actionLabel" binding:"required,max=80"`
@@ -119,6 +123,39 @@ func (h *AdminHandler) validAdminPassword(password string) bool {
 		return bcrypt.CompareHashAndPassword([]byte(h.cfg.AdminPasswordHash), []byte(password)) == nil
 	}
 	return h.cfg.AdminPassword != "" && h.cfg.AdminPassword == password
+}
+
+func (h *AdminHandler) ResetUserPassword(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || userID <= 0 {
+		fail(c, http.StatusBadRequest, "invalid_user_id", "user id is invalid")
+		return
+	}
+	var input AdminUserPasswordInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		fail(c, http.StatusBadRequest, "invalid_payload", err.Error())
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "password_hash_failed", "could not secure the new password")
+		return
+	}
+	result, err := h.db.ExecContext(c.Request.Context(), `
+		UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL
+	`, string(hash), nowString(), userID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "password_update_failed", "could not update user password")
+		return
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		fail(c, http.StatusNotFound, "user_not_found", "user was not found")
+		return
+	}
+	recordID := fmt.Sprintf("user-%d", userID)
+	h.logAudit(c.Request.Context(), "reset_password", recordID, "users", "管理员已重置用户密码")
+	ok(c, envelope{"updated": true, "userId": userID})
 }
 
 func (h *AdminHandler) EmailConfig(c *gin.Context) {
@@ -621,10 +658,10 @@ func (h *AdminHandler) listContentRecords(ctx context.Context, publishedOnly boo
 		if err != nil {
 			return nil, err
 		}
+		if record.Module == "users" {
+			continue
+		}
 		if publishedOnly {
-			if record.Module == "users" {
-				continue
-			}
 			if record.Status != "已上架" && record.Status != "正常" {
 				continue
 			}
@@ -633,6 +670,16 @@ func (h *AdminHandler) listContentRecords(ctx context.Context, publishedOnly boo
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if !publishedOnly {
+		users, err := h.listUserRecords(ctx)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, users...)
 	}
 	sort.Slice(records, func(i int, j int) bool {
 		if records[i].Module == records[j].Module {
@@ -644,6 +691,70 @@ func (h *AdminHandler) listContentRecords(ctx context.Context, publishedOnly boo
 		return records[i].Module < records[j].Module
 	})
 	return records, nil
+}
+
+func (h *AdminHandler) listUserRecords(ctx context.Context) ([]AdminContentRecord, error) {
+	rows, err := h.db.QueryContext(ctx, `
+		SELECT u.id, COALESCE(u.email, ''), u.nickname, u.role, u.province, u.grade,
+		       COALESCE(u.password_hash, ''), u.created_at, u.updated_at, COUNT(p.id)
+		FROM users u
+		LEFT JOIN posts p ON p.user_id = u.id AND p.deleted_at IS NULL
+		WHERE u.deleted_at IS NULL
+		GROUP BY u.id, u.email, u.nickname, u.role, u.province, u.grade, u.password_hash, u.created_at, u.updated_at
+		ORDER BY u.created_at DESC, u.id DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]AdminContentRecord, 0)
+	for rows.Next() {
+		var id int64
+		var email, nickname, role, province, grade, passwordHash, createdAt, updatedAt string
+		var postCount int
+		if err := rows.Scan(&id, &email, &nickname, &role, &province, &grade, &passwordHash, &createdAt, &updatedAt, &postCount); err != nil {
+			return nil, err
+		}
+		payload := marshalJSON(envelope{
+			"userId":             id,
+			"email":              email,
+			"grade":              grade,
+			"postCount":          postCount,
+			"passwordConfigured": passwordHash != "",
+		})
+		records = append(records, AdminContentRecord{
+			ID:        fmt.Sprintf("user-%d", id),
+			Module:    "users",
+			Title:     nickname,
+			Type:      adminRoleLabel(role),
+			Status:    "正常",
+			Scope:     province,
+			Owner:     "真实站内账号",
+			Tags:      cleanStringSlice([]string{grade, "可登录", "已设置密码"}),
+			Summary:   fmt.Sprintf("%s · 已发布 %d 篇帖子", email, postCount),
+			Priority:  "常规",
+			Payload:   json.RawMessage(payload),
+			CreatedAt: parseSQLiteTime(createdAt),
+			UpdatedAt: parseSQLiteTime(updatedAt),
+		})
+	}
+	return records, rows.Err()
+}
+
+func adminRoleLabel(role string) string {
+	switch role {
+	case "student":
+		return "学生"
+	case "parent":
+		return "家长"
+	case "teacher":
+		return "老师"
+	case "counselor":
+		return "规划师"
+	default:
+		return role
+	}
 }
 
 func (h *AdminHandler) getContentByID(ctx context.Context, id string) (AdminContentRecord, error) {

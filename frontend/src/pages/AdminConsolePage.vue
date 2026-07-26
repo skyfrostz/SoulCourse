@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import type {
   AdminEmailConfig,
   AdminRecord,
@@ -28,10 +28,7 @@ import {
   moduleDefinitions,
   nextPriority,
   optionsFor,
-  permissionLabels,
-  permissionPresets,
-  permissionsForType,
-  presetForPermissions,
+  resetAdminUserPassword,
   resolveMediaUrl,
   saveAdminContent,
   saveAdminSession,
@@ -45,7 +42,7 @@ import {
   workflowTrail,
 } from '../lib/admin'
 
-const state = createInitialAdminState()
+const state = reactive(createInitialAdminState())
 
 const activeModule = ref<ModuleId>('dashboard')
 const selectedId = ref('')
@@ -70,6 +67,8 @@ const loginForm = ref({
 const pendingWorkflowActionId = ref('')
 const workflowNote = ref('')
 const workflowError = ref('')
+const newUserPassword = ref('')
+const userPasswordResult = ref('')
 
 const isLoggedIn = computed(() => adminSession.value.authenticated && Boolean(settings.value.adminToken))
 const currentModule = computed(() => moduleDefinitions.find((item) => item.id === activeModule.value) || moduleDefinitions[0])
@@ -144,19 +143,13 @@ const statusOptionsForDraft = computed(() =>
   draftRecord.value && isEditableModule(activeModule.value) ? optionsFor('status', activeModule.value, draftRecord.value.status) : [],
 )
 const currentImages = computed(() => mediaUrls(draftRecord.value))
-const permissionEntries = Object.entries(permissionLabels)
-const permissionPresetEntries = Object.entries(permissionPresets)
-const currentPermissions = computed(() => {
-  if (!draftRecord.value) return []
-  const payloadPermissions = draftRecord.value.payload.permissions
-  if (Array.isArray(payloadPermissions) && payloadPermissions.length) return payloadPermissions
-  return permissionsForType(draftRecord.value.type)
-})
-const currentPermissionPreset = computed(() => {
-  if (!draftRecord.value) return 'basic'
-  const preset = draftRecord.value.payload.permissionPreset
-  return preset || presetForPermissions(currentPermissions.value)
-})
+const currentUserAccount = computed(() => ({
+  userId: Number(currentRecord.value?.payload.userId || 0),
+  email: String(currentRecord.value?.payload.email || ''),
+  grade: String(currentRecord.value?.payload.grade || ''),
+  postCount: Number(currentRecord.value?.payload.postCount || 0),
+  passwordConfigured: Boolean(currentRecord.value?.payload.passwordConfigured),
+}))
 
 watch([activeModule, selectedId], syncDraftFromSelected, { immediate: true })
 
@@ -187,7 +180,13 @@ function updateSettings(partial: Partial<AdminSettings>) {
 }
 
 function syncDraftFromSelected() {
-  draftRecord.value = currentRecord.value ? structuredClone(currentRecord.value) : null
+  draftRecord.value = currentRecord.value ? cloneRecord(currentRecord.value) : null
+  newUserPassword.value = ''
+  userPasswordResult.value = ''
+}
+
+function cloneRecord(record: AdminRecord) {
+  return structuredClone(toRaw(record))
 }
 
 function openModule(moduleId: ModuleId, recordId = '') {
@@ -279,7 +278,7 @@ async function loadRemoteContent() {
 }
 
 async function createRecordNow() {
-  if (!isEditableModule(activeModule.value)) return
+  if (!isEditableModule(activeModule.value) || activeModule.value === 'users') return
   const item = createNewRecord(activeModule.value)
   state.records[activeModule.value].unshift(item)
   selectedId.value = item.id
@@ -300,17 +299,9 @@ async function createRecordNow() {
 
 async function saveCurrentRecord() {
   if (!draftRecord.value || !currentRecord.value || !isEditableModule(activeModule.value)) return
-  const snapshot = structuredClone(currentRecord.value)
-  const nextRecord = structuredClone(draftRecord.value)
+  const snapshot = cloneRecord(currentRecord.value)
+  const nextRecord = cloneRecord(draftRecord.value)
   nextRecord.updatedAt = formatDate(new Date().toISOString())
-  if (activeModule.value === 'users') {
-    const permissions = currentPermissions.value
-    nextRecord.payload = {
-      ...nextRecord.payload,
-      permissionPreset: currentPermissionPreset.value,
-      permissions,
-    }
-  }
   Object.assign(currentRecord.value, nextRecord)
   state.audit.push(`保存 ${nextRecord.title}，状态：${nextRecord.status}`)
   try {
@@ -368,7 +359,7 @@ async function confirmWorkflowAction() {
     workflowError.value = '该动作必须填写处理意见，方便后续复盘和追责。'
     return
   }
-  const snapshot = structuredClone(item)
+  const snapshot = cloneRecord(item)
   const previousStatus = item.status
   item.status = action.nextStatus
   item.priority = nextPriority(action.nextStatus)
@@ -415,7 +406,7 @@ async function handleMediaUpload(event: Event) {
     input.value = ''
     return
   }
-  const snapshot = structuredClone(item)
+  const snapshot = cloneRecord(item)
   try {
     const uploads = await Promise.all(files.slice(0, Math.max(0, 9 - mediaUrls(item).length)).map((file) => uploadAdminImage(settings.value.apiBase, settings.value.adminToken, file)))
     const uploadedUrls = uploads.map((entry) => entry.url)
@@ -443,7 +434,7 @@ async function handleMediaUpload(event: Event) {
 async function removeMediaImageAt(index: number) {
   const item = currentRecord.value
   if (!item || !isEditableModule(activeModule.value)) return
-  const snapshot = structuredClone(item)
+  const snapshot = cloneRecord(item)
   item.payload = {
     ...item.payload,
     imageUrls: mediaUrls(item).filter((_, itemIndex) => itemIndex !== index),
@@ -464,27 +455,25 @@ async function removeMediaImageAt(index: number) {
   }
 }
 
-function applyPermissionPreset(presetId: string) {
-  if (!draftRecord.value) return
-  const preset = permissionPresets[presetId as keyof typeof permissionPresets]
-  if (!preset) return
-  draftRecord.value.payload = {
-    ...draftRecord.value.payload,
-    permissionPreset: presetId as keyof typeof permissionPresets,
-    permissions: [...preset.permissions],
+async function resetCurrentUserPassword() {
+  if (activeModule.value !== 'users' || !currentUserAccount.value.userId) return
+  if (newUserPassword.value.length < 8) {
+    userPasswordResult.value = '新密码至少需要 8 位。'
+    return
   }
-}
-
-function togglePermission(permission: string, checked: boolean) {
-  if (!draftRecord.value) return
-  const next = new Set(currentPermissions.value)
-  if (checked) next.add(permission)
-  else next.delete(permission)
-  const permissions = [...next]
-  draftRecord.value.payload = {
-    ...draftRecord.value.payload,
-    permissionPreset: presetForPermissions(permissions),
-    permissions,
+  userPasswordResult.value = '正在更新...'
+  try {
+    await resetAdminUserPassword(
+      settings.value.apiBase,
+      settings.value.adminToken,
+      currentUserAccount.value.userId,
+      newUserPassword.value,
+    )
+    newUserPassword.value = ''
+    userPasswordResult.value = '密码已更新。'
+    state.audit.push(`重置用户「${currentRecord.value?.title || ''}」的密码`)
+  } catch (error) {
+    userPasswordResult.value = `更新失败：${toErrorMessage(error)}`
   }
 }
 
@@ -780,7 +769,7 @@ function toErrorMessage(error: unknown) {
               <option v-for="status in statusOptionsForActiveModule" :key="status" :value="status">{{ status }}</option>
             </select>
           </label>
-          <button class="primary" type="button" @click="createRecordNow">新建条目</button>
+          <button v-if="activeModule !== 'users'" class="primary" type="button" @click="createRecordNow">新建条目</button>
         </div>
 
         <div class="table-wrap">
@@ -814,7 +803,7 @@ function toErrorMessage(error: unknown) {
                 </td>
                 <td>{{ item.updatedAt }}</td>
                 <td>
-                  <button type="button" @click.stop="openDrawer(item.id)">编辑</button>
+                  <button type="button" @click.stop="openDrawer(item.id)">{{ activeModule === 'users' ? '查看' : '编辑' }}</button>
                 </td>
               </tr>
               <tr v-if="!filteredRows.length">
@@ -830,14 +819,14 @@ function toErrorMessage(error: unknown) {
       <div class="drawer-head">
         <div>
           <small>{{ currentModule.label }}</small>
-          <h2>编辑条目</h2>
+          <h2>{{ activeModule === 'users' ? '账号详情' : '编辑条目' }}</h2>
         </div>
         <button type="button" @click="closeDrawer">×</button>
       </div>
 
-      <section class="workflow-card">
+      <section v-if="activeModule !== 'users'" class="workflow-card">
         <div class="workflow-head">
-          <strong>{{ activeModule === 'users' ? '身份认证流程' : '内容审核流程' }}</strong>
+          <strong>内容审核流程</strong>
           <span class="status" :class="statusClass(currentRecord?.status || '')">{{ currentRecord?.status }}</span>
         </div>
         <div class="workflow-steps">
@@ -867,101 +856,86 @@ function toErrorMessage(error: unknown) {
         </div>
       </section>
 
-      <label>
-        {{ activeModule === 'users' ? '用户名称' : '标题' }}
-        <input v-model="draftRecord.title" />
-      </label>
-      <label>
-        {{ activeModule === 'users' ? '身份类型' : '类型' }}
-        <select v-model="draftRecord.type">
-          <option v-for="option in typeOptionsForDraft" :key="option" :value="option">{{ option }}</option>
-        </select>
-      </label>
-      <label>
-        状态
-        <select v-model="draftRecord.status">
-          <option v-for="option in statusOptionsForDraft" :key="option" :value="option">{{ option }}</option>
-        </select>
-      </label>
-      <label>
-        {{ activeModule === 'users' ? '所属省份/服务范围' : '范围/地区' }}
-        <select v-model="draftRecord.scope">
-          <option v-for="option in scopeOptionsForDraft" :key="option" :value="option">{{ option }}</option>
-        </select>
-      </label>
-      <label>
-        {{ activeModule === 'users' ? '账号来源' : '负责人/来源' }}
-        <select v-model="draftRecord.owner">
-          <option v-for="option in ownerOptionsForDraft" :key="option" :value="option">{{ option }}</option>
-        </select>
-      </label>
-      <label>
-        标签
-        <select v-model="draftRecord.tags" class="multi-select" multiple :size="Math.min(Math.max(tagOptionsForDraft.length, 4), 7)">
-          <option v-for="option in tagOptionsForDraft" :key="option" :value="option">{{ option }}</option>
-        </select>
-      </label>
-
       <section v-if="activeModule === 'users'" class="permission-card">
         <div class="permission-head">
-          <strong>权限分类</strong>
-          <span>{{ permissionPresets[currentPermissionPreset].label }}</span>
+          <strong>{{ draftRecord.title }}</strong>
+          <span class="status ok">真实数据库账号</span>
         </div>
-        <div class="permission-presets">
-          <button
-            v-for="[presetId, preset] in permissionPresetEntries"
-            :key="presetId"
-            :class="{ active: presetId === currentPermissionPreset }"
-            type="button"
-            @click="applyPermissionPreset(presetId)"
-          >
-            {{ preset.label }}
-          </button>
-        </div>
-        <div class="permission-grid">
-          <label v-for="[permissionId, label] in permissionEntries" :key="permissionId">
-            <input
-              type="checkbox"
-              :checked="currentPermissions.includes(permissionId)"
-              @change="togglePermission(permissionId, ($event.target as HTMLInputElement).checked)"
-            />
-            <span>{{ label }}</span>
-          </label>
-        </div>
+        <dl class="field-list">
+          <dt>邮箱</dt><dd>{{ currentUserAccount.email }}</dd>
+          <dt>角色</dt><dd>{{ draftRecord.type }}</dd>
+          <dt>省份</dt><dd>{{ draftRecord.scope }}</dd>
+          <dt>年级</dt><dd>{{ currentUserAccount.grade }}</dd>
+          <dt>已发布帖子</dt><dd>{{ currentUserAccount.postCount }}</dd>
+          <dt>密码状态</dt><dd>{{ currentUserAccount.passwordConfigured ? '已设置' : '未设置' }}</dd>
+        </dl>
+        <label>
+          设置新密码
+          <input v-model="newUserPassword" type="password" minlength="8" autocomplete="new-password" placeholder="至少 8 位" />
+        </label>
+        <button class="primary" type="button" @click="resetCurrentUserPassword">更新密码</button>
+        <p class="result-text">{{ userPasswordResult }}</p>
       </section>
 
-      <section v-else class="media-card">
-        <div class="media-head">
-          <strong>本地图片</strong>
-          <span>{{ currentImages.length }}/9</span>
-        </div>
-        <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="handleMediaUpload" />
-        <div class="media-actions">
-          <button type="button" @click="fileInput?.click()">选择本地图片</button>
-          <small>上传后会保存到当前条目的图片列表。</small>
-        </div>
-        <div v-if="currentImages.length" class="media-preview-grid">
-          <figure v-for="(url, index) in currentImages" :key="`${url}-${index}`">
-            <img :src="resolveMediaUrl(settings.apiBase, url)" :alt="`内容图片 ${index + 1}`" />
-            <button type="button" aria-label="移除图片" @click="removeMediaImageAt(index)">×</button>
-          </figure>
-        </div>
-        <p v-else class="media-empty">还没有本地图片。</p>
-      </section>
+      <template v-else>
+        <label>标题<input v-model="draftRecord.title" /></label>
+        <label>
+          类型
+          <select v-model="draftRecord.type">
+            <option v-for="option in typeOptionsForDraft" :key="option" :value="option">{{ option }}</option>
+          </select>
+        </label>
+        <label>
+          状态
+          <select v-model="draftRecord.status">
+            <option v-for="option in statusOptionsForDraft" :key="option" :value="option">{{ option }}</option>
+          </select>
+        </label>
+        <label>
+          范围/地区
+          <select v-model="draftRecord.scope">
+            <option v-for="option in scopeOptionsForDraft" :key="option" :value="option">{{ option }}</option>
+          </select>
+        </label>
+        <label>
+          负责人/来源
+          <select v-model="draftRecord.owner">
+            <option v-for="option in ownerOptionsForDraft" :key="option" :value="option">{{ option }}</option>
+          </select>
+        </label>
+        <label>
+          标签
+          <select v-model="draftRecord.tags" class="multi-select" multiple :size="Math.min(Math.max(tagOptionsForDraft.length, 4), 7)">
+            <option v-for="option in tagOptionsForDraft" :key="option" :value="option">{{ option }}</option>
+          </select>
+        </label>
 
-      <label>
-        摘要
-        <textarea v-model="draftRecord.summary" />
-      </label>
-      <label>
-        来源链接
-        <input v-model="draftRecord.url" />
-      </label>
+        <section class="media-card">
+          <div class="media-head">
+            <strong>本地图片</strong>
+            <span>{{ currentImages.length }}/9</span>
+          </div>
+          <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="handleMediaUpload" />
+          <div class="media-actions">
+            <button type="button" @click="fileInput?.click()">选择本地图片</button>
+            <small>上传后会保存到当前条目的图片列表。</small>
+          </div>
+          <div v-if="currentImages.length" class="media-preview-grid">
+            <figure v-for="(url, index) in currentImages" :key="`${url}-${index}`">
+              <img :src="resolveMediaUrl(settings.apiBase, url)" :alt="`内容图片 ${index + 1}`" />
+              <button type="button" aria-label="移除图片" @click="removeMediaImageAt(index)">×</button>
+            </figure>
+          </div>
+          <p v-else class="media-empty">还没有本地图片。</p>
+        </section>
 
-      <div class="drawer-actions">
-        <button class="primary" type="button" @click="saveCurrentRecord">保存基础信息</button>
-        <button class="danger" type="button" @click="deleteCurrentRecord">删除</button>
-      </div>
+        <label>摘要<textarea v-model="draftRecord.summary" /></label>
+        <label>来源链接<input v-model="draftRecord.url" /></label>
+        <div class="drawer-actions">
+          <button class="primary" type="button" @click="saveCurrentRecord">保存基础信息</button>
+          <button class="danger" type="button" @click="deleteCurrentRecord">删除</button>
+        </div>
+      </template>
     </aside>
 
     <div v-if="selectedWorkflowAction && currentRecord" class="modal-backdrop">

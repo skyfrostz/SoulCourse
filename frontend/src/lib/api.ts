@@ -95,6 +95,7 @@ export async function fetchPosts(filter: FeedFilter, page = 1, pageSize = 4): Pr
       track: filter.track,
       subjects: filter.subjects.join(','),
       category: filter.category === 'all' ? undefined : filter.category,
+      province: '广东',
       q: filter.keyword || undefined,
       sort: filter.sort,
       limit: pageSize,

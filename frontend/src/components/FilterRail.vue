@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, CircleCheck, Dna, FlaskConical, Globe2, Landmark, SlidersHorizontal } from '@lucide/vue'
+import { ChevronDown, CircleCheck, Dna, FlaskConical, Globe2, Landmark, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { categoryLabels, subjectAccent, subjectLabels, trackLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
@@ -7,6 +7,8 @@ import type { Category, Subject, Track } from '../types/forum'
 
 const forumStore = useForumStore()
 const filterExpanded = ref(false)
+defineProps<{ collapsed: boolean }>()
+defineEmits<{ toggleCollapse: [] }>()
 
 const tracks: Track[] = ['physics', 'history']
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']
@@ -36,7 +38,16 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
 </script>
 
 <template>
-  <aside class="filter-rail">
+  <aside class="filter-rail" :class="{ collapsed }">
+    <button
+      class="rail-collapse-button rail-reopen-button"
+      type="button"
+      aria-label="展开筛选栏"
+      title="展开筛选栏"
+      @click="$emit('toggleCollapse')"
+    >
+      <PanelLeftOpen :size="19" />
+    </button>
     <div class="panel-title-row">
       <h2>选科组合筛选</h2>
       <div class="filter-title-actions">
@@ -44,6 +55,9 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
           <SlidersHorizontal :size="15" /> 筛选 <ChevronDown :size="14" />
         </button>
         <button class="ghost-link" type="button" @click="forumStore.resetFilters()">重置</button>
+        <button class="rail-collapse-button" type="button" aria-label="收起筛选栏" title="收起筛选栏" @click="$emit('toggleCollapse')">
+          <PanelLeftClose :size="17" />
+        </button>
       </div>
     </div>
 

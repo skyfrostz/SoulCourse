@@ -50,37 +50,39 @@ function toggleFavorite() {
 
 <template>
   <article class="post-card forum-row-card">
-    <header class="post-card-head">
-      <RouterLink class="author-profile-link" :to="`/users/${encodeURIComponent(livePost.authorName)}`">
-        <span class="small-avatar">{{ livePost.authorName.slice(0, 1) }}</span>
-        <span>
-          <strong>
-            {{ livePost.authorName }}
-            <em v-if="['teacher', 'counselor'].includes(livePost.authorRole)" class="verified-badge">认证</em>
-          </strong>
-          <small>{{ livePost.grade }} · {{ roleLabels[livePost.authorRole] }} · {{ livePost.electives.map((item) => subjectLabels[item]).join('') }}</small>
-        </span>
-      </RouterLink>
+    <RouterLink v-if="livePost.imageUrls?.length" class="post-image-strip" :to="`/posts/${livePost.id}`">
+        <img :src="appAssetUrl(livePost.imageUrls[0])" :alt="livePost.title" />
+        <span v-if="livePost.imageUrls.length > 1">{{ livePost.imageUrls.length }} 图</span>
+    </RouterLink>
 
+    <div class="post-card-content">
       <div class="post-meta-line">
         <span class="category-chip" :class="livePost.category">{{ categoryLabels[livePost.category] }}</span>
         <span>{{ trackLabels[livePost.track] }}</span>
       </div>
-    </header>
 
-    <RouterLink class="post-hit-area" :to="`/posts/${livePost.id}`">
-      <h2>{{ livePost.title }}</h2>
-      <p>{{ livePost.content }}</p>
+      <RouterLink class="post-hit-area" :to="`/posts/${livePost.id}`">
+        <h2>{{ livePost.title }}</h2>
+        <p>{{ livePost.content }}</p>
 
-      <div v-if="livePost.imageUrls?.length" class="post-image-strip">
-        <img :src="appAssetUrl(livePost.imageUrls[0])" :alt="livePost.title" />
-        <span v-if="livePost.imageUrls.length > 1">{{ livePost.imageUrls.length }} 图</span>
-      </div>
+        <div v-if="livePost.tags?.length" class="tag-row">
+          <span v-for="tag in livePost.tags.slice(0, 4)" :key="tag"># {{ tag }}</span>
+        </div>
+      </RouterLink>
 
-      <div v-if="livePost.tags?.length" class="tag-row">
-        <span v-for="tag in livePost.tags.slice(0, 4)" :key="tag"># {{ tag }}</span>
-      </div>
-    </RouterLink>
+      <header class="post-card-head">
+        <RouterLink class="author-profile-link" :to="`/users/${encodeURIComponent(livePost.authorName)}`">
+          <span class="small-avatar">{{ livePost.authorName.slice(0, 1) }}</span>
+          <span>
+            <strong>
+              {{ livePost.authorName }}
+              <em v-if="['teacher', 'counselor'].includes(livePost.authorRole)" class="verified-badge">认证</em>
+            </strong>
+            <small>{{ livePost.grade }} · {{ roleLabels[livePost.authorRole] }} · {{ livePost.electives.map((item) => subjectLabels[item]).join('') }}</small>
+          </span>
+        </RouterLink>
+      </header>
+    </div>
 
     <footer class="post-card-actions">
       <RouterLink :to="`/posts/${livePost.id}`"><MessageSquare :size="16" /> {{ formatCount(livePost.commentsCount) }} 条讨论</RouterLink>

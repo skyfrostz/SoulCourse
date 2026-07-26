@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Bookmark, ChevronLeft, MessageSquare, Send, ThumbsUp, UserPlus } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { Bookmark, ChevronLeft, ChevronRight, MessageSquare, RotateCcw, Send, ThumbsUp, UserPlus, X, ZoomIn, ZoomOut } from '@lucide/vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, createComment, fetchPostDetail, toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels, trackLabels } from '../lib/labels'
@@ -16,6 +16,8 @@ const forumStore = useForumStore()
 const draft = ref('')
 const commentError = ref('')
 const commentInput = ref<HTMLInputElement | null>(null)
+const activeImageIndex = ref<number | null>(null)
+const zoom = ref(1)
 
 const postId = computed(() => Number(route.params.id))
 const detailQuery = useQuery({
@@ -28,6 +30,7 @@ const rawPost = computed(() => detailQuery.data.value?.post)
 const post = computed(() => rawPost.value ? forumStore.hydratePost(rawPost.value) : undefined)
 const comments = computed(() => detailQuery.data.value?.comments ?? [])
 const displayedCommentCount = computed(() => comments.value.length)
+const lightboxUrl = computed(() => activeImageIndex.value === null ? '' : post.value?.imageUrls?.[activeImageIndex.value] ?? '')
 const dataEvidence = computed(() => {
   if (post.value?.category !== 'data') return null
   return (
@@ -117,6 +120,51 @@ function replyTo(author: string) {
   draft.value = `@${author} `
   window.setTimeout(() => commentInput.value?.focus(), 50)
 }
+
+function openLightbox(index: number) {
+  activeImageIndex.value = index
+  zoom.value = 1
+}
+
+function closeLightbox() {
+  activeImageIndex.value = null
+  zoom.value = 1
+}
+
+function moveImage(offset: number) {
+  const total = post.value?.imageUrls?.length ?? 0
+  if (!total || activeImageIndex.value === null) return
+  activeImageIndex.value = (activeImageIndex.value + offset + total) % total
+  zoom.value = 1
+}
+
+function setZoom(nextZoom: number) {
+  zoom.value = Math.min(4, Math.max(0.5, Number(nextZoom.toFixed(2))))
+}
+
+function handleImageWheel(event: WheelEvent) {
+  setZoom(zoom.value + (event.deltaY < 0 ? 0.2 : -0.2))
+}
+
+function handleLightboxKeydown(event: KeyboardEvent) {
+  if (activeImageIndex.value === null) return
+  if (event.key === 'Escape') closeLightbox()
+  else if (event.key === 'ArrowLeft') moveImage(-1)
+  else if (event.key === 'ArrowRight') moveImage(1)
+  else if (event.key === '+' || event.key === '=') setZoom(zoom.value + 0.2)
+  else if (event.key === '-') setZoom(zoom.value - 0.2)
+  else if (event.key === '0') setZoom(1)
+}
+
+watch(activeImageIndex, (index) => {
+  document.body.style.overflow = index === null ? '' : 'hidden'
+})
+watch(postId, closeLightbox)
+onMounted(() => window.addEventListener('keydown', handleLightboxKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleLightboxKeydown)
+  document.body.style.overflow = ''
+})
 </script>
 
 <template>
@@ -153,7 +201,15 @@ function replyTo(author: string) {
         <p class="article-body">{{ post.content }}</p>
 
         <div v-if="post.imageUrls?.length" class="article-gallery">
-          <img v-for="url in post.imageUrls" :key="url" :src="appAssetUrl(url)" :alt="post.title" />
+          <button class="article-gallery-main" type="button" aria-label="查看大图" @click="openLightbox(0)">
+            <img :src="appAssetUrl(post.imageUrls[0])" :alt="post.title" />
+            <span>查看大图 · {{ post.imageUrls.length }} 张</span>
+          </button>
+          <div v-if="post.imageUrls.length > 1" class="article-gallery-thumbs">
+            <button v-for="(url, index) in post.imageUrls.slice(1)" :key="url" type="button" :aria-label="`查看第 ${index + 2} 张图片`" @click="openLightbox(index + 1)">
+              <img :src="appAssetUrl(url)" :alt="`${post.title} 第 ${index + 2} 张图片`" />
+            </button>
+          </div>
         </div>
 
         <section v-if="dataEvidence" class="post-data-evidence">
@@ -250,5 +306,25 @@ function replyTo(author: string) {
       <h2>正在加载帖子详情</h2>
       <p>如果长时间没有出现，请返回论坛重新选择帖子。</p>
     </section>
+
+    <Teleport to="body">
+      <div v-if="activeImageIndex !== null && lightboxUrl" class="image-lightbox" role="dialog" aria-modal="true" aria-label="帖子图片预览" @click.self="closeLightbox">
+        <div class="lightbox-topbar">
+          <span>{{ activeImageIndex + 1 }} / {{ post?.imageUrls?.length }}</span>
+          <div class="lightbox-tools">
+            <button type="button" aria-label="缩小图片" title="缩小" @click="setZoom(zoom - 0.2)"><ZoomOut :size="20" /></button>
+            <strong>{{ Math.round(zoom * 100) }}%</strong>
+            <button type="button" aria-label="放大图片" title="放大" @click="setZoom(zoom + 0.2)"><ZoomIn :size="20" /></button>
+            <button type="button" aria-label="重置缩放" title="重置缩放" @click="setZoom(1)"><RotateCcw :size="19" /></button>
+            <button type="button" aria-label="关闭图片预览" title="关闭" @click="closeLightbox"><X :size="22" /></button>
+          </div>
+        </div>
+        <button v-if="(post?.imageUrls?.length ?? 0) > 1" class="lightbox-nav previous" type="button" aria-label="上一张" @click="moveImage(-1)"><ChevronLeft :size="30" /></button>
+        <div class="lightbox-stage" @wheel.prevent="handleImageWheel">
+          <img :src="appAssetUrl(lightboxUrl)" :alt="post?.title" :style="{ transform: `scale(${zoom})` }" />
+        </div>
+        <button v-if="(post?.imageUrls?.length ?? 0) > 1" class="lightbox-nav next" type="button" aria-label="下一张" @click="moveImage(1)"><ChevronRight :size="30" /></button>
+      </div>
+    </Teleport>
   </main>
 </template>

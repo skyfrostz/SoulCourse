@@ -51,8 +51,8 @@ interface LocalFollowState {
 export const useForumStore = defineStore('forum', {
   state: () => ({
     filter: {
-      track: 'physics' as Track,
-      subjects: ['chemistry', 'biology'] as Subject[],
+      track: 'all' as Track | 'all',
+      subjects: [] as Subject[],
       category: 'all' as Category | 'all',
       keyword: '',
       sort: 'recommended' as FeedSort,
@@ -78,15 +78,13 @@ export const useForumStore = defineStore('forum', {
       notificationSeeds.filter((notification) => !state.readNotificationIds[notification.id]).length,
   },
   actions: {
-    setTrack(track: Track) {
+    setTrack(track: Track | 'all') {
       this.filter.track = track
       this.page = 1
     },
     toggleSubject(subject: Subject) {
       if (this.filter.subjects.includes(subject)) {
-        if (this.filter.subjects.length > 1) {
-          this.filter.subjects = this.filter.subjects.filter((item) => item !== subject)
-        }
+        this.filter.subjects = this.filter.subjects.filter((item) => item !== subject)
         return
       }
       this.filter.subjects = [...this.filter.subjects.slice(-1), subject]
@@ -106,8 +104,8 @@ export const useForumStore = defineStore('forum', {
     },
     resetFilters() {
       this.filter = {
-        track: 'physics',
-        subjects: ['chemistry', 'biology'],
+        track: 'all',
+        subjects: [],
         category: 'all',
         keyword: '',
         sort: 'recommended',

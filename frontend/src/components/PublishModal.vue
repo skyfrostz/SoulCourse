@@ -19,8 +19,8 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const imagePreviews = ref<string[]>([])
 const tagInput = ref('')
 const tags = ref<string[]>([])
-const track = ref<Track>(forumStore.filter.track)
-const electives = ref<Subject[]>([...forumStore.filter.subjects])
+const track = ref<Track>(forumStore.filter.track === 'all' ? 'physics' : forumStore.filter.track)
+const electives = ref<Subject[]>(forumStore.filter.subjects.length === 2 ? [...forumStore.filter.subjects] : ['chemistry', 'biology'])
 const error = ref('')
 
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']

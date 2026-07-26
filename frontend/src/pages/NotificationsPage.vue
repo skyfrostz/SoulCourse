@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bell, ChevronLeft, ExternalLink, MessageCircle, Search, ShieldCheck } from '@lucide/vue'
+import { Bell, ChevronLeft, ExternalLink, Heart, MessageCircle, Plus, Search, ShieldCheck, UserPlus } from '@lucide/vue'
 import { notificationSeeds, notificationTypeLabels, type NotificationType } from '../lib/notifications'
 import { useForumStore } from '../stores/forum'
 
@@ -10,6 +10,7 @@ const forumStore = useForumStore()
 const activeType = ref<NotificationType | 'all'>('all')
 const activeId = ref(notificationSeeds[0]?.id ?? '')
 const keyword = ref('')
+const mobileSearchOpen = ref(false)
 
 const typeTabs: Array<{ label: string; value: NotificationType | 'all' }> = [
   { label: '全部', value: 'all' },
@@ -44,6 +45,19 @@ function selectNotification(id: string) {
   forumStore.markNotificationsRead([id])
 }
 
+function openMobileNotification(id: string, targetUrl: string) {
+  selectNotification(id)
+  router.push(targetUrl)
+}
+
+function openFavorites() {
+  if (!forumStore.currentUser) {
+    forumStore.authOpen = true
+    return
+  }
+  router.push(`/users/${encodeURIComponent(forumStore.currentUser.nickname)}#favorites`)
+}
+
 function openTarget() {
   if (!activeNotification.value) return
   forumStore.markNotificationsRead([activeNotification.value.id])
@@ -58,10 +72,60 @@ function formatTime(value: string) {
     minute: '2-digit',
   })
 }
+
+function formatShortTime(value: string) {
+  return new Date(value).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+}
 </script>
 
 <template>
   <main class="detail-page notifications-page">
+    <header class="mobile-message-header">
+      <h1>消息</h1>
+      <div>
+        <button type="button" :aria-expanded="mobileSearchOpen" aria-label="搜索消息" @click="mobileSearchOpen = !mobileSearchOpen">
+          <Search :size="23" />
+        </button>
+        <RouterLink to="/messages" aria-label="打开私信"><Plus :size="25" /></RouterLink>
+      </div>
+    </header>
+
+    <label v-if="mobileSearchOpen" class="mobile-message-search">
+      <Search :size="17" />
+      <input v-model="keyword" type="search" autocomplete="off" placeholder="搜索消息内容" />
+    </label>
+
+    <nav class="mobile-message-shortcuts" aria-label="消息快捷入口">
+      <button type="button" @click="openFavorites">
+        <span class="tone-like"><Heart :size="25" /></span>
+        <strong>赞与收藏</strong>
+      </button>
+      <button type="button" :class="{ active: activeType === 'follow' }" @click="activeType = 'follow'">
+        <span class="tone-follow"><UserPlus :size="25" /></span>
+        <strong>新增关注</strong>
+      </button>
+      <button type="button" :class="{ active: activeType === 'comment' }" @click="activeType = 'comment'">
+        <span class="tone-comment"><MessageCircle :size="25" /></span>
+        <strong>评论回复</strong>
+      </button>
+    </nav>
+
+    <section class="mobile-notification-list" aria-label="通知列表">
+      <button v-for="item in filteredNotifications" :key="item.id" type="button" @click="openMobileNotification(item.id, item.targetUrl)">
+        <span class="mobile-notification-avatar" :class="`tone-${item.type}`">
+          <MessageCircle v-if="item.type === 'comment'" :size="21" />
+          <UserPlus v-else-if="item.type === 'follow'" :size="21" />
+          <ShieldCheck v-else :size="21" />
+        </span>
+        <span class="mobile-notification-copy">
+          <strong>{{ item.title }}</strong>
+          <small>{{ item.summary }}</small>
+        </span>
+        <time>{{ formatShortTime(item.createdAt) }}</time>
+        <i v-if="item.unread"></i>
+      </button>
+    </section>
+
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
 
     <section class="notifications-hero">

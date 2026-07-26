@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChevronDown, CircleCheck, Dna, FlaskConical, Globe2, Landmark, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from '@lucide/vue'
 import { computed, ref } from 'vue'
-import { categoryLabels, subjectAccent, subjectLabels, trackLabels } from '../lib/labels'
+import { categoryLabels, subjectAccent, subjectLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
 import type { Category, Subject, Track } from '../types/forum'
 
@@ -10,7 +10,7 @@ const filterExpanded = ref(false)
 defineProps<{ collapsed: boolean }>()
 defineEmits<{ toggleCollapse: [] }>()
 
-const tracks: Track[] = ['physics', 'history']
+const tracks: Array<Track | 'all'> = ['all', 'physics', 'history']
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']
 const categories: Array<Category | 'all'> = ['all', 'experience', 'question', 'data']
 
@@ -64,7 +64,7 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
     <div id="community-filter-body" class="filter-body" :class="{ open: filterExpanded }">
     <section class="filter-section">
       <h3>方向</h3>
-      <div class="segmented-control">
+      <div class="segmented-control track-control">
         <button
           v-for="track in tracks"
           :key="track"
@@ -72,7 +72,7 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
           :aria-pressed="forumStore.filter.track === track"
           @click="forumStore.setTrack(track)"
         >
-          {{ trackLabels[track] }}
+          {{ track === 'all' ? '全部' : track === 'physics' ? '物理' : '历史' }}
         </button>
       </div>
     </section>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, Home, Plus, TrendingUp, UserRound } from '@lucide/vue'
+import { Home, MessageCircle, Plus, TrendingUp, UserRound } from '@lucide/vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useForumStore } from '../stores/forum'
@@ -38,7 +38,7 @@ function openProfile() {
     </button>
     <RouterLink to="/notifications" :class="{ active: isMessageRoute }" aria-label="消息与通知">
       <span class="mobile-nav-icon">
-        <Bell :size="22" />
+        <MessageCircle :size="22" />
         <em v-if="unreadCount">{{ unreadCount > 9 ? '9+' : unreadCount }}</em>
       </span>
       <span>消息</span>

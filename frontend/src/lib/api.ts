@@ -92,7 +92,7 @@ export async function fetchMe(): Promise<User> {
 export async function fetchPosts(filter: FeedFilter, page = 1, pageSize = 4): Promise<Post[]> {
   const response = await api.get<ApiEnvelope<Post[]>>('/posts', {
     params: {
-      track: filter.track,
+      track: filter.track === 'all' ? undefined : filter.track,
       subjects: filter.subjects.join(','),
       category: filter.category === 'all' ? undefined : filter.category,
       province: '广东',

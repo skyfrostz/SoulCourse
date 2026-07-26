@@ -56,7 +56,7 @@ export interface SubjectInsight {
 }
 
 export interface FeedFilter {
-  track: Track
+  track: Track | 'all'
   subjects: Subject[]
   category: Category | 'all'
   keyword: string

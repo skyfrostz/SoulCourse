@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Bookmark, ChevronLeft, MessageSquare, PenLine, Settings, Sparkles, UserCheck, UserPlus, UserRound, Users } from '@lucide/vue'
 import PostCard from '../components/PostCard.vue'
@@ -11,6 +11,7 @@ import type { Comment, Post, Role } from '../types/forum'
 const route = useRoute()
 const router = useRouter()
 const forumStore = useForumStore()
+const activeProfileTab = ref<'posts' | 'comments' | 'favorites'>(route.hash === '#favorites' ? 'favorites' : 'posts')
 
 const profileName = computed(() => decodeURIComponent(String(route.params.name ?? '')))
 const isCurrentUser = computed(() => forumStore.currentUser?.nickname === profileName.value)
@@ -121,7 +122,68 @@ function toggleFollow() {
       <RouterLink to="/settings">完善画像</RouterLink>
     </section>
 
-    <section v-if="isCurrentUser" class="profile-section follow-management-section">
+    <nav v-if="isCurrentUser" class="mobile-profile-shortcuts" aria-label="个人功能">
+      <RouterLink to="/settings">
+        <span class="tone-profile"><Sparkles :size="21" /></span>
+        <strong>选科画像</strong>
+        <small>完善偏好</small>
+      </RouterLink>
+      <RouterLink to="/following">
+        <span class="tone-following"><Users :size="21" /></span>
+        <strong>我的关注</strong>
+        <small>{{ followingList.length }} 人</small>
+      </RouterLink>
+      <button type="button" @click="activeProfileTab = 'favorites'">
+        <span class="tone-favorite"><Bookmark :size="21" /></span>
+        <strong>我的收藏</strong>
+        <small>{{ favoritePosts.length }} 篇</small>
+      </button>
+    </nav>
+
+    <nav class="mobile-profile-tabs" aria-label="个人主页内容">
+      <button type="button" :class="{ active: activeProfileTab === 'posts' }" @click="activeProfileTab = 'posts'">帖子</button>
+      <button type="button" :class="{ active: activeProfileTab === 'comments' }" @click="activeProfileTab = 'comments'">评论</button>
+      <button v-if="isCurrentUser" type="button" :class="{ active: activeProfileTab === 'favorites' }" @click="activeProfileTab = 'favorites'">收藏</button>
+    </nav>
+
+    <section class="mobile-profile-content">
+      <template v-if="activeProfileTab === 'posts'">
+        <div v-if="authoredPosts.length" class="feed-grid">
+          <PostCard v-for="post in authoredPosts" :key="post.id" :post="post" />
+        </div>
+        <div v-else class="empty-state compact-empty">
+          <UserRound :size="28" />
+          <h2>还没有公开帖子</h2>
+          <p>发布后的选科经验会显示在这里。</p>
+        </div>
+      </template>
+      <template v-else-if="activeProfileTab === 'comments'">
+        <div v-if="commentCards.length" class="profile-comment-list">
+          <RouterLink v-for="item in commentCards" :key="item.comment.id" :to="`/posts/${item.post.id}`">
+            <span>{{ item.post.title }}</span>
+            <p>{{ item.comment.content }}</p>
+            <small>{{ new Date(item.comment.createdAt).toLocaleString('zh-CN') }}</small>
+          </RouterLink>
+        </div>
+        <div v-else class="empty-state compact-empty">
+          <MessageSquare :size="28" />
+          <h2>还没有评论</h2>
+          <p>参与过的讨论会显示在这里。</p>
+        </div>
+      </template>
+      <template v-else>
+        <div v-if="favoritePosts.length" class="feed-grid">
+          <PostCard v-for="post in favoritePosts" :key="post.id" :post="post" />
+        </div>
+        <div v-else class="empty-state compact-empty">
+          <Bookmark :size="28" />
+          <h2>还没有收藏</h2>
+          <p>收藏重要经验，建立自己的选科资料夹。</p>
+        </div>
+      </template>
+    </section>
+
+    <section v-if="isCurrentUser" class="profile-section follow-management-section desktop-profile-content">
       <div class="feed-toolbar">
         <div class="feed-tabs">
           <button class="active">我的关注</button>
@@ -150,7 +212,7 @@ function toggleFollow() {
       </div>
     </section>
 
-    <section v-if="isCurrentUser" class="profile-section follow-management-section">
+    <section v-if="isCurrentUser" class="profile-section follow-management-section desktop-profile-content">
       <div class="feed-toolbar">
         <div class="feed-tabs">
           <button class="active">关注我的</button>
@@ -179,7 +241,7 @@ function toggleFollow() {
       </div>
     </section>
 
-    <section class="profile-section">
+    <section class="profile-section desktop-profile-content">
       <div class="feed-toolbar">
         <div class="feed-tabs">
           <button class="active">TA 的公开笔记</button>
@@ -195,7 +257,7 @@ function toggleFollow() {
       </div>
     </section>
 
-    <section class="profile-section">
+    <section class="profile-section desktop-profile-content">
       <div class="feed-toolbar">
         <div class="feed-tabs">
           <button class="active">TA 的评论</button>
@@ -215,7 +277,7 @@ function toggleFollow() {
       </div>
     </section>
 
-    <section v-if="isCurrentUser" class="profile-section">
+    <section v-if="isCurrentUser" class="profile-section desktop-profile-content">
       <div class="feed-toolbar">
         <div class="feed-tabs">
           <button class="active">我的收藏</button>

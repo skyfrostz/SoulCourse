@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, Bookmark, ChevronDown, LogOut, Mail, PenLine, Search, Settings, Users } from '@lucide/vue'
+import { Bell, Bookmark, ChevronDown, LogOut, Mail, PenLine, Search, Settings, Users, X } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DecisionSearch from './DecisionSearch.vue'
@@ -7,7 +7,7 @@ import { useForumData } from '../composables/useForumData'
 import { notificationSeeds, notificationTypeLabels } from '../lib/notifications'
 import { appAssetUrl } from '../lib/runtime'
 import { useForumStore } from '../stores/forum'
-import type { Category } from '../types/forum'
+import type { Category, Track } from '../types/forum'
 
 defineProps<{
   source: 'api'
@@ -40,6 +40,14 @@ const activeCategory = computed(() => (route.path === '/' ? forumStore.filter.ca
 
 function setCategory(category: Category | 'all') {
   forumStore.browseCategory(category)
+}
+
+function selectMobileTrack(track: Track | 'all') {
+  forumStore.setTrack(track)
+  forumStore.setSubjects([])
+  forumStore.setCategory('all')
+  forumStore.setKeyword('')
+  forumStore.setSort('recommended')
 }
 
 function togglePanel(panel: 'notifications' | 'profile') {
@@ -95,6 +103,37 @@ onBeforeUnmount(() => {
 
 <template>
   <header class="top-nav">
+    <div class="mobile-discovery-bar">
+      <RouterLink class="mobile-brand-mark" to="/" aria-label="选科π首页">
+        <img :src="appAssetUrl('/brand/logo-mark.png')" alt="" />
+      </RouterLink>
+      <nav aria-label="首页内容方向">
+        <button type="button" :class="{ active: forumStore.filter.track === 'all' }" @click="selectMobileTrack('all')">推荐</button>
+        <button type="button" :class="{ active: forumStore.filter.track === 'physics' }" @click="selectMobileTrack('physics')">物理</button>
+        <button type="button" :class="{ active: forumStore.filter.track === 'history' }" @click="selectMobileTrack('history')">历史</button>
+      </nav>
+      <button class="mobile-search-button" type="button" :aria-expanded="searchOpen" aria-label="搜索" @click="searchOpen = !searchOpen">
+        <X v-if="searchOpen" :size="24" />
+        <Search v-else :size="25" />
+      </button>
+    </div>
+
+    <Transition name="soft-pop">
+      <section v-if="searchOpen" class="mobile-search-drawer">
+        <label>
+          <Search :size="18" />
+          <input
+            :value="forumStore.filter.keyword"
+            type="search"
+            autocomplete="off"
+            placeholder="搜索组合、专业或经验"
+            @input="forumStore.setKeyword(($event.target as HTMLInputElement).value)"
+          />
+        </label>
+        <DecisionSearch :posts="posts" :topics="topics" />
+      </section>
+    </Transition>
+
     <RouterLink class="brand-block" to="/" aria-label="选科π首页">
       <div class="brand-mark" aria-hidden="true">
         <img :src="appAssetUrl('/brand/logo-mark.png')" alt="" />

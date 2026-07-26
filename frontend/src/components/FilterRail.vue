@@ -33,7 +33,7 @@ const hotCombos = computed(() => [
 function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }) {
   forumStore.setTrack(combo.track)
   forumStore.setSubjects(combo.subjects)
-  forumStore.setKeyword(combo.label)
+  forumStore.setKeyword('')
 }
 </script>
 

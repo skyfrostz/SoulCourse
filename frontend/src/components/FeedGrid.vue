@@ -25,16 +25,17 @@ const forumStore = useForumStore()
 
     <div class="feed-toolbar">
       <div class="feed-tabs">
-        <button :class="{ active: forumStore.filter.sort === 'recommended' }" @click="forumStore.setSort('recommended')">
+        <button :class="{ active: forumStore.filter.sort === 'recommended' }" :aria-pressed="forumStore.filter.sort === 'recommended'" @click="forumStore.setSort('recommended')">
           推荐
         </button>
-        <button :class="{ active: forumStore.filter.sort === 'latest' }" @click="forumStore.setSort('latest')">
+        <button :class="{ active: forumStore.filter.sort === 'latest' }" :aria-pressed="forumStore.filter.sort === 'latest'" @click="forumStore.setSort('latest')">
           最新
         </button>
       </div>
       <button
         class="sort-button"
         :class="{ active: forumStore.filter.sort === 'hot' }"
+        :aria-pressed="forumStore.filter.sort === 'hot'"
         @click="forumStore.setSort(forumStore.filter.sort === 'hot' ? 'recommended' : 'hot')"
       >
         最热 <ChevronDown :size="15" />

@@ -102,6 +102,9 @@ onBeforeUnmount(() => {
       <span class="brand-copy">
         <span class="brand-name">选科π</span>
         <small>广东选科社区</small>
+        <span class="brand-spectrum" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i>
+        </span>
       </span>
     </RouterLink>
 
@@ -110,6 +113,7 @@ onBeforeUnmount(() => {
         v-for="item in navItems"
         :key="item.category"
         :class="{ active: activeCategory === item.category }"
+        :aria-current="activeCategory === item.category ? 'page' : undefined"
         to="/"
         @click="setCategory(item.category)"
       >

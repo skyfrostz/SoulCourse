@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { CircleCheck, Dna, FlaskConical, Globe2, Landmark } from '@lucide/vue'
-import { computed } from 'vue'
+import { ChevronDown, CircleCheck, Dna, FlaskConical, Globe2, Landmark, SlidersHorizontal } from '@lucide/vue'
+import { computed, ref } from 'vue'
 import { categoryLabels, subjectAccent, subjectLabels, trackLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
 import type { Category, Subject, Track } from '../types/forum'
 
 const forumStore = useForumStore()
+const filterExpanded = ref(false)
 
 const tracks: Track[] = ['physics', 'history']
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']
@@ -38,9 +39,15 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
   <aside class="filter-rail">
     <div class="panel-title-row">
       <h2>选科组合筛选</h2>
-      <button class="ghost-link" type="button" @click="forumStore.resetFilters()">重置</button>
+      <div class="filter-title-actions">
+        <button class="filter-toggle" type="button" :aria-expanded="filterExpanded" aria-controls="community-filter-body" @click="filterExpanded = !filterExpanded">
+          <SlidersHorizontal :size="15" /> 筛选 <ChevronDown :size="14" />
+        </button>
+        <button class="ghost-link" type="button" @click="forumStore.resetFilters()">重置</button>
+      </div>
     </div>
 
+    <div id="community-filter-body" class="filter-body" :class="{ open: filterExpanded }">
     <section class="filter-section">
       <h3>方向</h3>
       <div class="segmented-control">
@@ -48,6 +55,7 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
           v-for="track in tracks"
           :key="track"
           :class="{ active: forumStore.filter.track === track }"
+          :aria-pressed="forumStore.filter.track === track"
           @click="forumStore.setTrack(track)"
         >
           {{ trackLabels[track] }}
@@ -62,6 +70,7 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
         :key="subject"
         class="subject-row"
         :class="{ checked: forumStore.filter.subjects.includes(subject) }"
+        :aria-pressed="forumStore.filter.subjects.includes(subject)"
         @click="forumStore.toggleSubject(subject)"
       >
         <span class="subject-check">
@@ -79,6 +88,7 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
           v-for="category in categories"
           :key="category"
           :class="{ active: forumStore.filter.category === category }"
+          :aria-pressed="forumStore.filter.category === category"
           @click="forumStore.setCategory(category)"
         >
           {{ category === 'all' ? '全部' : categoryLabels[category] }}
@@ -96,5 +106,6 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
     </section>
 
     <RouterLink class="outline-wide" to="/insights">查看全部组合</RouterLink>
+    </div>
   </aside>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AuthModal from './components/AuthModal.vue'
+import MobileBottomNav from './components/MobileBottomNav.vue'
 import PublishModal from './components/PublishModal.vue'
 import TopNav from './components/TopNav.vue'
 import { useForumData } from './composables/useForumData'
@@ -21,6 +22,7 @@ const isAdminLayout = computed(() => route.meta.layout === 'admin')
         <component :is="Component" :key="route.fullPath" />
       </Transition>
     </RouterView>
+    <MobileBottomNav v-if="!isAdminLayout" />
     <AuthModal v-if="!isAdminLayout && forumStore.authOpen" />
     <PublishModal v-if="!isAdminLayout && forumStore.publishOpen" />
   </div>

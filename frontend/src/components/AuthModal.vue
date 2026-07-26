@@ -156,11 +156,11 @@ onUnmounted(() => {
       <form class="auth-form" @submit.prevent="submit">
         <label>
           邮箱
-          <input v-model="email" type="email" required />
+          <input v-model="email" type="email" autocomplete="email" required />
         </label>
         <label>
           密码
-          <input v-model="password" type="password" required minlength="6" />
+          <input v-model="password" type="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" required minlength="6" />
         </label>
 
         <template v-if="mode === 'register'">

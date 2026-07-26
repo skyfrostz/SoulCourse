@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bell, ChevronLeft, ExternalLink, Search, ShieldCheck } from '@lucide/vue'
+import { Bell, ChevronLeft, ExternalLink, MessageCircle, Search, ShieldCheck } from '@lucide/vue'
 import { notificationSeeds, notificationTypeLabels, type NotificationType } from '../lib/notifications'
 import { useForumStore } from '../stores/forum'
 
@@ -81,6 +81,10 @@ function formatTime(value: string) {
     </section>
 
     <nav class="content-lens-tabs notification-tabs" aria-label="通知筛选">
+      <RouterLink class="notification-private-link" to="/messages">
+        <MessageCircle :size="15" /> 私信
+        <span v-if="forumStore.messageUnread">{{ forumStore.messageUnread }}</span>
+      </RouterLink>
       <button
         v-for="tab in typeTabs"
         :key="tab.value"

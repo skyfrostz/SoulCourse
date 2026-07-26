@@ -6728,6 +6728,8 @@ textarea {
   .forum-home-workspace,
   .forum-home-workspace.filter-collapsed {
     grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding-inline: 8px;
   }
 
   .filter-rail.collapsed > :not(.rail-reopen-button) {
@@ -6743,8 +6745,122 @@ textarea {
     margin-top: 10px;
   }
 
+  .forum-home-workspace .feed-panel {
+    order: 1;
+  }
+
   .forum-home-workspace .feed-grid {
-    column-count: 1;
+    column-count: 2;
+    column-gap: 8px;
+  }
+
+  .forum-home-workspace .post-card {
+    margin-bottom: 12px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .forum-home-workspace .post-card:hover {
+    box-shadow: none;
+    transform: none;
+  }
+
+  .forum-home-workspace .post-image-strip,
+  .forum-home-workspace .feed-grid .post-card:nth-child(3n) .post-image-strip,
+  .forum-home-workspace .post-title-cover {
+    border-radius: 7px;
+    aspect-ratio: 3 / 4;
+  }
+
+  .forum-home-workspace .post-title-cover {
+    padding: 14px;
+  }
+
+  .forum-home-workspace .post-title-cover span {
+    margin-bottom: 9px;
+    font-size: 10px;
+  }
+
+  .forum-home-workspace .post-title-cover strong {
+    font-size: 18px;
+    line-height: 1.3;
+  }
+
+  .forum-home-workspace .post-title-cover small {
+    margin-top: 12px;
+    font-size: 10px;
+  }
+
+  .forum-home-workspace .post-card-content {
+    padding: 8px 4px 0;
+  }
+
+  .forum-home-workspace .post-meta-line,
+  .forum-home-workspace .post-card p,
+  .forum-home-workspace .tag-row,
+  .forum-home-workspace .author-profile-link small,
+  .forum-home-workspace .source-badge,
+  .forum-home-workspace .post-card-actions > a,
+  .forum-home-workspace .post-stats button:last-child {
+    display: none;
+  }
+
+  .forum-home-workspace .post-hit-area {
+    padding: 0;
+  }
+
+  .forum-home-workspace .post-card h2 {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.42;
+  }
+
+  .forum-home-workspace .post-card-head {
+    display: block;
+    margin-top: 8px;
+    padding: 0;
+    border-top: 0;
+  }
+
+  .forum-home-workspace .author-profile-link {
+    gap: 6px;
+  }
+
+  .forum-home-workspace .small-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+  }
+
+  .forum-home-workspace .author-profile-link > span:last-child {
+    min-width: 0;
+  }
+
+  .forum-home-workspace .author-profile-link strong {
+    overflow: hidden;
+    color: #64646a;
+    font-size: 11px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .forum-home-workspace .post-card-actions {
+    justify-content: flex-end;
+    min-height: 28px;
+    padding: 0 4px;
+    border-top: 0;
+  }
+
+  .forum-home-workspace .post-card-actions .post-stats {
+    gap: 0;
+  }
+
+  .forum-home-workspace .post-card-actions .post-stats button {
+    min-height: 28px;
+    padding: 0;
+    font-size: 11px;
   }
 
   .article-gallery-thumbs {
@@ -6779,5 +6895,159 @@ textarea {
   .lightbox-stage img {
     max-width: calc(100vw - 108px);
     max-height: calc(100vh - 76px);
+  }
+}
+
+.mobile-bottom-nav {
+  display: none;
+}
+
+.mobile-observation-page {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding: 24px 18px 110px;
+}
+
+.mobile-observation-page .insight-panel {
+  display: block;
+}
+
+.mobile-observation-page .insight-box {
+  padding: 20px;
+}
+
+.notification-private-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #0f766e;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.notification-private-link span {
+  display: grid;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  place-items: center;
+  border-radius: 10px;
+  background: #ff2442;
+  color: #fff;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .app-shell:not(.is-admin-route) {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
+  .top-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .top-nav .nav-actions {
+    display: none;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    z-index: 80;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: start;
+    height: calc(64px + env(safe-area-inset-bottom));
+    padding: 7px 8px env(safe-area-inset-bottom);
+    border-top: 1px solid rgba(15, 23, 42, 0.1);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 -6px 20px rgba(15, 23, 42, 0.06);
+    backdrop-filter: saturate(180%) blur(18px);
+  }
+
+  .mobile-bottom-nav > a,
+  .mobile-bottom-nav > button:not(.mobile-publish-button) {
+    display: flex;
+    min-width: 0;
+    height: 50px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #7a7a80;
+    font-size: 10px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .mobile-bottom-nav > a.active,
+  .mobile-bottom-nav > button.active {
+    color: #171719;
+  }
+
+  .mobile-nav-icon {
+    position: relative;
+    display: grid;
+    place-items: center;
+  }
+
+  .mobile-nav-icon em {
+    position: absolute;
+    top: -7px;
+    right: -11px;
+    display: grid;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    place-items: center;
+    border: 2px solid #fff;
+    border-radius: 9px;
+    background: #ff2442;
+    color: #fff;
+    font-size: 9px;
+    font-style: normal;
+    font-weight: 800;
+  }
+
+  .mobile-bottom-nav .mobile-publish-button {
+    display: grid;
+    width: 54px;
+    height: 46px;
+    margin: 2px auto 0;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #28b7f5 0%, #36c878 24%, #ffd23f 48%, #ff8a34 68%, #ff5b8a 86%, #8c6cff 100%);
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(40, 111, 190, 0.2);
+  }
+
+  .mobile-observation-page {
+    padding: 16px 10px 28px;
+  }
+
+  .mobile-observation-page .insight-box {
+    padding: 16px;
+    border-radius: 8px;
+  }
+
+  .mobile-observation-page .trend-chart {
+    grid-template-columns: 88px minmax(0, 1fr);
+    min-height: 120px;
+    gap: 14px;
+  }
+
+  .mobile-observation-page .trend-donut {
+    width: 88px;
+  }
+
+  .mobile-observation-page .trend-donut::after {
+    inset: 23px;
   }
 }

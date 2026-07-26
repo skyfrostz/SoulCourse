@@ -6,6 +6,7 @@ import InsightPage from '../pages/InsightPage.vue'
 import InsightsOverviewPage from '../pages/InsightsOverviewPage.vue'
 import MessagesPage from '../pages/MessagesPage.vue'
 import NotificationsPage from '../pages/NotificationsPage.vue'
+import ObservationPage from '../pages/ObservationPage.vue'
 import MajorForumPage from '../pages/MajorForumPage.vue'
 import PolicyDocumentPage from '../pages/PolicyDocumentPage.vue'
 import PostDetailPage from '../pages/PostDetailPage.vue'
@@ -36,6 +37,7 @@ export const router = createRouter({
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/messages', name: 'messages', component: MessagesPage },
     { path: '/notifications', name: 'notifications', component: NotificationsPage },
+    { path: '/observe', name: 'observation', component: ObservationPage },
     { path: '/requirements', name: 'requirements', component: RequirementsPage },
     { path: '/requirements/:major', name: 'major-forum', component: MajorForumPage },
     { path: '/knowledge', name: 'knowledge-base', component: KnowledgeBasePage },

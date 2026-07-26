@@ -95,12 +95,15 @@ onBeforeUnmount(() => {
 
 <template>
   <header class="top-nav">
-    <div class="brand-block">
+    <RouterLink class="brand-block" to="/" aria-label="选科π首页">
       <div class="brand-mark" aria-hidden="true">
         <img :src="appAssetUrl('/brand/logo-mark.png')" alt="" />
       </div>
-      <span class="brand-name">选科π</span>
-    </div>
+      <span class="brand-copy">
+        <span class="brand-name">选科π</span>
+        <small>广东选科社区</small>
+      </span>
+    </RouterLink>
 
     <nav class="main-tabs" aria-label="主导航">
       <RouterLink
@@ -137,7 +140,6 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="nav-actions">
-      <span class="source-dot api">API</span>
       <button class="write-button" type="button" @click="forumStore.openPublish('question')">
         <PenLine :size="16" /> 发帖
       </button>

@@ -50,12 +50,25 @@ function toggleFavorite() {
 
 <template>
   <article class="post-card forum-row-card">
-    <RouterLink class="post-hit-area" :to="`/posts/${livePost.id}`">
+    <header class="post-card-head">
+      <RouterLink class="author-profile-link" :to="`/users/${encodeURIComponent(livePost.authorName)}`">
+        <span class="small-avatar">{{ livePost.authorName.slice(0, 1) }}</span>
+        <span>
+          <strong>
+            {{ livePost.authorName }}
+            <em v-if="['teacher', 'counselor'].includes(livePost.authorRole)" class="verified-badge">认证</em>
+          </strong>
+          <small>{{ livePost.grade }} · {{ roleLabels[livePost.authorRole] }} · {{ livePost.electives.map((item) => subjectLabels[item]).join('') }}</small>
+        </span>
+      </RouterLink>
+
       <div class="post-meta-line">
         <span class="category-chip" :class="livePost.category">{{ categoryLabels[livePost.category] }}</span>
         <span>{{ trackLabels[livePost.track] }}</span>
       </div>
+    </header>
 
+    <RouterLink class="post-hit-area" :to="`/posts/${livePost.id}`">
       <h2>{{ livePost.title }}</h2>
       <p>{{ livePost.content }}</p>
 
@@ -67,38 +80,18 @@ function toggleFavorite() {
       <div v-if="livePost.tags?.length" class="tag-row">
         <span v-for="tag in livePost.tags.slice(0, 4)" :key="tag"># {{ tag }}</span>
       </div>
-
-      <div v-if="livePost.category === 'data'" class="mini-chart" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-
-      <div v-if="livePost.id === 6" class="study-photo" aria-hidden="true"></div>
-
-      <div class="post-footer">
-        <div class="author-line">
-          <span class="small-avatar">{{ livePost.authorName.slice(0, 1) }}</span>
-          <span>
-            <strong>
-              {{ livePost.authorName }}
-              <em v-if="['teacher', 'counselor'].includes(livePost.authorRole)" class="verified-badge">认证</em>
-            </strong>
-            <small>{{ livePost.grade }} · {{ roleLabels[livePost.authorRole] }} · {{ livePost.electives.map((item) => subjectLabels[item]).join('') }}</small>
-          </span>
-        </div>
-
-        <div class="post-stats">
-          <span><MessageSquare :size="15" /> {{ formatCount(livePost.commentsCount) }}</span>
-          <button type="button" :class="{ active: livePost.viewerLiked }" @click.prevent.stop="toggleLike">
-            <ThumbsUp :size="15" /> {{ formatCount(livePost.likesCount) }}
-          </button>
-          <button type="button" :class="{ active: livePost.viewerFavorited }" @click.prevent.stop="toggleFavorite">
-            <Bookmark :size="15" /> {{ formatCount(livePost.favoritesCount) }}
-          </button>
-        </div>
-      </div>
     </RouterLink>
+
+    <footer class="post-card-actions">
+      <RouterLink :to="`/posts/${livePost.id}`"><MessageSquare :size="16" /> {{ formatCount(livePost.commentsCount) }} 条讨论</RouterLink>
+      <div class="post-stats">
+        <button type="button" :class="{ active: livePost.viewerLiked }" @click="toggleLike">
+          <ThumbsUp :size="16" /> {{ formatCount(livePost.likesCount) }}
+        </button>
+        <button type="button" :class="{ active: livePost.viewerFavorited }" @click="toggleFavorite">
+          <Bookmark :size="16" /> {{ formatCount(livePost.favoritesCount) }}
+        </button>
+      </div>
+    </footer>
   </article>
 </template>

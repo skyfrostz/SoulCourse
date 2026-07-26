@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, RefreshCw } from '@lucide/vue'
+import { ChevronDown, MapPin, RefreshCw, Users } from '@lucide/vue'
 import PostCard from './PostCard.vue'
 import { useForumStore } from '../stores/forum'
 import type { Post } from '../types/forum'
@@ -14,6 +14,15 @@ const forumStore = useForumStore()
 
 <template>
   <section class="feed-panel">
+    <header class="feed-intro">
+      <div>
+        <span class="feed-kicker"><MapPin :size="14" /> 广东 · 新高考</span>
+        <h1>选科讨论广场</h1>
+        <p>学生、家长和老师正在分享真实选择与复盘。</p>
+      </div>
+      <span class="feed-count"><Users :size="16" /> 本页 {{ posts.length }} 篇讨论</span>
+    </header>
+
     <div class="feed-toolbar">
       <div class="feed-tabs">
         <button :class="{ active: forumStore.filter.sort === 'recommended' }" @click="forumStore.setSort('recommended')">

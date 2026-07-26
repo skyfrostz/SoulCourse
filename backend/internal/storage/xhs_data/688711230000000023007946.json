@@ -1,0 +1,105 @@
+{
+  "province": "guangdong",
+  "feed_id": "688711230000000023007946",
+  "xsec_token": "ABQ6p2dVrOAJd6WyymMSSJSsGddjIlwfwVkDnWBou6xeE=",
+  "note": {
+    "xsecToken": "ABQ6p2dVrOAJd6WyymMSSJSsGddjIlwfwVkDnWBou6xeE=",
+    "type": "normal",
+    "desc": "#当代读书人[话题]# 今年广东高考本科录取已经接近尾声，大湾区大学作为新大学分数高达522，三所专升本院校之间的差距也不小。\n\t\n目前大学排名情形如何？升学君根据今年的投档情况简单概括~\n#广东高考[话题]# #高考志愿填报[话题]# #梦想的大学[话题]# #大学专业怎么选[话题]# #大学分数线[话题]# #我的高质量大学[话题]# #大湾区大学[话题]# #大学排名[话题]#",
+    "user": {
+      "avatar": "https://sns-avatar-qc.xhscdn.com/avatar/1040g2jo31jn6h8ru346g5p482nhk80aj1enqeu0",
+      "xsecToken": "ABYYzp0sbAjBGOkrXIrXxW0UThkPUtj7GTUrVYrfXSlv4=",
+      "userId": "648815e30000000011000153",
+      "nickname": "广东高考升学指导"
+    },
+    "interactInfo": {
+      "commentCount": "41",
+      "shareCount": "209",
+      "collected": false,
+      "followed": false,
+      "relation": "none",
+      "niceCount": "",
+      "liked": false,
+      "likedCount": "1305",
+      "collectedCount": "569"
+    },
+    "atUserList": [],
+    "time": 1753682211000,
+    "shareInfo": {
+      "unShare": false
+    },
+    "noteId": "688711230000000023007946",
+    "title": "一张图看懂广东大学排名❗️",
+    "imageList": [
+      {
+        "infoList": [
+          {
+            "imageScene": "WB_PRV",
+            "url": "http://sns-webpic-qc.xhscdn.com/202607262348/c4511a830367e713fc2cdae2462c2a21/1040g00831pe2bamijc6g5p482nhk80ajnndv3j8!nd_prv_wlteh_webp_3"
+          },
+          {
+            "imageScene": "WB_DFT",
+            "url": "http://sns-webpic-qc.xhscdn.com/202607262348/a6e3b3883356009eefb2d20106f895c8/1040g00831pe2bamijc6g5p482nhk80ajnndv3j8!nd_dft_wlteh_webp_3"
+          }
+        ],
+        "urlPre": "http://sns-webpic-qc.xhscdn.com/202607262348/c4511a830367e713fc2cdae2462c2a21/1040g00831pe2bamijc6g5p482nhk80ajnndv3j8!nd_prv_wlteh_webp_3",
+        "urlDefault": "http://sns-webpic-qc.xhscdn.com/202607262348/a6e3b3883356009eefb2d20106f895c8/1040g00831pe2bamijc6g5p482nhk80ajnndv3j8!nd_dft_wlteh_webp_3",
+        "stream": {},
+        "livePhoto": false,
+        "fileId": "1040g00831pe2bamijc6g5p482nhk80ajnndv3j8",
+        "height": 1656,
+        "width": 1242,
+        "url": "",
+        "traceId": ""
+      }
+    ],
+    "tagList": [
+      {
+        "id": "623a6841000000000100172b",
+        "name": "当代读书人",
+        "type": "topic"
+      },
+      {
+        "id": "5cde877e000000000603cd0b",
+        "name": "广东高考",
+        "type": "topic"
+      },
+      {
+        "id": "62be67180000000001007b34",
+        "name": "高考志愿填报",
+        "type": "topic"
+      },
+      {
+        "id": "5d3c0a840000000018035d2c",
+        "name": "梦想的大学",
+        "type": "topic"
+      },
+      {
+        "type": "topic",
+        "id": "5d1b2b44000000000e03bbfb",
+        "name": "大学专业怎么选"
+      },
+      {
+        "type": "topic",
+        "id": "5d2dd41f000000000d0241e4",
+        "name": "大学分数线"
+      },
+      {
+        "id": "612cd112000000000100937e",
+        "name": "我的高质量大学",
+        "type": "topic"
+      },
+      {
+        "id": "622969ab00000000010036a5",
+        "name": "大湾区大学",
+        "type": "topic"
+      },
+      {
+        "type": "topic",
+        "id": "5c7646db000000000f00f699",
+        "name": "大学排名"
+      }
+    ],
+    "lastUpdateTime": 1764317430000
+  }
+}

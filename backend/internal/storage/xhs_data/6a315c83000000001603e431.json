@@ -1,0 +1,100 @@
+{
+  "province": "guangdong",
+  "feed_id": "6a315c83000000001603e431",
+  "xsec_token": "ABkGGfo068zLzJhoeMZKa6ffYZ2qrNLdB0Bv8IX-PmlK4=",
+  "note": {
+    "xsecToken": "ABkGGfo068zLzJhoeMZKa6ffYZ2qrNLdB0Bv8IX-PmlK4=",
+    "type": "normal",
+    "title": "广东选生物政治考生务必关注这几个专业！！",
+    "desc": "一、物生政（物理+生物+政治）\n可选专业[可R]：计算机、大数据、工程造价、建筑、新能源、机电、园林工程等工科专业，就业赛道覆盖面广\n不可报[禁R]：临床医学、口腔医学（要求选化学）、历史师范、文物考古类专业\n二、史生政（历史+生物+政治）\n可选专业[有R]：汉语言、历史教育、考古、文物修复，适合意向文史教师的考生。\n不可报[禁R]：所有限物理工科，计算机、建筑、机电、大数据、软件工程等都不能填报\n三、两组共同可报专业[蹲R]（本科、专科院校均有开设）\n1. 康养医护：护理、助产、康复、中医康养、健康管理\n​2. 政法方向：法学、治安管理、思政、社会工作，适合意向基层公共服务、政法岗位考生\n​3. 师范教育：学前教育、小学教育、心理学、商务英语\n​4. 财经商贸：会计、电商、金融、人力、旅游酒店管理\n​5. 传媒农林：新媒体、广告、畜牧兽医、风景园林\n四、两组合共同的优势[向右R]\n1. 可选赛道丰富，护理、政法、幼教、财会类专业均能填报，体制内岗位选择多；\n​2. 本科、专科均有对应专业，后期专插本对口选择充足。#2026高考季[话题]# #致高考[话题]# #高考[话题]# #高考志愿[话题]# #广东高考[话题]# #大学[话题]# #高考报志愿选专业[话题]# #广东专科志愿[话题]#",
+    "user": {
+      "avatar": "https://sns-avatar-qc.xhscdn.com/avatar/1040g2jo3208465uhmedg5pitkng2ufq6lo8oak8",
+      "xsecToken": "ABbYlrWqpXsOgpoZ7tVGUcijkHrgePymP3i4W65eYS6Rk=",
+      "userId": "68f4f99a000000003202b250",
+      "nickname": "小达人"
+    },
+    "tagList": [
+      {
+        "id": "682a7694000000001303d7c0",
+        "name": "2026高考季",
+        "type": "topic"
+      },
+      {
+        "id": "5eccdf15000000000101c280",
+        "name": "致高考",
+        "type": "topic"
+      },
+      {
+        "name": "高考",
+        "type": "topic",
+        "id": "59327757cd30d85f05794970"
+      },
+      {
+        "id": "666983fa0000000003019d15",
+        "name": "高考志愿",
+        "type": "topic"
+      },
+      {
+        "type": "topic",
+        "id": "5cde877e000000000603cd0b",
+        "name": "广东高考"
+      },
+      {
+        "id": "5c468bf1000000000f0359ac",
+        "name": "大学",
+        "type": "topic"
+      },
+      {
+        "id": "5d1409b3000000000d038cf9",
+        "name": "高考报志愿选专业",
+        "type": "topic"
+      },
+      {
+        "id": "622ace41000000000101f25e",
+        "name": "广东专科志愿",
+        "type": "topic"
+      }
+    ],
+    "lastUpdateTime": 1781619843000,
+    "shareInfo": {
+      "unShare": false
+    },
+    "noteId": "6a315c83000000001603e431",
+    "interactInfo": {
+      "collected": false,
+      "commentCount": "1",
+      "shareCount": "2",
+      "niceCount": "",
+      "collectedCount": "6",
+      "followed": false,
+      "relation": "none",
+      "liked": false,
+      "likedCount": "5"
+    },
+    "imageList": [
+      {
+        "fileId": "1040g008321fro2rv7e5g5q7kv6dclcig3mrie4o",
+        "height": 1600,
+        "traceId": "",
+        "infoList": [
+          {
+            "imageScene": "WB_PRV",
+            "url": "http://sns-webpic-qc.xhscdn.com/202607262357/ce724afb5b9ebbdf449323503e6e3e72/1040g008321fro2rv7e5g5q7kv6dclcig3mrie4o!nd_prv_wlteh_webp_3"
+          },
+          {
+            "imageScene": "WB_DFT",
+            "url": "http://sns-webpic-qc.xhscdn.com/202607262357/7cc4952d4519fdb30f13f2ed9319ce17/1040g008321fro2rv7e5g5q7kv6dclcig3mrie4o!nd_dft_wlteh_webp_3"
+          }
+        ],
+        "urlPre": "http://sns-webpic-qc.xhscdn.com/202607262357/ce724afb5b9ebbdf449323503e6e3e72/1040g008321fro2rv7e5g5q7kv6dclcig3mrie4o!nd_prv_wlteh_webp_3",
+        "stream": {},
+        "width": 1200,
+        "url": "",
+        "urlDefault": "http://sns-webpic-qc.xhscdn.com/202607262357/7cc4952d4519fdb30f13f2ed9319ce17/1040g008321fro2rv7e5g5q7kv6dclcig3mrie4o!nd_dft_wlteh_webp_3",
+        "livePhoto": false
+      }
+    ],
+    "atUserList": [],
+    "time": 1781619843000
+  }
+}

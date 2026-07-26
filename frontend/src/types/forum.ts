@@ -24,6 +24,11 @@ export interface Post {
   viewerLiked: boolean
   viewerFavorited: boolean
   viewerFollowing: boolean
+  sourcePlatform?: string
+  sourceUrl?: string
+  sourceTitle?: string
+  sourceAuthor?: string
+  sourceAvatarUrl?: string
   createdAt: string
   updatedAt: string
 }

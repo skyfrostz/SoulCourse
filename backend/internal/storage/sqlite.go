@@ -191,10 +191,11 @@ func initSQLiteSchema(db *sql.DB) error {
 			post_id INTEGER NOT NULL UNIQUE,
 			source_platform TEXT NOT NULL,
 			source_url TEXT NOT NULL UNIQUE,
-			source_note_id TEXT NOT NULL DEFAULT '',
-			source_title TEXT NOT NULL DEFAULT '',
-			source_author TEXT NOT NULL DEFAULT '',
-			source_likes INTEGER NOT NULL DEFAULT 0,
+			 source_note_id TEXT NOT NULL DEFAULT '',
+			 source_title TEXT NOT NULL DEFAULT '',
+			 source_author TEXT NOT NULL DEFAULT '',
+			 source_avatar_url TEXT NOT NULL DEFAULT '',
+			 source_likes INTEGER NOT NULL DEFAULT 0,
 			source_comments INTEGER NOT NULL DEFAULT 0,
 			source_favorites INTEGER NOT NULL DEFAULT 0,
 			source_format TEXT NOT NULL DEFAULT '图文',
@@ -223,6 +224,9 @@ func initSQLiteSchema(db *sql.DB) error {
 		if _, err := db.Exec(statement); err != nil {
 			return err
 		}
+	}
+	if err := ensureSQLiteColumn(db, "content_sources", "source_avatar_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
 	}
 
 	var count int
@@ -284,7 +288,34 @@ func initSQLiteSchema(db *sql.DB) error {
 			}
 		}
 	}
-	return seedGuangdongPhaseOne(db)
+	if err := seedGuangdongPhaseOne(db); err != nil {
+		return err
+	}
+	return seedXHSImports(db)
+}
+
+func ensureSQLiteColumn(db *sql.DB, table string, column string, definition string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition)
+	return err
 }
 
 func sqliteNow() string {

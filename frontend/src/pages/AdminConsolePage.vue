@@ -944,6 +944,14 @@ function toErrorMessage(error: unknown) {
             <option v-for="option in ownerOptionsForDraft" :key="option" :value="option">{{ option }}</option>
           </select>
         </label>
+        <section v-if="currentRecord?.payload.sourcePlatform" class="source-info-card">
+          <img v-if="currentRecord.payload.sourceAvatarUrl" :src="resolveMediaUrl(settings.apiBase, String(currentRecord.payload.sourceAvatarUrl))" :alt="String(currentRecord.payload.sourceAuthor || currentRecord.owner)" />
+          <div>
+            <small>外部内容来源 · 非站内账号</small>
+            <strong>{{ currentRecord.payload.sourceAuthor || currentRecord.owner }}</strong>
+            <a :href="String(currentRecord.payload.sourceUrl || '')" target="_blank" rel="noreferrer">查看小红书原文</a>
+          </div>
+        </section>
         <label>
           标签
           <select v-model="draftRecord.tags" class="multi-select" multiple :size="Math.min(Math.max(tagOptionsForDraft.length, 4), 7)">
@@ -2184,6 +2192,39 @@ td small {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.source-info-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #ffd5da;
+  border-radius: 7px;
+  background: #fff7f8;
+}
+
+.source-info-card img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.source-info-card div {
+  display: grid;
+  gap: 3px;
+}
+
+.source-info-card small {
+  color: #8b5b62;
+  font-size: 11px;
+}
+
+.source-info-card a {
+  color: #c5283d;
+  font-size: 12px;
 }
 
 @media (max-width: 1080px) {

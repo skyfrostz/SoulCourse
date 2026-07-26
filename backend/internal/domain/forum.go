@@ -45,6 +45,11 @@ type Post struct {
 	ViewerLiked     bool         `json:"viewerLiked"`
 	ViewerFavorited bool         `json:"viewerFavorited"`
 	ViewerFollowing bool         `json:"viewerFollowing"`
+	SourcePlatform  string       `json:"sourcePlatform,omitempty"`
+	SourceURL       string       `json:"sourceUrl,omitempty"`
+	SourceTitle     string       `json:"sourceTitle,omitempty"`
+	SourceAuthor    string       `json:"sourceAuthor,omitempty"`
+	SourceAvatarURL string       `json:"sourceAvatarUrl,omitempty"`
 	CreatedAt       time.Time    `json:"createdAt"`
 	UpdatedAt       time.Time    `json:"updatedAt"`
 }

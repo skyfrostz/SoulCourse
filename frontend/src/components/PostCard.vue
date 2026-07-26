@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
-import { Bookmark, MessageSquare, ThumbsUp } from '@lucide/vue'
+import { Bookmark, ExternalLink, MessageSquare, ThumbsUp } from '@lucide/vue'
 import { computed } from 'vue'
 import { togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels, trackLabels } from '../lib/labels'
@@ -54,6 +54,11 @@ function toggleFavorite() {
         <img :src="appAssetUrl(livePost.imageUrls[0])" :alt="livePost.title" />
         <span v-if="livePost.imageUrls.length > 1">{{ livePost.imageUrls.length }} 图</span>
     </RouterLink>
+    <RouterLink v-else class="post-title-cover" :class="`cover-${livePost.track}`" :to="`/posts/${livePost.id}`">
+      <span>{{ trackLabels[livePost.track] }}</span>
+      <strong>{{ livePost.title }}</strong>
+      <small>{{ livePost.electives.map((item) => subjectLabels[item]).join(' · ') }}</small>
+    </RouterLink>
 
     <div class="post-card-content">
       <div class="post-meta-line">
@@ -71,7 +76,15 @@ function toggleFavorite() {
       </RouterLink>
 
       <header class="post-card-head">
-        <RouterLink class="author-profile-link" :to="`/users/${encodeURIComponent(livePost.authorName)}`">
+        <a v-if="livePost.sourcePlatform" class="author-profile-link source-author-link" :href="livePost.sourceUrl" target="_blank" rel="noreferrer">
+          <img v-if="livePost.sourceAvatarUrl" class="small-avatar source-avatar" :src="appAssetUrl(livePost.sourceAvatarUrl)" :alt="livePost.sourceAuthor || livePost.authorName" />
+          <span v-else class="small-avatar">{{ (livePost.sourceAuthor || livePost.authorName).slice(0, 1) }}</span>
+          <span>
+            <strong>{{ livePost.sourceAuthor || livePost.authorName }} <em class="source-badge">小红书来源</em></strong>
+            <small>原作者 · 查看原文 <ExternalLink :size="12" /></small>
+          </span>
+        </a>
+        <RouterLink v-else class="author-profile-link" :to="`/users/${encodeURIComponent(livePost.authorName)}`">
           <span class="small-avatar">{{ livePost.authorName.slice(0, 1) }}</span>
           <span>
             <strong>

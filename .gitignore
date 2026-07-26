@@ -25,6 +25,8 @@ backend/coverage.out
 backend/uploads/
 
 outputs/
+output/
+.playwright-cli/
 backend/data/*
 backend/data/
 /release

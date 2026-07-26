@@ -1,0 +1,100 @@
+{
+  "province": "zhejiang",
+  "feed_id": "6a39480e00000000060340b3",
+  "xsec_token": "ABzNppPJtcz3BeY-_iIoprqdLbvzomsLMfbsGTAaQ_pKM=",
+  "note": {
+    "xsecToken": "ABzNppPJtcz3BeY-_iIoprqdLbvzomsLMfbsGTAaQ_pKM=",
+    "lastUpdateTime": 1782138894000,
+    "noteId": "6a39480e00000000060340b3",
+    "user": {
+      "userId": "5e7e87de000000000100905d",
+      "nickname": "丁丁冻椰奶🥕",
+      "avatar": "https://sns-avatar-qc.xhscdn.com/avatar/6796e789310bb734a99cee08.jpg",
+      "xsecToken": "AB0mahdeX9Z4RyfQPj2e96usjuTgitDTemN4quzdsvjec="
+    },
+    "interactInfo": {
+      "likedCount": "226",
+      "collected": false,
+      "collectedCount": "131",
+      "commentCount": "74",
+      "followed": false,
+      "relation": "none",
+      "niceCount": "",
+      "liked": false,
+      "shareCount": "142"
+    },
+    "imageList": [
+      {
+        "fileId": "notes_pre_post/1040g3k8321nk3d1ano705njugvf0942tnr4aq5g",
+        "width": 1206,
+        "url": "",
+        "urlDefault": "http://sns-webpic-qc.xhscdn.com/202607262346/43be5c9155217b94628f97bfd5090135/notes_pre_post/1040g3k8321nk3d1ano705njugvf0942tnr4aq5g!nd_dft_wlteh_webp_3",
+        "height": 1554,
+        "traceId": "",
+        "infoList": [
+          {
+            "imageScene": "WB_PRV",
+            "url": "http://sns-webpic-qc.xhscdn.com/202607262346/9f11f091d4af78d17ff5cade28503fbd/notes_pre_post/1040g3k8321nk3d1ano705njugvf0942tnr4aq5g!nd_prv_wlteh_webp_3"
+          },
+          {
+            "imageScene": "WB_DFT",
+            "url": "http://sns-webpic-qc.xhscdn.com/202607262346/43be5c9155217b94628f97bfd5090135/notes_pre_post/1040g3k8321nk3d1ano705njugvf0942tnr4aq5g!nd_dft_wlteh_webp_3"
+          }
+        ],
+        "urlPre": "http://sns-webpic-qc.xhscdn.com/202607262346/9f11f091d4af78d17ff5cade28503fbd/notes_pre_post/1040g3k8321nk3d1ano705njugvf0942tnr4aq5g!nd_prv_wlteh_webp_3",
+        "stream": {},
+        "livePhoto": false
+      }
+    ],
+    "tagList": [
+      {
+        "id": "5bfd5f381f07a300013c15a0",
+        "name": "浙江高考",
+        "type": "topic"
+      },
+      {
+        "id": "666983fa0000000003019d15",
+        "name": "高考志愿",
+        "type": "topic"
+      },
+      {
+        "id": "5c8212d6000000000f001aa1",
+        "name": "填报志愿",
+        "type": "topic"
+      },
+      {
+        "id": "5d1409b3000000000d038cf9",
+        "name": "高考报志愿选专业",
+        "type": "topic"
+      },
+      {
+        "id": "5f32acc90000000001008605",
+        "name": "提前批",
+        "type": "topic"
+      },
+      {
+        "id": "62dd161600000000010014cd",
+        "name": "滑档和退档",
+        "type": "topic"
+      },
+      {
+        "id": "5d10b7ff000000000d020ca3",
+        "name": "选专业",
+        "type": "topic"
+      },
+      {
+        "id": "60d51dc20000000001000b45",
+        "name": "高考报考指南",
+        "type": "topic"
+      }
+    ],
+    "shareInfo": {
+      "unShare": false
+    },
+    "type": "normal",
+    "title": "别再用其他省那套逻辑来填浙江志愿了！",
+    "desc": "浙江的80个志愿真的不一样！\n看到网上有很多浙江考生/家长问，填志愿会不会滑档/退档？分数比别人高但是志愿填在后面会不会反而是别人录上了？\n我想说，别再用其他省那套逻辑来填浙江志愿了！浙江高考规则真的不一样👇首先让我来说清楚浙江的填报底层逻辑～\n\t\n✅ 浙江实行“专业平行志愿”\n普通类考生可填报不超过80个志愿。1个志愿 = 1所院校的1个专业。投档直接到具体学校的具体专业，不存在“先投档到学校再分专业”这回事。\n✅ 核心规则：分数优先 + 遵循志愿 + 一轮投档\n🧡分数优先：谁分高谁先投档。甲601分、乙600分，哪怕甲把某志愿填在第20个、乙填在第1个，也是甲先投档。\n🧡遵循志愿：轮到你的分数时，系统从第1个到第80个依次检索，碰到第一个符合条件的志愿就直接投档，投完后面全部作废。所以排序超级重要！ 最想去的往前放。\n🧡一轮投档：同一批次只有一次投档机会。投出去就结束了，不存在“这个不行再看下一个”。\n\t\n而浙江高考的最大亮点就是！没有专业调剂！\n每个志愿都是“大学+专业”独立个体，投进去就直接录到这个专业。再也不用担心被调剂到不喜欢的专业了！\n\t\n⚠️ 关于“不会滑档”要说清楚\n80个志愿填满+合理“冲稳保”梯度，基本不会滑档。但“一轮投档”意味着一旦被投档后因体检不符、单科成绩不够、选考科目不匹配等原因被退档，本批次就再没机会了。只能等征集志愿或下一段。\n比如，宁波大学阳明创新班文科类要求语文/英语120➕，那么如果你考了115，却填了这个专业，并且被投档，那么将会面临退档，其他除了体检不符合要求之外，通常不会被退档。所以务必仔细阅读招生要求！\n\t\n💡 填报建议\n🩵核心看位次，不是看分数\n🩵冲稳保搭配：前25个左右“冲一冲”，中间40个左右“稳一稳”，最后15个左右“保一保”\n🩵尽量填满80个，保底志愿一定要有\n🩵首轮填报时间：6月29日-30日\n🩵唯一填报网站：浙江省教育考试院（www.zjzs.net）\n浙江的规则其实对考生真的很友好，分高就是王道，想读啥专业就填啥专业，没有调剂焦虑！💪\n\t\n#浙江高考[话题]# #高考志愿[话题]# #填报志愿[话题]# #高考报志愿选专业[话题]# #提前批[话题]# #滑档和退档[话题]# #选专业[话题]# #高考报考指南[话题]#",
+    "atUserList": [],
+    "time": 1782138894000
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "province": "guangxi",
+  "feed_id": "6a421cfc00000000200394b4",
+  "xsec_token": "AB1iZ6UFKZek_e2PmhIbs0unJ3wRW0tnOD3I_ANEknu7s=",
+  "note": {
+    "xsecToken": "AB1iZ6UFKZek_e2PmhIbs0unJ3wRW0tnOD3I_ANEknu7s=",
+    "imageList": [
+      {
+        "height": 4091,
+        "width": 1375,
+        "url": "",
+        "traceId": "",
+        "urlPre": "http://sns-webpic-qc.xhscdn.com/202607262345/78e90b33b1e765ee9bc33533d188eb6d/notes_pre_post/1040g3k0322087nt67e004a00lfd56enkqnrp35o!nd_prv_wlteh_webp_3",
+        "urlDefault": "http://sns-webpic-qc.xhscdn.com/202607262345/18fefb98ce855ce17fd418c300fffe69/notes_pre_post/1040g3k0322087nt67e004a00lfd56enkqnrp35o!nd_dft_wlteh_webp_3",
+        "fileId": "notes_pre_post/1040g3k0322087nt67e004a00lfd56enkqnrp35o",
+        "infoList": [
+          {
+            "imageScene": "WB_PRV",
+            "url": "http://sns-webpic-qc.xhscdn.com/202607262345/78e90b33b1e765ee9bc33533d188eb6d/notes_pre_post/1040g3k0322087nt67e004a00lfd56enkqnrp35o!nd_prv_wlteh_webp_3"
+          },
+          {
+            "url": "http://sns-webpic-qc.xhscdn.com/202607262345/18fefb98ce855ce17fd418c300fffe69/notes_pre_post/1040g3k0322087nt67e004a00lfd56enkqnrp35o!nd_dft_wlteh_webp_3",
+            "imageScene": "WB_DFT"
+          }
+        ],
+        "stream": {},
+        "livePhoto": false
+      }
+    ],
+    "time": 1782717692000,
+    "lastUpdateTime": 1783834775000,
+    "noteId": "6a421cfc00000000200394b4",
+    "type": "normal",
+    "desc": "根据最新2026广西省一分一段表，特别推出2026广西省物理类大学录取分数线预测，欢迎传阅\n#高考录取[话题]# #高考志愿填报[话题]# #填报志愿[话题]# #一分一段表[话题]##广西高考[话题]#  #高考分数线[话题]# #录取结果[话题]# #投档线[话题]# #分数线[话题]##广西高考录取[话题]#",
+    "interactInfo": {
+      "liked": false,
+      "collected": false,
+      "collectedCount": "44",
+      "commentCount": "57",
+      "followed": false,
+      "relation": "none",
+      "niceCount": "",
+      "likedCount": "181",
+      "shareCount": "106"
+    },
+    "tagList": [
+      {
+        "id": "5d24b352000000000f038e97",
+        "name": "高考录取",
+        "type": "topic"
+      },
+      {
+        "type": "topic",
+        "id": "62be67180000000001007b34",
+        "name": "高考志愿填报"
+      },
+      {
+        "id": "5c8212d6000000000f001aa1",
+        "name": "填报志愿",
+        "type": "topic"
+      },
+      {
+        "type": "topic",
+        "id": "61488436000000000101c8a1",
+        "name": "一分一段表"
+      },
+      {
+        "name": "广西高考",
+        "type": "topic",
+        "id": "5d103e82000000000e02579d"
+      },
+      {
+        "name": "高考分数线",
+        "type": "topic",
+        "id": "5d0e3f8d000000000d02c732"
+      },
+      {
+        "name": "录取结果",
+        "type": "topic",
+        "id": "5d2ca3ca000000000f0299cb"
+      },
+      {
+        "type": "topic",
+        "id": "5f38a454000000000101f9a3",
+        "name": "投档线"
+      },
+      {
+        "id": "5ce728c8000000000f01c4b4",
+        "name": "分数线",
+        "type": "topic"
+      },
+      {
+        "type": "topic",
+        "id": "6113cc29000000000100820e",
+        "name": "广西高考录取"
+      }
+    ],
+    "atUserList": [],
+    "ipLocation": "上海",
+    "shareInfo": {
+      "unShare": false
+    },
+    "title": "独家！2026年广西省大学录取投档线出炉",
+    "user": {
+      "userId": "5a1fda5311be10063bfd3af4",
+      "nickname": "商业与数据",
+      "avatar": "https://sns-avatar-qc.xhscdn.com/avatar/63a9a8db5ffba8c5b8094339.jpg",
+      "xsecToken": "ABFkPiUpLrL2b9LL16EBY9I3O6AZcOUeE2X3CVJJbcG9U="
+    }
+  }
+}

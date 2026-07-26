@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Bookmark, ChevronLeft, ChevronRight, MessageSquare, RotateCcw, Send, ThumbsUp, UserPlus, X, ZoomIn, ZoomOut } from '@lucide/vue'
+import { Bookmark, ChevronLeft, ChevronRight, ExternalLink, MessageSquare, RotateCcw, Send, ThumbsUp, UserPlus, X, ZoomIn, ZoomOut } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, createComment, fetchPostDetail, toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
@@ -33,10 +33,7 @@ const displayedCommentCount = computed(() => comments.value.length)
 const lightboxUrl = computed(() => activeImageIndex.value === null ? '' : post.value?.imageUrls?.[activeImageIndex.value] ?? '')
 const dataEvidence = computed(() => {
   if (post.value?.category !== 'data') return null
-  return (
-    sourcedDataPosts.find((item) => post.value?.title.includes(item.title.slice(0, 8))) ??
-    sourcedDataPosts[0]
-  )
+  return sourcedDataPosts.find((item) => item.title === post.value?.title) ?? null
 })
 
 const likeMutation = useMutation({
@@ -90,7 +87,7 @@ function toggleFavorite() {
 }
 
 function toggleFollow() {
-  if (!post.value || !forumStore.requireAuth()) return
+  if (!post.value || post.value.sourcePlatform || !forumStore.requireAuth()) return
   followMutation.mutate(undefined, { onError: () => { commentError.value = '关注失败，请稍后重试。' } })
 }
 
@@ -176,19 +173,30 @@ onBeforeUnmount(() => {
         <div class="breadcrumb">首页 / 帖子详情 / {{ categoryLabels[post.category] }}</div>
         <h1>{{ post.title }}</h1>
         <div class="article-meta">
-          <RouterLink class="avatar medium user-link-avatar" :to="`/users/${encodeURIComponent(post.authorName)}`">
+          <a v-if="post.sourcePlatform" class="avatar medium source-detail-avatar" :href="post.sourceUrl" target="_blank" rel="noreferrer">
+            <img v-if="post.sourceAvatarUrl" :src="appAssetUrl(post.sourceAvatarUrl)" :alt="post.sourceAuthor || post.authorName" />
+            <template v-else>{{ (post.sourceAuthor || post.authorName).slice(0, 1) }}</template>
+          </a>
+          <RouterLink v-else class="avatar medium user-link-avatar" :to="`/users/${encodeURIComponent(post.authorName)}`">
             {{ post.authorName.slice(0, 1) }}
           </RouterLink>
           <span>
-            <RouterLink class="author-name-link" :to="`/users/${encodeURIComponent(post.authorName)}`">
+            <a v-if="post.sourcePlatform" class="author-name-link" :href="post.sourceUrl" target="_blank" rel="noreferrer">
+              <strong>{{ post.sourceAuthor || post.authorName }} <em class="source-badge">小红书来源</em></strong>
+            </a>
+            <RouterLink v-else class="author-name-link" :to="`/users/${encodeURIComponent(post.authorName)}`">
               <strong>
                 {{ post.authorName }}
                 <em v-if="['teacher', 'counselor'].includes(post.authorRole)" class="verified-badge">认证</em>
               </strong>
             </RouterLink>
-            <small>{{ post.grade }} · {{ roleLabels[post.authorRole] }} · {{ post.province }}</small>
+            <small v-if="post.sourcePlatform">原作者 · {{ post.province }} · 来源内容</small>
+            <small v-else>{{ post.grade }} · {{ roleLabels[post.authorRole] }} · {{ post.province }}</small>
           </span>
-          <button class="follow-button" :class="{ active: post.viewerFollowing }" @click="toggleFollow">
+          <a v-if="post.sourcePlatform" class="follow-button source-original-link" :href="post.sourceUrl" target="_blank" rel="noreferrer">
+            <ExternalLink :size="15" /> 查看原文
+          </a>
+          <button v-else class="follow-button" :class="{ active: post.viewerFollowing }" @click="toggleFollow">
             <UserPlus :size="15" /> {{ post.viewerFollowing ? '已关注' : '关注作者' }}
           </button>
         </div>
@@ -210,6 +218,11 @@ onBeforeUnmount(() => {
               <img :src="appAssetUrl(url)" :alt="`${post.title} 第 ${index + 2} 张图片`" />
             </button>
           </div>
+        </div>
+        <div v-else class="article-title-cover" :class="`cover-${post.track}`">
+          <span>{{ trackLabels[post.track] }}</span>
+          <strong>{{ post.title }}</strong>
+          <small>{{ post.electives.map((item) => subjectLabels[item]).join(' · ') }}</small>
         </div>
 
         <section v-if="dataEvidence" class="post-data-evidence">

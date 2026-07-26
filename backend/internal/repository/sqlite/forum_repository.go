@@ -50,29 +50,32 @@ func (r *ForumRepository) ListPosts(ctx context.Context, viewerID *int64, filter
 		post := &posts[i]
 		post.ViewerLiked = liked[post.ID]
 		post.ViewerFavorited = favorited[post.ID]
-		post.ViewerFollowing = followed[post.AuthorName]
+		post.ViewerFollowing = post.SourcePlatform == "" && followed[post.AuthorName]
 	}
 	return posts, nil
 }
 
 func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 	query := `
-		SELECT id, user_id, author_name, author_role, title, content, image_urls, tags, track, electives,
-		       category, grade, province, likes_count, comments_count, favorites_count, created_at, updated_at
-		FROM posts
-		WHERE deleted_at IS NULL`
+		SELECT p.id, p.user_id, p.author_name, p.author_role, p.title, p.content, p.image_urls, p.tags, p.track, p.electives,
+		       p.category, p.grade, p.province, p.likes_count, p.comments_count, p.favorites_count, p.created_at, p.updated_at,
+		       COALESCE(cs.source_platform, ''), COALESCE(cs.source_url, ''), COALESCE(cs.source_title, ''),
+		       COALESCE(cs.source_author, ''), COALESCE(cs.source_avatar_url, '')
+		FROM posts p
+		LEFT JOIN content_sources cs ON cs.post_id = p.id
+		WHERE p.deleted_at IS NULL`
 	args := make([]any, 0, 8)
 
 	if filter.Track != "" {
-		query += " AND track = ?"
+		query += " AND p.track = ?"
 		args = append(args, string(filter.Track))
 	}
 	if filter.Category != "" {
-		query += " AND category = ?"
+		query += " AND p.category = ?"
 		args = append(args, string(filter.Category))
 	}
 	if province := strings.TrimSpace(filter.Province); province != "" {
-		query += " AND province = ?"
+		query += " AND p.province = ?"
 		args = append(args, province)
 	}
 
@@ -85,26 +88,26 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 		if subject == "" {
 			continue
 		}
-		query += ` AND electives LIKE ? ESCAPE '\'`
+		query += ` AND p.electives LIKE ? ESCAPE '\'`
 		args = append(args, `%"`+escapeLike(string(subject))+`"%`)
 	}
 
 	if keyword := strings.ToLower(strings.TrimSpace(filter.Keyword)); keyword != "" {
-		query += ` AND LOWER(title || ' ' || content || ' ' || author_name || ' ' || province || ' ' || grade || ' ' || tags) LIKE ? ESCAPE '\'`
+		query += ` AND LOWER(p.title || ' ' || p.content || ' ' || p.author_name || ' ' || p.province || ' ' || p.grade || ' ' || p.tags) LIKE ? ESCAPE '\'`
 		args = append(args, "%"+escapeLike(keyword)+"%")
 	}
 
 	switch filter.Sort {
 	case domain.SortLatest:
-		query += " ORDER BY created_at DESC, id DESC"
+		query += " ORDER BY p.created_at DESC, p.id DESC"
 	case domain.SortHot:
-		query += " ORDER BY likes_count + comments_count * 4 DESC, updated_at DESC, id DESC"
+		query += " ORDER BY p.likes_count + p.comments_count * 4 DESC, p.updated_at DESC, p.id DESC"
 	default:
 		query += ` ORDER BY
-			(MIN(likes_count, 300) * 0.8 + MIN(comments_count, 80) * 4 + MIN(favorites_count, 120) * 3
-			 + CASE WHEN author_role IN ('teacher', 'counselor') THEN 45 ELSE 0 END
-			 + CASE WHEN likes_count < 150 THEN 65 ELSE 0 END) DESC,
-			created_at DESC, id DESC`
+			(MIN(p.likes_count, 300) * 0.8 + MIN(p.comments_count, 80) * 4 + MIN(p.favorites_count, 120) * 3
+			 + CASE WHEN p.author_role IN ('teacher', 'counselor') THEN 45 ELSE 0 END
+			 + CASE WHEN p.likes_count < 150 THEN 65 ELSE 0 END) DESC,
+			p.created_at DESC, p.id DESC`
 	}
 
 	query += " LIMIT ? OFFSET ?"
@@ -129,7 +132,7 @@ func (r *ForumRepository) GetPost(ctx context.Context, viewerID *int64, id int64
 	}
 	post.ViewerLiked = liked[post.ID]
 	post.ViewerFavorited = favorited[post.ID]
-	post.ViewerFollowing = followed[post.AuthorName]
+	post.ViewerFollowing = post.SourcePlatform == "" && followed[post.AuthorName]
 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, post_id, user_id, author, role, content, created_at
@@ -311,9 +314,12 @@ func (r *ForumRepository) GetTopic(ctx context.Context, viewerID *int64, slug st
 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT p.id, p.user_id, p.author_name, p.author_role, p.title, p.content, p.image_urls, p.tags, p.track, p.electives,
-		       p.category, p.grade, p.province, p.likes_count, p.comments_count, p.favorites_count, p.created_at, p.updated_at
+		       p.category, p.grade, p.province, p.likes_count, p.comments_count, p.favorites_count, p.created_at, p.updated_at,
+		       COALESCE(cs.source_platform, ''), COALESCE(cs.source_url, ''), COALESCE(cs.source_title, ''),
+		       COALESCE(cs.source_author, ''), COALESCE(cs.source_avatar_url, '')
 		FROM posts p
 		JOIN topic_posts tp ON tp.post_id = p.id
+		LEFT JOIN content_sources cs ON cs.post_id = p.id
 		WHERE tp.topic_id = ? AND p.deleted_at IS NULL
 	`, topic.ID)
 	if err != nil {
@@ -334,7 +340,7 @@ func (r *ForumRepository) GetTopic(ctx context.Context, viewerID *int64, slug st
 		}
 		post.ViewerLiked = liked[post.ID]
 		post.ViewerFavorited = favorited[post.ID]
-		post.ViewerFollowing = followed[post.AuthorName]
+		post.ViewerFollowing = post.SourcePlatform == "" && followed[post.AuthorName]
 		posts = append(posts, post)
 	}
 	sortPosts(posts, domain.SortLatest)
@@ -442,8 +448,9 @@ func (r *ForumRepository) ToggleFollowAuthor(ctx context.Context, followerID int
 	var exists int
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT 1
-		FROM posts
-		WHERE author_name = ? AND deleted_at IS NULL
+		FROM posts p
+		WHERE p.author_name = ? AND p.deleted_at IS NULL
+		  AND NOT EXISTS (SELECT 1 FROM content_sources cs WHERE cs.post_id = p.id)
 		LIMIT 1
 	`, authorName).Scan(&exists); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -519,10 +526,13 @@ func (r *ForumRepository) togglePostRelation(ctx context.Context, table string, 
 
 func (r *ForumRepository) fetchPostByID(ctx context.Context, id int64) (domain.Post, error) {
 	return scanPost(r.db.QueryRowContext(ctx, `
-		SELECT id, user_id, author_name, author_role, title, content, image_urls, tags, track, electives,
-		       category, grade, province, likes_count, comments_count, favorites_count, created_at, updated_at
-		FROM posts
-		WHERE id = ? AND deleted_at IS NULL
+		SELECT p.id, p.user_id, p.author_name, p.author_role, p.title, p.content, p.image_urls, p.tags, p.track, p.electives,
+		       p.category, p.grade, p.province, p.likes_count, p.comments_count, p.favorites_count, p.created_at, p.updated_at,
+		       COALESCE(cs.source_platform, ''), COALESCE(cs.source_url, ''), COALESCE(cs.source_title, ''),
+		       COALESCE(cs.source_author, ''), COALESCE(cs.source_avatar_url, '')
+		FROM posts p
+		LEFT JOIN content_sources cs ON cs.post_id = p.id
+		WHERE p.id = ? AND p.deleted_at IS NULL
 	`, id))
 }
 
@@ -618,6 +628,11 @@ func scanPost(scanner postScanner) (domain.Post, error) {
 		&post.FavoritesCount,
 		&createdAt,
 		&updatedAt,
+		&post.SourcePlatform,
+		&post.SourceURL,
+		&post.SourceTitle,
+		&post.SourceAuthor,
+		&post.SourceAvatarURL,
 	)
 	if err != nil {
 		return domain.Post{}, err

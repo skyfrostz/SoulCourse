@@ -104,7 +104,8 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 		query += " ORDER BY p.likes_count + p.comments_count * 4 DESC, p.updated_at DESC, p.id DESC"
 	default:
 		query += ` ORDER BY
-			(MIN(p.likes_count, 300) * 0.8 + MIN(p.comments_count, 80) * 4 + MIN(p.favorites_count, 120) * 3
+			(CASE WHEN p.title LIKE '%选科%' OR p.tags LIKE '%选科%' THEN 1500 ELSE 0 END
+			 + MIN(p.likes_count, 300) * 0.8 + MIN(p.comments_count, 80) * 4 + MIN(p.favorites_count, 120) * 3
 			 + CASE WHEN p.author_role IN ('teacher', 'counselor') THEN 45 ELSE 0 END
 			 + CASE WHEN p.likes_count < 150 THEN 65 ELSE 0 END) DESC,
 			p.created_at DESC, p.id DESC`

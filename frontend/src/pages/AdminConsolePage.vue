@@ -1,4 +1,19 @@
 <script setup lang="ts">
+import {
+  ChartNoAxesColumnIncreasing,
+  Download,
+  GraduationCap,
+  LayoutDashboard,
+  Library,
+  Lightbulb,
+  LogOut,
+  MessagesSquare,
+  Plus,
+  RefreshCw,
+  Settings,
+  Tags,
+  Users,
+} from '@lucide/vue'
 import { computed, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import type {
   AdminEmailConfig,
@@ -150,6 +165,22 @@ const currentUserAccount = computed(() => ({
   postCount: Number(currentRecord.value?.payload.postCount || 0),
   passwordConfigured: Boolean(currentRecord.value?.payload.passwordConfigured),
 }))
+const navigationGroups = computed(() => [
+  { label: '工作台', modules: state.modules.filter((item) => item.id === 'dashboard') },
+  { label: '内容运营', modules: state.modules.filter((item) => !['dashboard', 'users', 'system'].includes(item.id)) },
+  { label: '账号与系统', modules: state.modules.filter((item) => ['users', 'system'].includes(item.id)) },
+])
+const moduleIcons = {
+  dashboard: LayoutDashboard,
+  posts: MessagesSquare,
+  categories: Tags,
+  policies: Library,
+  requirements: GraduationCap,
+  insights: ChartNoAxesColumnIncreasing,
+  advice: Lightbulb,
+  users: Users,
+  system: Settings,
+}
 
 watch([activeModule, selectedId], syncDraftFromSelected, { immediate: true })
 
@@ -582,22 +613,25 @@ function toErrorMessage(error: unknown) {
         </div>
       </div>
 
-      <nav>
-        <button
-          v-for="item in state.modules"
-          :key="item.id"
-          :class="{ active: activeModule === item.id }"
-          type="button"
-          @click="openModule(item.id)"
-        >
-          <i>{{ item.icon }}</i>
-          <span>{{ item.label }}</span>
-        </button>
+      <nav aria-label="后台导航">
+        <section v-for="group in navigationGroups" :key="group.label" class="nav-group">
+          <span class="nav-label">{{ group.label }}</span>
+          <button
+            v-for="item in group.modules"
+            :key="item.id"
+            :class="{ active: activeModule === item.id }"
+            type="button"
+            @click="openModule(item.id)"
+          >
+            <component :is="moduleIcons[item.id]" :size="17" />
+            <span>{{ item.label }}</span>
+          </button>
+        </section>
       </nav>
 
       <div class="sidebar-foot">
-        <span>统一后台</span>
-        <strong>Vue + Go</strong>
+        <span>已连接生产内容库</span>
+        <strong>{{ adminSession.email || settings.adminEmail }}</strong>
       </div>
     </aside>
 
@@ -611,9 +645,9 @@ function toErrorMessage(error: unknown) {
         <div class="top-actions">
           <span class="session-pill">{{ adminSession.email || settings.adminEmail || '在线后台' }}</span>
           <span class="sync-pill" :class="apiConnected ? 'ok' : 'local'">{{ lastSyncMessage }}</span>
-          <button type="button" @click="loadRemoteContent">同步后台</button>
-          <button type="button" @click="exportData">导出配置</button>
-          <button type="button" @click="logoutAdmin">退出</button>
+          <button type="button" @click="loadRemoteContent"><RefreshCw :size="15" /> 同步</button>
+          <button type="button" @click="exportData"><Download :size="15" /> 导出</button>
+          <button type="button" @click="logoutAdmin"><LogOut :size="15" /> 退出</button>
         </div>
       </header>
 
@@ -758,6 +792,13 @@ function toErrorMessage(error: unknown) {
       </section>
 
       <section v-else class="workbench">
+        <div class="workbench-heading">
+          <div>
+            <small>内容工作台</small>
+            <h2>{{ currentModule.label }}</h2>
+          </div>
+          <strong>{{ filteredRows.length }} 条记录</strong>
+        </div>
         <div class="toolbar">
           <label class="search">
             <span>搜索</span>
@@ -769,7 +810,7 @@ function toErrorMessage(error: unknown) {
               <option v-for="status in statusOptionsForActiveModule" :key="status" :value="status">{{ status }}</option>
             </select>
           </label>
-          <button v-if="activeModule !== 'users'" class="primary" type="button" @click="createRecordNow">新建条目</button>
+          <button v-if="activeModule !== 'users'" class="primary" type="button" @click="createRecordNow"><Plus :size="16" /> 新建条目</button>
         </div>
 
         <div class="table-wrap">
@@ -999,9 +1040,9 @@ button {
 
 .admin-console-page {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 224px minmax(0, 1fr);
   min-height: 100vh;
-  background: #f6f8fb;
+  background: #f5f5f7;
 }
 
 .sidebar {
@@ -1009,12 +1050,12 @@ button {
   top: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 18px;
+  gap: 22px;
   height: 100vh;
-  padding: 18px;
-  border-right: 1px solid #dbe3ee;
-  background: #0f172a;
-  color: #e2e8f0;
+  padding: 18px 14px 14px;
+  border-right: 1px solid #dedee3;
+  background: rgba(251, 251, 253, 0.96);
+  color: #1d1d1f;
 }
 
 .brand {
@@ -1026,74 +1067,95 @@ button {
 
 .brand strong {
   display: block;
-  color: #fff;
+  color: #1d1d1f;
 }
 
 .brand small {
-  color: #94a3b8;
+  color: #86868b;
 }
 
 .sidebar nav {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: 18px;
+}
+
+.nav-group {
+  display: grid;
+  gap: 4px;
+}
+
+.nav-label {
+  padding: 0 10px 5px;
+  color: #86868b;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .sidebar nav button {
   display: grid;
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: 22px 1fr;
   align-items: center;
-  height: 40px;
+  gap: 8px;
+  height: 38px;
   padding: 0 10px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
-  color: #cbd5e1;
+  color: #56565b;
   text-align: left;
-  font-weight: 850;
+  font-size: 13px;
+  font-weight: 750;
 }
 
 .sidebar nav button.active,
 .sidebar nav button:hover {
-  background: #1e293b;
-  color: #fff;
-}
-
-.sidebar nav i {
-  font-style: normal;
-  color: #5eead4;
+  border-color: #cbdcf7;
+  background: #e9f1ff;
+  color: #174ea6;
 }
 
 .sidebar-foot {
   display: grid;
   gap: 4px;
-  padding: 12px;
-  border: 1px solid #334155;
+  padding: 11px 10px;
+  overflow: hidden;
+  border: 1px solid #dedee3;
   border-radius: 8px;
-  background: #111827;
+  background: #fff;
 }
 
 .sidebar-foot span {
-  color: #94a3b8;
+  color: #34a853;
   font-size: 12px;
+}
+
+.sidebar-foot strong {
+  overflow: hidden;
+  color: #56565b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .main {
   min-width: 0;
-  padding: 18px 22px 32px;
+  padding: 0 28px 40px;
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 18px;
-  margin-bottom: 14px;
-  padding: 18px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.04);
+  margin: 0 -28px 18px;
+  padding: 16px 28px;
+  border-bottom: 1px solid #dedee3;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: saturate(180%) blur(18px);
 }
 
 .topbar small {
@@ -1102,9 +1164,9 @@ button {
 }
 
 .topbar h1 {
-  margin: 4px 0;
+  margin: 3px 0;
   color: #0f172a;
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .topbar p {
@@ -1168,6 +1230,14 @@ button {
   white-space: nowrap;
 }
 
+.top-actions button,
+.toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .primary {
   border-color: #0f9f7a;
   background: #0f9f7a;
@@ -1183,23 +1253,31 @@ button {
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.metric-grid article,
-.panel,
-.workbench {
-  border: 1px solid #e2e8f0;
+  gap: 0;
+  margin-bottom: 14px;
+  overflow: hidden;
+  border: 1px solid #dedee3;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.04);
+}
+
+.panel,
+.workbench {
+  border: 1px solid #dedee3;
+  border-radius: 8px;
+  background: #fff;
 }
 
 .metric-grid article {
   display: grid;
-  gap: 8px;
-  padding: 16px;
+  gap: 6px;
+  min-width: 0;
+  padding: 17px 18px;
+  border-right: 1px solid #e5e5ea;
+}
+
+.metric-grid article:last-child {
+  border-right: 0;
 }
 
 .metric-grid small {
@@ -1208,7 +1286,8 @@ button {
 }
 
 .metric-grid strong {
-  font-size: 28px;
+  color: #1d1d1f;
+  font-size: 30px;
 }
 
 .metric-grid p {
@@ -1221,13 +1300,13 @@ button {
 .dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.7fr);
-  gap: 12px;
+  gap: 14px;
 }
 
 .panel {
   display: grid;
   gap: 14px;
-  padding: 16px;
+  padding: 18px;
 }
 
 .panel.wide {
@@ -1390,13 +1469,38 @@ td small {
   overflow: hidden;
 }
 
+.workbench-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 12px;
+}
+
+.workbench-heading small {
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.workbench-heading h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
+.workbench-heading > strong {
+  color: #6e6e73;
+  font-size: 12px;
+}
+
 .toolbar {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) 180px auto;
   gap: 12px;
   align-items: end;
-  padding: 14px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 18px 16px;
+  border-bottom: 1px solid #dedee3;
+  background: #fafafa;
 }
 
 .toolbar label,
@@ -1446,11 +1550,52 @@ td small {
 }
 
 .table-wrap {
+  max-height: calc(100vh - 230px);
   overflow: auto;
 }
 
+.content-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+}
+
 .content-table td:nth-child(1) {
-  min-width: 300px;
+  width: 42%;
+  min-width: 380px;
+}
+
+.content-table th:nth-child(2),
+.content-table td:nth-child(2),
+.content-table th:nth-child(3),
+.content-table td:nth-child(3),
+.content-table th:nth-child(4),
+.content-table td:nth-child(4),
+.content-table th:nth-child(5),
+.content-table td:nth-child(5),
+.content-table th:nth-child(7),
+.content-table td:nth-child(7),
+.content-table th:nth-child(8),
+.content-table td:nth-child(8) {
+  min-width: 74px;
+  white-space: nowrap;
+}
+
+.content-table th:nth-child(5),
+.content-table td:nth-child(5),
+.content-table th:nth-child(7),
+.content-table td:nth-child(7) {
+  min-width: 112px;
+}
+
+.content-table th:nth-child(6),
+.content-table td:nth-child(6) {
+  min-width: 120px;
+}
+
+.content-table td:last-child button {
+  min-width: 48px;
 }
 
 .tag-row {
@@ -2110,6 +2255,99 @@ td small {
 
   .media-preview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: grid;
+    height: auto;
+    gap: 10px;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid #dedee3;
+    box-shadow: 0 5px 18px rgba(15, 23, 42, 0.06);
+  }
+
+  .brand {
+    grid-template-columns: 36px 1fr;
+  }
+
+  .brand .admin-logo-frame {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brand small {
+    display: none;
+  }
+
+  .sidebar nav {
+    display: flex;
+    gap: 6px;
+    margin: 0 -12px;
+    padding: 0 12px 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sidebar nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-group {
+    display: contents;
+  }
+
+  .nav-label {
+    display: none;
+  }
+
+  .sidebar nav button {
+    display: flex;
+    flex: 0 0 auto;
+    width: auto;
+    padding: 0 10px;
+  }
+
+  .sidebar-foot {
+    display: none;
+  }
+
+  .topbar {
+    position: static;
+    gap: 12px;
+    margin: 0 0 12px;
+    padding: 4px 2px 14px;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .top-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .session-pill,
+  .sync-pill {
+    grid-column: 1 / -1;
+  }
+
+  .metric-grid article {
+    border-right: 0;
+    border-bottom: 1px solid #e5e5ea;
+  }
+
+  .metric-grid article:last-child {
+    border-bottom: 0;
+  }
+
+  .workbench-heading {
+    padding: 14px;
+  }
+
+  .toolbar {
+    padding: 12px 14px 14px;
   }
 }
 </style>

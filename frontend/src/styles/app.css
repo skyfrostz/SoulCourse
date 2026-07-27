@@ -8186,3 +8186,452 @@ textarea {
     border-color: #76767c;
   }
 }
+
+/* Shared discovery density: one predictable card system across every post feed. */
+.filter-confirm-button {
+  display: none;
+}
+
+@media (min-width: 761px) {
+  .forum-home-workspace .filter-rail:not(.collapsed) {
+    max-height: calc(100dvh - 104px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 6px;
+    scrollbar-color: rgba(110, 110, 115, 0.48) transparent;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+  }
+
+  .forum-home-workspace .filter-rail:not(.collapsed)::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .forum-home-workspace .filter-rail:not(.collapsed)::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(110, 110, 115, 0.42);
+  }
+
+  .feed-grid,
+  .forum-home-workspace .feed-grid {
+    display: block;
+    column-count: 3;
+    column-gap: 12px;
+  }
+
+  .feed-grid > .post-card,
+  .forum-home-workspace .feed-grid > .post-card {
+    display: inline-block;
+    width: 100%;
+    min-height: 0;
+    margin: 0 0 12px;
+    break-inside: avoid;
+  }
+
+  .feed-grid .post-image-strip,
+  .feed-grid .post-title-cover,
+  .feed-grid .post-card:nth-child(3n) .post-image-strip,
+  .forum-home-workspace .feed-grid .post-image-strip,
+  .forum-home-workspace .feed-grid .post-title-cover,
+  .forum-home-workspace .feed-grid .post-card:nth-child(3n) .post-image-strip {
+    display: flex;
+    width: 100%;
+    max-height: 420px;
+    margin: 0;
+    border-radius: 7px 7px 0 0;
+    aspect-ratio: 3 / 4;
+  }
+
+  .feed-grid .post-image-strip img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .feed-grid .post-title-cover {
+    padding: 18px;
+  }
+
+  .feed-grid .post-title-cover strong {
+    font-size: 20px;
+  }
+
+  .feed-grid .post-card-content,
+  .forum-home-workspace .feed-grid .post-card-content {
+    padding: 10px 12px 9px;
+  }
+
+  .feed-grid .post-hit-area,
+  .forum-home-workspace .feed-grid .post-hit-area {
+    min-height: 0;
+    padding: 0;
+  }
+
+  .feed-grid .post-card h2,
+  .forum-home-workspace .feed-grid .post-card h2 {
+    margin: 7px 0 5px;
+    font-size: 15px;
+    line-height: 1.38;
+  }
+
+  .feed-grid .post-card p,
+  .forum-home-workspace .feed-grid .post-card p {
+    font-size: 12.5px;
+    line-height: 1.55;
+    -webkit-line-clamp: 2;
+  }
+
+  .feed-grid .post-card-head,
+  .forum-home-workspace .feed-grid .post-card-head {
+    margin-top: 9px;
+    padding: 9px 0 0;
+    border-top: 1px solid #f0f0f2;
+  }
+
+  .feed-grid .post-card-actions,
+  .forum-home-workspace .feed-grid .post-card-actions {
+    min-height: 40px;
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 760px) {
+  .feed-grid,
+  .forum-home-workspace .feed-grid,
+  .mobile-profile-content .feed-grid {
+    display: block;
+    column-count: 2;
+    column-gap: 8px;
+  }
+
+  .feed-grid > .post-card,
+  .forum-home-workspace .feed-grid > .post-card,
+  .mobile-profile-content .feed-grid > .post-card {
+    display: inline-block;
+    width: 100%;
+    min-height: 0;
+    margin: 0 0 10px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .feed-grid > .post-card:hover {
+    box-shadow: none;
+    transform: none;
+  }
+
+  .feed-grid .post-image-strip,
+  .feed-grid .post-title-cover,
+  .feed-grid .post-card:nth-child(3n) .post-image-strip,
+  .forum-home-workspace .feed-grid .post-image-strip,
+  .forum-home-workspace .feed-grid .post-title-cover,
+  .forum-home-workspace .feed-grid .post-card:nth-child(3n) .post-image-strip {
+    display: flex;
+    width: 100%;
+    margin: 0;
+    border-radius: 7px;
+    aspect-ratio: 3 / 4;
+  }
+
+  .feed-grid .post-image-strip img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .feed-grid .post-title-cover {
+    padding: 13px;
+  }
+
+  .feed-grid .post-title-cover span {
+    margin-bottom: 8px;
+    font-size: 10px;
+  }
+
+  .feed-grid .post-title-cover strong {
+    font-size: 17px;
+    line-height: 1.3;
+  }
+
+  .feed-grid .post-title-cover small {
+    margin-top: 10px;
+    font-size: 10px;
+  }
+
+  .feed-grid .post-card-content,
+  .forum-home-workspace .feed-grid .post-card-content,
+  .mobile-profile-content .feed-grid .post-card-content {
+    padding: 8px 4px 0;
+  }
+
+  .feed-grid .post-hit-area,
+  .forum-home-workspace .feed-grid .post-hit-area {
+    min-height: 0;
+    padding: 0;
+  }
+
+  .feed-grid .post-card h2,
+  .forum-home-workspace .feed-grid .post-card h2 {
+    margin: 0;
+    color: #242426;
+    font-size: 13px;
+    line-height: 1.4;
+    -webkit-line-clamp: 2;
+  }
+
+  .feed-grid .post-meta-line,
+  .feed-grid .post-card p,
+  .feed-grid .tag-row,
+  .feed-grid .author-profile-link small,
+  .feed-grid .source-badge,
+  .feed-grid .post-card-actions > a,
+  .feed-grid .post-stats button:last-child {
+    display: none;
+  }
+
+  .feed-grid .post-card-head,
+  .forum-home-workspace .feed-grid .post-card-head {
+    display: block;
+    margin-top: 7px;
+    padding: 7px 0 0;
+    border-top: 1px solid #f0f0f2;
+  }
+
+  .feed-grid .author-profile-link {
+    gap: 6px;
+  }
+
+  .feed-grid .small-avatar {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+  }
+
+  .feed-grid .author-profile-link strong {
+    overflow: hidden;
+    max-width: 12ch;
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .feed-grid .post-card-actions,
+  .forum-home-workspace .feed-grid .post-card-actions {
+    justify-content: flex-end;
+    min-height: 30px;
+    padding: 0 2px;
+    border-top: 0;
+  }
+
+  .feed-grid .post-card-actions .post-stats {
+    gap: 0;
+  }
+
+  .feed-grid .post-card-actions .post-stats button {
+    gap: 4px;
+    padding: 4px;
+    font-size: 10px;
+  }
+
+  .forum-home-workspace .filter-rail {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .filter-body.open {
+    max-height: 1320px;
+  }
+
+  .filter-confirm-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 100%;
+    min-height: 44px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 9px;
+    background: #08775c;
+    color: #fff;
+    font-weight: 850;
+    box-shadow: 0 8px 18px rgba(8, 119, 92, 0.16);
+  }
+
+  .filter-confirm-button:active {
+    transform: scale(0.985);
+  }
+
+  .requirements-page.detail-page,
+  .knowledge-page.detail-page {
+    padding: 8px 10px 28px;
+  }
+
+  .requirements-page > .back-link,
+  .knowledge-page > .back-link {
+    height: 32px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .requirements-page .requirements-xhs-hero,
+  .knowledge-page .knowledge-hero {
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 14px;
+    border-radius: 10px;
+  }
+
+  .requirements-page .requirements-xhs-hero > div,
+  .knowledge-page .knowledge-hero > div {
+    min-width: 0;
+  }
+
+  .requirements-page .breadcrumb,
+  .knowledge-page .breadcrumb {
+    margin-bottom: 7px;
+    font-size: 11px;
+  }
+
+  .requirements-page .requirements-xhs-hero h1,
+  .knowledge-page .knowledge-hero h1 {
+    margin: 0 0 7px;
+    font-size: 21px;
+    line-height: 1.22;
+    letter-spacing: -0.025em;
+  }
+
+  .requirements-page .requirements-xhs-hero p,
+  .knowledge-page .knowledge-hero p {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 0;
+    color: #5c5c63;
+    font-size: 12.5px;
+    line-height: 1.55;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .requirements-page .overview-metrics,
+  .knowledge-page .overview-metrics {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-top: 10px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .requirements-page .overview-metrics::-webkit-scrollbar,
+  .knowledge-page .overview-metrics::-webkit-scrollbar,
+  .requirements-page .quick-query-row::-webkit-scrollbar,
+  .knowledge-page .content-lens-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .requirements-page .overview-metrics span,
+  .knowledge-page .overview-metrics span {
+    flex: 0 0 auto;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 7px;
+    font-size: 10.5px;
+    white-space: nowrap;
+  }
+
+  .requirements-page .overview-metrics svg,
+  .knowledge-page .overview-metrics svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .requirements-page .requirement-search-panel {
+    gap: 7px;
+  }
+
+  .requirements-page .requirement-search,
+  .knowledge-page .knowledge-search {
+    height: 38px;
+    gap: 7px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .requirements-page .quick-query-row {
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .requirements-page .quick-query-row button {
+    flex: 0 0 auto;
+    height: 27px;
+    padding: 0 9px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .requirements-page .requirement-filter-board {
+    gap: 7px;
+    margin-bottom: 8px;
+    padding: 9px;
+    border-radius: 10px;
+  }
+
+  .requirements-page .requirement-filter-board > div:first-child {
+    display: flex;
+    width: 100%;
+    min-height: 38px;
+    height: 38px;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  .requirements-page .requirement-filter-board > div:first-child strong {
+    font-size: 20px;
+  }
+
+  .requirements-page .requirement-filter-board > div:first-child span {
+    font-size: 11px;
+  }
+
+  .requirements-page .scroll-chip-row {
+    gap: 6px;
+    padding-bottom: 1px;
+  }
+
+  .requirements-page .scroll-chip-row button {
+    height: 29px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .knowledge-page .content-lens-tabs {
+    flex-wrap: nowrap;
+    gap: 5px;
+    width: 100%;
+    margin-bottom: 8px;
+    overflow-x: auto;
+    padding: 4px;
+    scrollbar-width: none;
+  }
+
+  .knowledge-page .content-lens-tabs button {
+    flex: 0 0 auto;
+    height: 30px;
+    padding: 0 12px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}

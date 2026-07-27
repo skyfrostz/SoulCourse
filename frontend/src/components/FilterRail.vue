@@ -156,6 +156,9 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
     </section>
 
     <RouterLink class="outline-wide" to="/insights">查看全部组合</RouterLink>
+    <button class="filter-confirm-button" type="button" @click="filterExpanded = false">
+      <CircleCheck :size="17" /> 确定并收起
+    </button>
     </div>
   </aside>
 </template>

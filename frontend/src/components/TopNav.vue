@@ -7,7 +7,7 @@ import { useForumData } from '../composables/useForumData'
 import { notificationSeeds, notificationTypeLabels } from '../lib/notifications'
 import { appAssetUrl } from '../lib/runtime'
 import { useForumStore } from '../stores/forum'
-import type { Category, Track } from '../types/forum'
+import type { Category } from '../types/forum'
 
 defineProps<{
   source: 'api'
@@ -40,14 +40,6 @@ const activeCategory = computed(() => (route.path === '/' ? forumStore.filter.ca
 
 function setCategory(category: Category | 'all') {
   forumStore.browseCategory(category)
-}
-
-function selectMobileTrack(track: Track | 'all') {
-  forumStore.setTrack(track)
-  forumStore.setSubjects([])
-  forumStore.setCategory('all')
-  forumStore.setKeyword('')
-  forumStore.setSort('recommended')
 }
 
 function togglePanel(panel: 'notifications' | 'profile') {
@@ -107,10 +99,10 @@ onBeforeUnmount(() => {
       <RouterLink class="mobile-brand-mark" to="/" aria-label="选科π首页">
         <img :src="appAssetUrl('/brand/logo-mark.png')" alt="" />
       </RouterLink>
-      <nav aria-label="首页内容方向">
-        <button type="button" :class="{ active: forumStore.filter.track === 'all' }" @click="selectMobileTrack('all')">推荐</button>
-        <button type="button" :class="{ active: forumStore.filter.track === 'physics' }" @click="selectMobileTrack('physics')">物理</button>
-        <button type="button" :class="{ active: forumStore.filter.track === 'history' }" @click="selectMobileTrack('history')">历史</button>
+      <nav aria-label="移动端主入口">
+        <RouterLink class="active" to="/" aria-current="page" @click="forumStore.resetFilters()">推荐</RouterLink>
+        <RouterLink to="/requirements">选科查询</RouterLink>
+        <RouterLink to="/knowledge">政策库</RouterLink>
       </nav>
       <button class="mobile-search-button" type="button" :aria-expanded="searchOpen" aria-label="搜索" @click="searchOpen = !searchOpen">
         <X v-if="searchOpen" :size="24" />

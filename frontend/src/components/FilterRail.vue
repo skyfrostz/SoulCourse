@@ -21,6 +21,21 @@ const subjectIcons = {
   geography: Globe2,
 }
 
+const trackLabel = computed(() =>
+  forumStore.filter.track === 'all' ? '全部方向' : forumStore.filter.track === 'physics' ? '物理方向' : '历史方向',
+)
+const subjectsLabel = computed(() =>
+  forumStore.filter.subjects.length
+    ? forumStore.filter.subjects.map((subject) => subjectLabels[subject]).join(' + ')
+    : '不限科目',
+)
+const categoryLabel = computed(() =>
+  forumStore.filter.category === 'all' ? '全部内容' : categoryLabels[forumStore.filter.category],
+)
+const activeFilterCount = computed(() =>
+  Number(forumStore.filter.track !== 'all') + forumStore.filter.subjects.length + Number(forumStore.filter.category !== 'all'),
+)
+
 const hotCombos = computed(() => [
   { label: '物化生', count: '12.6k', color: '#0f9f7a', track: 'physics' as Track, subjects: ['chemistry', 'biology'] as Subject[] },
   { label: '物化地', count: '9.8k', color: '#2563eb', track: 'physics' as Track, subjects: ['chemistry', 'geography'] as Subject[] },
@@ -48,22 +63,37 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
     >
       <PanelLeftOpen :size="19" />
     </button>
-    <div class="panel-title-row">
-      <h2>选科组合筛选</h2>
+    <div class="panel-title-row filter-panel-heading">
+      <div>
+        <span class="filter-kicker">精准筛选</span>
+        <h2>找适合你的讨论</h2>
+        <p>按方向、再选科目和内容类型缩小范围</p>
+      </div>
       <div class="filter-title-actions">
         <button class="filter-toggle" type="button" :aria-expanded="filterExpanded" aria-controls="community-filter-body" @click="filterExpanded = !filterExpanded">
-          <SlidersHorizontal :size="15" /> 筛选 <ChevronDown :size="14" />
+          <SlidersHorizontal :size="16" /> {{ filterExpanded ? '收起' : '展开筛选' }}
+          <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span>
+          <ChevronDown class="filter-chevron" :size="15" />
         </button>
-        <button class="ghost-link" type="button" @click="forumStore.resetFilters()">重置</button>
+        <button v-if="activeFilterCount" class="ghost-link" type="button" @click="forumStore.resetFilters()">重置</button>
         <button class="rail-collapse-button" type="button" aria-label="收起筛选栏" title="收起筛选栏" @click="$emit('toggleCollapse')">
           <PanelLeftClose :size="17" />
         </button>
       </div>
     </div>
 
+    <div class="filter-summary" aria-label="当前筛选条件">
+      <span><small>方向</small><strong>{{ trackLabel }}</strong></span>
+      <span><small>科目</small><strong>{{ subjectsLabel }}</strong></span>
+      <span><small>类型</small><strong>{{ categoryLabel }}</strong></span>
+    </div>
+
     <div id="community-filter-body" class="filter-body" :class="{ open: filterExpanded }">
     <section class="filter-section">
-      <h3>方向</h3>
+      <div class="filter-section-heading">
+        <span>1</span>
+        <div><h3>方向</h3><small>先选物理或历史方向</small></div>
+      </div>
       <div class="segmented-control track-control">
         <button
           v-for="track in tracks"
@@ -78,7 +108,10 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
     </section>
 
     <section class="filter-section">
-      <h3>再选科目</h3>
+      <div class="filter-section-heading">
+        <span>2</span>
+        <div><h3>再选科目</h3><small>最多选择两门科目</small></div>
+      </div>
       <button
         v-for="subject in subjects"
         :key="subject"
@@ -96,7 +129,10 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
     </section>
 
     <section class="filter-section">
-      <h3>内容类型</h3>
+      <div class="filter-section-heading">
+        <span>3</span>
+        <div><h3>内容类型</h3><small>选择想查看的讨论形式</small></div>
+      </div>
       <div class="category-stack">
         <button
           v-for="category in categories"

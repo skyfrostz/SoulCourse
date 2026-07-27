@@ -109,6 +109,76 @@ func (h *ForumHandler) Me(c *gin.Context) {
 	ok(c, user)
 }
 
+func (h *ForumHandler) GetProfile(c *gin.Context) {
+	profile, err := h.service.GetAccountProfile(c.Request.Context(), middleware.CurrentUserID(c), c.Param("name"))
+	if err != nil {
+		failNotFoundOrInternal(c, err, "profile")
+		return
+	}
+	ok(c, profile)
+}
+
+func (h *ForumHandler) GetMyProfile(c *gin.Context) {
+	user, _ := middleware.CurrentUser(c)
+	profile, err := h.service.GetAccountProfile(c.Request.Context(), &user.ID, user.Nickname)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "internal_error", "could not load profile")
+		return
+	}
+	ok(c, profile)
+}
+
+func (h *ForumHandler) UpdateMyProfile(c *gin.Context) {
+	var input domain.UpdateProfileInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		fail(c, http.StatusBadRequest, "invalid_payload", err.Error())
+		return
+	}
+	user, _ := middleware.CurrentUser(c)
+	profile, err := h.service.UpdateAccountProfile(c.Request.Context(), user.ID, input)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidElectives) {
+			fail(c, http.StatusBadRequest, "invalid_electives", err.Error())
+			return
+		}
+		fail(c, http.StatusInternalServerError, "internal_error", "could not update profile")
+		return
+	}
+	ok(c, profile)
+}
+
+func (h *ForumHandler) ListNotifications(c *gin.Context) {
+	user, _ := middleware.CurrentUser(c)
+	items, err := h.service.ListNotifications(c.Request.Context(), user.ID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "internal_error", "could not list notifications")
+		return
+	}
+	ok(c, items)
+}
+
+func (h *ForumHandler) MarkNotificationRead(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	user, _ := middleware.CurrentUser(c)
+	if err := h.service.MarkNotificationRead(c.Request.Context(), user.ID, &id); err != nil {
+		fail(c, http.StatusInternalServerError, "internal_error", "could not update notification")
+		return
+	}
+	ok(c, envelope{"read": true})
+}
+
+func (h *ForumHandler) MarkAllNotificationsRead(c *gin.Context) {
+	user, _ := middleware.CurrentUser(c)
+	if err := h.service.MarkNotificationRead(c.Request.Context(), user.ID, nil); err != nil {
+		fail(c, http.StatusInternalServerError, "internal_error", "could not update notifications")
+		return
+	}
+	ok(c, envelope{"read": true})
+}
+
 func (h *ForumHandler) Taxonomy(c *gin.Context) {
 	ok(c, envelope{
 		"tracks": []envelope{

@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Bookmark, ChevronLeft, MessageSquare, PenLine, Settings, Sparkles, UserCheck, UserPlus, UserRound, Users } from '@lucide/vue'
+import { Bookmark, Brain, ChevronLeft, MessageSquare, PenLine, Settings, Sparkles, UserCheck, UserPlus, UserRound, Users } from '@lucide/vue'
 import PostCard from '../components/PostCard.vue'
+import { fetchProfile } from '../lib/api'
 import { roleLabels, subjectLabels, trackLabels } from '../lib/labels'
 import { sampleComments, samplePosts } from '../lib/sampleData'
 import { useForumStore, type FollowProfile } from '../stores/forum'
-import type { Comment, Post, Role } from '../types/forum'
+import type { Comment, Role } from '../types/forum'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,14 +17,28 @@ const activeProfileTab = ref<'posts' | 'comments' | 'favorites'>(route.hash === 
 
 const profileName = computed(() => decodeURIComponent(String(route.params.name ?? '')))
 const isCurrentUser = computed(() => forumStore.currentUser?.nickname === profileName.value)
-const allPosts = computed(() => samplePosts.map((post) => forumStore.hydratePost(post)))
-const authoredPosts = computed(() => allPosts.value.filter((post) => post.authorName === profileName.value))
+const accountProfileQuery = useQuery({
+  queryKey: ['profile', profileName.value],
+  queryFn: () => fetchProfile(profileName.value),
+  retry: false,
+})
+const accountProfile = computed(() => accountProfileQuery.data.value)
+const allPosts = computed(() => accountProfile.value?.posts ?? samplePosts.map((post) => forumStore.hydratePost(post)))
+const authoredPosts = computed(() => accountProfile.value?.posts ?? allPosts.value.filter((post) => post.authorName === profileName.value))
 const allComments = computed(() => Object.values(sampleComments).flat())
-const authoredComments = computed(() => allComments.value.filter((comment) => comment.author === profileName.value))
+const authoredComments = computed(() => accountProfile.value?.comments.map((item) => item.comment) ?? allComments.value.filter((comment) => comment.author === profileName.value))
 
 const profile = computed(() => {
   const fromPost = authoredPosts.value[0]
   const fromComment = authoredComments.value[0]
+  if (accountProfile.value) {
+    return {
+      name: accountProfile.value.user.nickname,
+      role: accountProfile.value.user.role,
+      province: accountProfile.value.user.province,
+      grade: accountProfile.value.user.grade,
+    }
+  }
   if (isCurrentUser.value && forumStore.currentUser) {
     return {
       name: forumStore.currentUser.nickname,
@@ -39,7 +55,7 @@ const profile = computed(() => {
   }
 })
 
-const favoritePosts = computed(() => (isCurrentUser.value ? forumStore.getFavoritePosts(allPosts.value) : []))
+const favoritePosts = computed(() => isCurrentUser.value ? (accountProfile.value?.favorites ?? forumStore.getFavoritePosts(allPosts.value)) : [])
 const followingList = computed(() => forumStore.getFollowing(profile.value.name))
 const followerList = computed(() => forumStore.getFollowers(profile.value.name))
 const isFollowing = computed(() => forumStore.isUserFollowing(profile.value.name))
@@ -51,13 +67,27 @@ const profileAsFollow = computed<FollowProfile>(() => ({
   followedAt: new Date().toISOString(),
 }))
 const commentCards = computed(() =>
-  authoredComments.value
-    .map((comment) => {
-      const post = allPosts.value.find((item) => item.id === comment.postId)
-      return { comment, post }
-    })
-    .filter((item): item is { comment: Comment; post: Post } => Boolean(item.post)),
+  accountProfile.value?.comments.map((item) => ({ comment: item.comment, postId: item.comment.postId, postTitle: item.postTitle }))
+    ?? authoredComments.value
+      .map((comment) => {
+        const post = allPosts.value.find((item) => item.id === comment.postId)
+        return post ? { comment, postId: post.id, postTitle: post.title } : null
+      })
+      .filter((item): item is { comment: Comment; postId: number; postTitle: string } => Boolean(item)),
 )
+const profileStats = computed(() => accountProfile.value?.stats ?? {
+  posts: authoredPosts.value.length,
+  comments: authoredComments.value.length,
+  following: followingList.value.length,
+  followers: followerList.value.length,
+  favorites: favoritePosts.value.length,
+  engagement: 0,
+})
+const choiceProfile = computed(() => accountProfile.value?.choiceProfile ?? forumStore.choiceProfile)
+const profileCompletion = computed(() => {
+  const values = [choiceProfile.value.mbti, choiceProfile.value.targetMajors, choiceProfile.value.gradeRank, choiceProfile.value.city]
+  return Math.round((values.filter(Boolean).length / values.length) * 100)
+})
 
 function roleTone(role: Role) {
   if (role === 'teacher' || role === 'counselor') return '认证用户'
@@ -94,12 +124,13 @@ function toggleFollow() {
         <div class="breadcrumb">用户主页 / {{ roleTone(profile.role) }}</div>
         <h1>{{ profile.name }}</h1>
         <p>{{ profile.grade }} · {{ roleLabels[profile.role] }} · {{ profile.province }}</p>
+        <p v-if="accountProfile?.bio" class="profile-bio">{{ accountProfile.bio }}</p>
         <div class="overview-metrics">
-          <span><PenLine :size="17" /> {{ authoredPosts.length }} 篇帖子</span>
-          <span><MessageSquare :size="17" /> {{ authoredComments.length }} 条评论</span>
-          <span><UserPlus :size="17" /> {{ followingList.length }} 关注</span>
-          <span><Users :size="17" /> {{ followerList.length }} 粉丝</span>
-          <span v-if="isCurrentUser"><Bookmark :size="17" /> {{ favoritePosts.length }} 个收藏</span>
+          <span><PenLine :size="17" /> {{ profileStats.posts }} 篇帖子</span>
+          <span><MessageSquare :size="17" /> {{ profileStats.comments }} 条评论</span>
+          <span><UserPlus :size="17" /> {{ profileStats.following }} 关注</span>
+          <span><Users :size="17" /> {{ profileStats.followers }} 粉丝</span>
+          <span v-if="isCurrentUser"><Bookmark :size="17" /> {{ profileStats.favorites }} 个收藏</span>
         </div>
       </div>
       <div class="user-profile-actions">
@@ -116,27 +147,32 @@ function toggleFollow() {
     <section v-if="isCurrentUser" class="profile-choice-card">
       <div>
         <small><Sparkles :size="15" /> 我的选科画像</small>
-        <h2>{{ trackLabels[forumStore.choiceProfile.preferredTrack] }} · {{ forumStore.choiceProfile.preferredSubjects.map((item) => subjectLabels[item]).join(' + ') }}</h2>
-        <p>MBTI：{{ forumStore.choiceProfile.mbti || '未填写' }} · 目标专业：{{ forumStore.choiceProfile.targetMajors || '未填写' }}</p>
+        <h2>{{ trackLabels[choiceProfile.preferredTrack] }} · {{ choiceProfile.preferredSubjects.map((item) => subjectLabels[item]).join(' + ') }}</h2>
+        <p>MBTI：{{ choiceProfile.mbti || '未填写' }} · 目标专业：{{ choiceProfile.targetMajors || '未填写' }}</p>
       </div>
-      <RouterLink to="/settings">完善画像</RouterLink>
+      <RouterLink to="/settings">画像完成度 {{ profileCompletion }}%</RouterLink>
     </section>
 
-    <nav v-if="isCurrentUser" class="mobile-profile-shortcuts" aria-label="个人功能">
+    <nav v-if="isCurrentUser" class="profile-service-grid mobile-profile-shortcuts" aria-label="个人功能">
       <RouterLink to="/settings">
         <span class="tone-profile"><Sparkles :size="21" /></span>
         <strong>选科画像</strong>
-        <small>完善偏好</small>
+        <small>{{ profileCompletion }}% 完成</small>
+      </RouterLink>
+      <RouterLink to="/settings">
+        <span class="tone-mbti"><Brain :size="21" /></span>
+        <strong>MBTI 偏好</strong>
+        <small>{{ choiceProfile.mbti || '待填写' }}</small>
       </RouterLink>
       <RouterLink to="/following">
         <span class="tone-following"><Users :size="21" /></span>
         <strong>我的关注</strong>
-        <small>{{ followingList.length }} 人</small>
+        <small>{{ profileStats.following }} 人</small>
       </RouterLink>
       <button type="button" @click="activeProfileTab = 'favorites'">
         <span class="tone-favorite"><Bookmark :size="21" /></span>
         <strong>我的收藏</strong>
-        <small>{{ favoritePosts.length }} 篇</small>
+        <small>{{ profileStats.favorites }} 篇</small>
       </button>
     </nav>
 
@@ -159,8 +195,8 @@ function toggleFollow() {
       </template>
       <template v-else-if="activeProfileTab === 'comments'">
         <div v-if="commentCards.length" class="profile-comment-list">
-          <RouterLink v-for="item in commentCards" :key="item.comment.id" :to="`/posts/${item.post.id}`">
-            <span>{{ item.post.title }}</span>
+          <RouterLink v-for="item in commentCards" :key="item.comment.id" :to="`/posts/${item.postId}`">
+            <span>{{ item.postTitle }}</span>
             <p>{{ item.comment.content }}</p>
             <small>{{ new Date(item.comment.createdAt).toLocaleString('zh-CN') }}</small>
           </RouterLink>
@@ -188,7 +224,7 @@ function toggleFollow() {
         <div class="feed-tabs">
           <button class="active">我的关注</button>
         </div>
-        <span class="profile-section-count">{{ followingList.length }} 人</span>
+        <span class="profile-section-count">{{ profileStats.following }} 人</span>
       </div>
       <div v-if="followingList.length" class="follow-card-grid">
         <RouterLink
@@ -217,7 +253,7 @@ function toggleFollow() {
         <div class="feed-tabs">
           <button class="active">关注我的</button>
         </div>
-        <span class="profile-section-count">{{ followerList.length }} 人</span>
+        <span class="profile-section-count">{{ profileStats.followers }} 人</span>
       </div>
       <div v-if="followerList.length" class="follow-card-grid">
         <RouterLink
@@ -264,8 +300,8 @@ function toggleFollow() {
         </div>
       </div>
       <div v-if="commentCards.length" class="profile-comment-list">
-        <RouterLink v-for="item in commentCards" :key="item.comment.id" :to="`/posts/${item.post.id}`">
-          <span>{{ item.post.title }}</span>
+        <RouterLink v-for="item in commentCards" :key="item.comment.id" :to="`/posts/${item.postId}`">
+          <span>{{ item.postTitle }}</span>
           <p>{{ item.comment.content }}</p>
           <small>{{ new Date(item.comment.createdAt).toLocaleString('zh-CN') }}</small>
         </RouterLink>

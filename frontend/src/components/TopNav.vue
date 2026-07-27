@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DecisionSearch from './DecisionSearch.vue'
 import { useForumData } from '../composables/useForumData'
-import { notificationSeeds, notificationTypeLabels } from '../lib/notifications'
+import { notificationTypeLabels } from '../lib/notifications'
 import { appAssetUrl } from '../lib/runtime'
 import { useForumStore } from '../stores/forum'
 import type { Category } from '../types/forum'
@@ -22,12 +22,7 @@ let searchCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 let profileCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 const { posts, topics } = useForumData()
 const favoritePosts = computed(() => forumStore.getFavoritePosts(posts.value).slice(0, 8))
-const notificationItems = computed(() =>
-  notificationSeeds.map((item) => ({
-    ...item,
-    unread: !forumStore.readNotificationIds[item.id],
-  })),
-)
+const notificationItems = computed(() => forumStore.notifications.map((item) => ({ ...item, unread: !item.readAt })))
 
 const navItems: Array<{ label: string; category: Category | 'all' }> = [
   { label: '首页', category: 'all' },
@@ -43,6 +38,7 @@ function setCategory(category: Category | 'all') {
 }
 
 function togglePanel(panel: 'notifications' | 'profile') {
+  if (panel === 'notifications' && !forumStore.requireAuth('/notifications')) return
   if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
   const willOpen = openPanel.value !== panel
   openPanel.value = willOpen ? panel : null
@@ -182,15 +178,14 @@ onBeforeUnmount(() => {
         <Bell :size="20" />
         <span v-if="forumStore.unreadNotificationCount" class="notification-dot" />
       </button>
-      <RouterLink class="icon-button" aria-label="私信" to="/messages" @click="forumStore.markMessagesRead()">
+      <RouterLink class="icon-button" aria-label="私信" to="/messages">
         <Mail :size="20" />
-        <span v-if="forumStore.messageUnread" class="message-dot" />
       </RouterLink>
       <button
         v-if="!forumStore.currentUser"
         class="login-button"
         type="button"
-        @click="forumStore.authOpen = true"
+        @click="forumStore.openAuth()"
       >
         登录 / 注册
       </button>

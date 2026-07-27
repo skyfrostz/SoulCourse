@@ -19,6 +19,7 @@ import TopicPage from '../pages/TopicPage.vue'
 import TopicsOverviewPage from '../pages/TopicsOverviewPage.vue'
 import UserProfilePage from '../pages/UserProfilePage.vue'
 import AdminConsolePage from '../pages/AdminConsolePage.vue'
+import { useForumStore } from '../stores/forum'
 
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -33,10 +34,10 @@ export const router = createRouter({
     { path: '/advice', name: 'advice-overview', component: AdviceOverviewPage },
     { path: '/advice/:id', name: 'advice-detail', component: AdviceDetailPage },
     { path: '/admin', alias: '/admin/', name: 'admin-console', component: AdminConsolePage, meta: { layout: 'admin' } },
-    { path: '/following', name: 'following', component: FollowingPage },
-    { path: '/settings', name: 'settings', component: SettingsPage },
-    { path: '/messages', name: 'messages', component: MessagesPage },
-    { path: '/notifications', name: 'notifications', component: NotificationsPage },
+    { path: '/following', name: 'following', component: FollowingPage, meta: { requiresAuth: true } },
+    { path: '/settings', name: 'settings', component: SettingsPage, meta: { requiresAuth: true } },
+    { path: '/messages', name: 'messages', component: MessagesPage, meta: { requiresAuth: true } },
+    { path: '/notifications', name: 'notifications', component: NotificationsPage, meta: { requiresAuth: true } },
     { path: '/observe', name: 'observation', component: ObservationPage },
     { path: '/requirements', name: 'requirements', component: RequirementsPage },
     { path: '/requirements/:major', name: 'major-forum', component: MajorForumPage },
@@ -47,4 +48,11 @@ export const router = createRouter({
   scrollBehavior() {
     return { top: 0 }
   },
+})
+
+router.beforeEach((to, from) => {
+  if (!to.meta.requiresAuth) return true
+  const forumStore = useForumStore()
+  if (forumStore.requireAuth(to.fullPath)) return true
+  return from.matched.length ? false : '/'
 })

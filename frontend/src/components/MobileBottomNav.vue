@@ -2,13 +2,13 @@
 import { Home, MessageCircle, Plus, TrendingUp, UserRound } from '@lucide/vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useForumStore } from '../stores/forum'
+import { currentProfileAuthRedirect, useForumStore } from '../stores/forum'
 
 const forumStore = useForumStore()
 const route = useRoute()
 const router = useRouter()
 
-const unreadCount = computed(() => forumStore.unreadNotificationCount + forumStore.messageUnread)
+const unreadCount = computed(() => forumStore.unreadNotificationCount)
 const isMessageRoute = computed(() => ['/notifications', '/messages'].includes(route.path))
 const isProfileRoute = computed(() =>
   route.path.startsWith('/users/') || ['/settings', '/following'].includes(route.path),
@@ -16,7 +16,7 @@ const isProfileRoute = computed(() =>
 
 function openProfile() {
   if (!forumStore.currentUser) {
-    forumStore.authOpen = true
+    forumStore.openAuth(currentProfileAuthRedirect)
     return
   }
   router.push(`/users/${encodeURIComponent(forumStore.currentUser.nickname)}`)

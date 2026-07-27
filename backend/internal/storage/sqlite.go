@@ -135,6 +135,27 @@ func initSQLiteSchema(db *sql.DB) error {
 			PRIMARY KEY (follower_id, author_name),
 			FOREIGN KEY(follower_id) REFERENCES users(id) ON DELETE CASCADE
 		);`,
+		`CREATE TABLE IF NOT EXISTS user_profiles (
+			user_id INTEGER PRIMARY KEY,
+			bio TEXT NOT NULL DEFAULT '',
+			choice_profile TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS notifications (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			recipient_user_id INTEGER NOT NULL,
+			actor_user_id INTEGER,
+			type TEXT NOT NULL,
+			title TEXT NOT NULL,
+			summary TEXT NOT NULL DEFAULT '',
+			target_url TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			read_at TEXT,
+			FOREIGN KEY(recipient_user_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+		);`,
 		`CREATE TABLE IF NOT EXISTS topics (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			slug TEXT NOT NULL UNIQUE,
@@ -220,6 +241,8 @@ func initSQLiteSchema(db *sql.DB) error {
 			ON posts (author_name, deleted_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_comments_post
 			ON comments (post_id, deleted_at, created_at ASC);`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_recipient
+			ON notifications (recipient_user_id, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_email_verification_lookup
 			ON email_verification_codes (email, used_at, expires_at, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_email_verification_attempts_email

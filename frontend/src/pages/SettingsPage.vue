@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Check, ChevronLeft, Save, Sparkles } from '@lucide/vue'
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { requestChoiceAdvice } from '../lib/api'
+import { fetchMyProfile, requestChoiceAdvice, updateMyProfile } from '../lib/api'
 import { subjectLabels, trackLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
 import type { ChoiceAdvice, ChoiceProfile, Subject, Track } from '../types/forum'
@@ -10,6 +10,8 @@ import type { ChoiceAdvice, ChoiceProfile, Subject, Track } from '../types/forum
 const router = useRouter()
 const forumStore = useForumStore()
 const saved = ref(false)
+const saving = ref(false)
+const bio = ref('')
 const advice = ref<ChoiceAdvice | null>(null)
 const adviceLoading = ref(false)
 const adviceError = ref('')
@@ -27,12 +29,18 @@ function toggleSubject(subject: Subject) {
   form.preferredSubjects = [...form.preferredSubjects.slice(-1), subject]
 }
 
-function save() {
-  forumStore.saveChoiceProfile({ ...form })
-  saved.value = true
-  window.setTimeout(() => {
-    saved.value = false
-  }, 1800)
+async function save() {
+  saving.value = true
+  try {
+    const profile = await updateMyProfile({ bio: bio.value, choiceProfile: { ...form } })
+    forumStore.saveChoiceProfile(profile.choiceProfile)
+    saved.value = true
+    window.setTimeout(() => {
+      saved.value = false
+    }, 1800)
+  } finally {
+    saving.value = false
+  }
 }
 
 async function generateAdvice() {
@@ -40,7 +48,7 @@ async function generateAdvice() {
     forumStore.authOpen = true
     return
   }
-  forumStore.saveChoiceProfile({ ...form })
+  await save()
   adviceLoading.value = true
   adviceError.value = ''
   try {
@@ -51,6 +59,12 @@ async function generateAdvice() {
     adviceLoading.value = false
   }
 }
+
+onMounted(async () => {
+  const profile = await fetchMyProfile()
+  bio.value = profile.bio
+  Object.assign(form, profile.choiceProfile)
+})
 
 function searchSuggestion(keyword: string) {
   forumStore.setKeyword(keyword)
@@ -67,8 +81,8 @@ function searchSuggestion(keyword: string) {
         <h1>个人信息与选科画像</h1>
         <p>完善这些信息后，后续可以据此推荐更贴近你的组合、帖子和数据建议。</p>
       </div>
-      <button class="write-button" type="button" @click="save">
-        <Save :size="16" /> 保存设置
+      <button class="write-button" type="button" :disabled="saving" @click="save">
+        <Save :size="16" /> {{ saving ? '保存中' : '保存设置' }}
       </button>
     </section>
 
@@ -76,6 +90,7 @@ function searchSuggestion(keyword: string) {
       <form class="settings-card" @submit.prevent="save">
         <h2>基础信息</h2>
         <div class="settings-fields">
+          <label class="full-field">个人简介<input v-model="bio" maxlength="300" placeholder="简单介绍你的年级、目标或正在纠结的问题" /></label>
           <label>姓名/称呼<input v-model="form.realName" placeholder="例如：小周" /></label>
           <label>所在城市<input v-model="form.city" placeholder="例如：杭州" /></label>
           <label>学校类型<input v-model="form.schoolType" placeholder="重点高中 / 普通高中 / 国际部" /></label>
@@ -162,7 +177,7 @@ function searchSuggestion(keyword: string) {
         <p>{{ trackLabels[form.preferredTrack] }} · {{ form.preferredSubjects.map((item) => subjectLabels[item]).join(' + ') }}</p>
         <p>MBTI：{{ form.mbti || '未填写' }}</p>
         <p>目标：{{ form.targetMajors || '未填写目标专业' }}</p>
-        <span v-if="saved"><Check :size="16" /> 已保存到本地</span>
+        <span v-if="saved"><Check :size="16" /> 已保存到账号</span>
         <div class="ai-advice-card">
           <div>
             <strong><Sparkles :size="16" /> AI 个性化建议</strong>

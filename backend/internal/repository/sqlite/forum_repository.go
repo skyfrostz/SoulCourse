@@ -96,6 +96,10 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 		query += ` AND LOWER(p.title || ' ' || p.content || ' ' || p.author_name || ' ' || p.province || ' ' || p.grade || ' ' || p.tags) LIKE ? ESCAPE '\'`
 		args = append(args, "%"+escapeLike(keyword)+"%")
 	}
+	if authorName := strings.TrimSpace(filter.AuthorName); authorName != "" {
+		query += " AND p.author_name = ?"
+		args = append(args, authorName)
+	}
 
 	switch filter.Sort {
 	case domain.SortLatest:
@@ -222,7 +226,8 @@ func (r *ForumRepository) CreatePost(ctx context.Context, user domain.User, inpu
 }
 
 func (r *ForumRepository) CreateComment(ctx context.Context, user domain.User, postID int64, input domain.CreateCommentInput) (domain.Comment, error) {
-	if _, err := r.fetchPostByID(ctx, postID); err != nil {
+	post, err := r.fetchPostByID(ctx, postID)
+	if err != nil {
 		return domain.Comment{}, err
 	}
 	now := nowString()
@@ -239,6 +244,9 @@ func (r *ForumRepository) CreateComment(ctx context.Context, user domain.User, p
 	}
 	if _, err := r.db.ExecContext(ctx, `UPDATE posts SET comments_count = comments_count + 1, updated_at = ? WHERE id = ?`, now, postID); err != nil {
 		return domain.Comment{}, err
+	}
+	if post.UserID != nil && *post.UserID != user.ID {
+		_ = r.createNotification(ctx, *post.UserID, &user.ID, "comment", user.Nickname+" 评论了你的帖子", truncateText(input.Content, 90), fmt.Sprintf("/posts/%d", postID))
 	}
 	return scanComment(r.db.QueryRowContext(ctx, `
 		SELECT id, post_id, user_id, author, role, content, created_at
@@ -359,6 +367,16 @@ func (r *ForumRepository) CreateUser(ctx context.Context, input domain.RegisterI
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
+		return domain.User{}, err
+	}
+	nowProfile := nowString()
+	if _, err := r.db.ExecContext(ctx, `
+		INSERT INTO user_profiles (user_id, bio, choice_profile, created_at, updated_at)
+		VALUES (?, '', ?, ?, ?)
+	`, id, mustJSON(defaultChoiceProfile()), nowProfile, nowProfile); err != nil {
+		return domain.User{}, err
+	}
+	if err := r.createNotification(ctx, id, nil, "profile", "完善你的选科画像", "补充 MBTI、目标专业和学科稳定性，让建议更贴近你。", "/settings"); err != nil {
 		return domain.User{}, err
 	}
 	return scanUser(r.db.QueryRowContext(ctx, `
@@ -605,11 +623,19 @@ func (r *ForumRepository) ConsumeEmailVerificationCode(ctx context.Context, emai
 }
 
 func (r *ForumRepository) TogglePostLike(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error) {
-	return r.togglePostRelation(ctx, "post_likes", "likes_count", userID, postID)
+	result, err := r.togglePostRelation(ctx, "post_likes", "likes_count", userID, postID)
+	if err == nil && result.Active {
+		_ = r.notifyPostOwner(ctx, userID, postID, "like", "赞了你的帖子")
+	}
+	return result, err
 }
 
 func (r *ForumRepository) TogglePostFavorite(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error) {
-	return r.togglePostRelation(ctx, "post_favorites", "favorites_count", userID, postID)
+	result, err := r.togglePostRelation(ctx, "post_favorites", "favorites_count", userID, postID)
+	if err == nil && result.Active {
+		_ = r.notifyPostOwner(ctx, userID, postID, "favorite", "收藏了你的帖子")
+	}
+	return result, err
 }
 
 func (r *ForumRepository) ToggleFollowAuthor(ctx context.Context, followerID int64, authorName string) (bool, error) {
@@ -645,7 +671,126 @@ func (r *ForumRepository) ToggleFollowAuthor(ctx context.Context, followerID int
 	if err != nil {
 		return false, err
 	}
+	var recipientID int64
+	if err := r.db.QueryRowContext(ctx, `SELECT id FROM users WHERE nickname = ? AND deleted_at IS NULL LIMIT 1`, authorName).Scan(&recipientID); err == nil && recipientID != followerID {
+		var actorName string
+		_ = r.db.QueryRowContext(ctx, `SELECT nickname FROM users WHERE id = ?`, followerID).Scan(&actorName)
+		_ = r.createNotification(ctx, recipientID, &followerID, "follow", actorName+" 关注了你", "你的公开讨论获得了一位新关注者。", fmt.Sprintf("/users/%s", authorName))
+	}
 	return true, nil
+}
+
+func (r *ForumRepository) GetAccountProfile(ctx context.Context, viewerID *int64, name string) (domain.AccountProfile, error) {
+	user, err := scanUser(r.db.QueryRowContext(ctx, `
+		SELECT id, email, nickname, role, province, grade, created_at
+		FROM users WHERE nickname = ? AND deleted_at IS NULL LIMIT 1
+	`, name))
+	if err != nil {
+		return domain.AccountProfile{}, err
+	}
+	profile := domain.AccountProfile{User: user, ChoiceProfile: defaultChoiceProfile()}
+	var profileJSON string
+	if err := r.db.QueryRowContext(ctx, `SELECT bio, choice_profile FROM user_profiles WHERE user_id = ?`, user.ID).Scan(&profile.Bio, &profileJSON); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return domain.AccountProfile{}, err
+	}
+	isOwner := viewerID != nil && *viewerID == user.ID
+	if isOwner && profileJSON != "" {
+		_ = json.Unmarshal([]byte(profileJSON), &profile.ChoiceProfile)
+	}
+
+	countQueries := []struct {
+		query string
+		dest  *int
+		arg   any
+	}{
+		{`SELECT COUNT(*) FROM posts WHERE user_id = ? AND deleted_at IS NULL`, &profile.Stats.Posts, user.ID},
+		{`SELECT COUNT(*) FROM comments WHERE user_id = ? AND deleted_at IS NULL`, &profile.Stats.Comments, user.ID},
+		{`SELECT COUNT(*) FROM follows WHERE follower_id = ?`, &profile.Stats.Following, user.ID},
+		{`SELECT COUNT(*) FROM follows WHERE author_name = ?`, &profile.Stats.Followers, user.Nickname},
+		{`SELECT COUNT(*) FROM post_favorites WHERE user_id = ?`, &profile.Stats.Favorites, user.ID},
+		{`SELECT COALESCE(SUM(likes_count + favorites_count), 0) FROM posts WHERE user_id = ? AND deleted_at IS NULL`, &profile.Stats.Engagement, user.ID},
+	}
+	for _, item := range countQueries {
+		if err := r.db.QueryRowContext(ctx, item.query, item.arg).Scan(item.dest); err != nil {
+			return domain.AccountProfile{}, err
+		}
+	}
+	profile.Posts, err = r.ListPosts(ctx, viewerID, domain.FeedFilter{AuthorName: user.Nickname, Sort: domain.SortLatest, Limit: 50})
+	if err != nil {
+		return domain.AccountProfile{}, err
+	}
+	profile.Comments, err = r.listProfileComments(ctx, user.ID)
+	if err != nil {
+		return domain.AccountProfile{}, err
+	}
+	if isOwner {
+		profile.Favorites, err = r.listFavoritePosts(ctx, user.ID)
+		if err != nil {
+			return domain.AccountProfile{}, err
+		}
+	} else {
+		profile.User.Email = ""
+	}
+	return profile, nil
+}
+
+func (r *ForumRepository) UpdateAccountProfile(ctx context.Context, userID int64, input domain.UpdateProfileInput) (domain.AccountProfile, error) {
+	now := nowString()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO user_profiles (user_id, bio, choice_profile, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET bio = excluded.bio, choice_profile = excluded.choice_profile, updated_at = excluded.updated_at
+	`, userID, strings.TrimSpace(input.Bio), mustJSON(input.ChoiceProfile), now, now)
+	if err != nil {
+		return domain.AccountProfile{}, err
+	}
+	user, err := r.GetUserByID(ctx, userID)
+	if err != nil {
+		return domain.AccountProfile{}, err
+	}
+	return r.GetAccountProfile(ctx, &userID, user.Nickname)
+}
+
+func (r *ForumRepository) ListNotifications(ctx context.Context, userID int64) ([]domain.Notification, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT n.id, n.type, n.title, n.summary, n.target_url, COALESCE(u.nickname, ''), n.created_at, n.read_at
+		FROM notifications n
+		LEFT JOIN users u ON u.id = n.actor_user_id
+		WHERE n.recipient_user_id = ?
+		ORDER BY n.created_at DESC, n.id DESC
+		LIMIT 100
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.Notification, 0)
+	for rows.Next() {
+		var item domain.Notification
+		var createdAt string
+		var readAt sql.NullString
+		if err := rows.Scan(&item.ID, &item.Type, &item.Title, &item.Summary, &item.TargetURL, &item.ActorName, &createdAt, &readAt); err != nil {
+			return nil, err
+		}
+		item.CreatedAt = parseTime(createdAt)
+		if readAt.Valid {
+			value := parseTime(readAt.String)
+			item.ReadAt = &value
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *ForumRepository) MarkNotificationRead(ctx context.Context, userID int64, notificationID *int64) error {
+	query := `UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE recipient_user_id = ?`
+	args := []any{nowString(), userID}
+	if notificationID != nil {
+		query += ` AND id = ?`
+		args = append(args, *notificationID)
+	}
+	_, err := r.db.ExecContext(ctx, query, args...)
+	return err
 }
 
 func (r *ForumRepository) togglePostRelation(ctx context.Context, table string, counter string, userID int64, postID int64) (domain.ToggleResult, error) {
@@ -690,6 +835,106 @@ func (r *ForumRepository) togglePostRelation(ctx context.Context, table string, 
 		return domain.ToggleResult{}, err
 	}
 	return domain.ToggleResult{Active: active, Count: count}, nil
+}
+
+func (r *ForumRepository) createNotification(ctx context.Context, recipientID int64, actorID *int64, notificationType string, title string, summary string, targetURL string) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO notifications (recipient_user_id, actor_user_id, type, title, summary, target_url, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, recipientID, actorID, notificationType, title, summary, targetURL, nowString())
+	return err
+}
+
+func (r *ForumRepository) notifyPostOwner(ctx context.Context, actorID int64, postID int64, notificationType string, action string) error {
+	post, err := r.fetchPostByID(ctx, postID)
+	if err != nil || post.UserID == nil || *post.UserID == actorID {
+		return err
+	}
+	var actorName string
+	if err := r.db.QueryRowContext(ctx, `SELECT nickname FROM users WHERE id = ?`, actorID).Scan(&actorName); err != nil {
+		return err
+	}
+	return r.createNotification(ctx, *post.UserID, &actorID, notificationType, actorName+" "+action, post.Title, fmt.Sprintf("/posts/%d", postID))
+}
+
+func (r *ForumRepository) listProfileComments(ctx context.Context, userID int64) ([]domain.ProfileComment, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT c.id, c.post_id, c.user_id, c.author, c.role, c.content, c.created_at, p.title
+		FROM comments c
+		JOIN posts p ON p.id = c.post_id
+		WHERE c.user_id = ? AND c.deleted_at IS NULL AND p.deleted_at IS NULL
+		ORDER BY c.created_at DESC
+		LIMIT 50
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.ProfileComment, 0)
+	for rows.Next() {
+		var item domain.ProfileComment
+		var commentUserID sql.NullInt64
+		var createdAt string
+		if err := rows.Scan(&item.Comment.ID, &item.Comment.PostID, &commentUserID, &item.Comment.Author, &item.Comment.Role, &item.Comment.Content, &createdAt, &item.PostTitle); err != nil {
+			return nil, err
+		}
+		if commentUserID.Valid {
+			value := commentUserID.Int64
+			item.Comment.UserID = &value
+		}
+		item.Comment.CreatedAt = parseTime(createdAt)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *ForumRepository) listFavoritePosts(ctx context.Context, userID int64) ([]domain.Post, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT p.id, p.user_id, p.author_name, p.author_role, p.title, p.content, p.image_urls, p.tags, p.track, p.electives,
+		       p.category, p.grade, p.province, p.likes_count, p.comments_count, p.favorites_count, p.created_at, p.updated_at,
+		       COALESCE(cs.source_platform, ''), COALESCE(cs.source_url, ''), COALESCE(cs.source_title, ''),
+		       COALESCE(cs.source_author, ''), COALESCE(cs.source_avatar_url, '')
+		FROM post_favorites pf
+		JOIN posts p ON p.id = pf.post_id
+		LEFT JOIN content_sources cs ON cs.post_id = p.id
+		WHERE pf.user_id = ? AND p.deleted_at IS NULL
+		ORDER BY pf.created_at DESC
+		LIMIT 50
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.Post, 0)
+	for rows.Next() {
+		post, err := scanPost(rows)
+		if err != nil {
+			return nil, err
+		}
+		post.ViewerFavorited = true
+		items = append(items, post)
+	}
+	return items, rows.Err()
+}
+
+func defaultChoiceProfile() domain.ChoiceProfile {
+	return domain.ChoiceProfile{
+		SchoolType:          "普通高中",
+		SubjectStability:    "中等",
+		PreferredTrack:      domain.TrackPhysics,
+		PreferredSubjects:   []domain.Subject{domain.SubjectChemistry, domain.SubjectBiology},
+		LearningStyle:       "理解推导型",
+		PressureTolerance:   "中等",
+		RecommendationFocus: "专业覆盖率优先",
+	}
+}
+
+func truncateText(value string, limit int) string {
+	text := []rune(strings.TrimSpace(value))
+	if len(text) <= limit {
+		return string(text)
+	}
+	return string(text[:limit]) + "…"
 }
 
 func (r *ForumRepository) fetchPostByID(ctx context.Context, id int64) (domain.Post, error) {

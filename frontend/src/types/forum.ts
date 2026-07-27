@@ -95,6 +95,43 @@ export interface ChoiceProfile {
   recommendationFocus: string
 }
 
+export interface ProfileStats {
+  posts: number
+  comments: number
+  following: number
+  followers: number
+  favorites: number
+  engagement: number
+}
+
+export interface ProfileComment {
+  comment: Comment
+  postTitle: string
+}
+
+export interface AccountProfile {
+  user: User
+  bio: string
+  choiceProfile: ChoiceProfile
+  stats: ProfileStats
+  posts: Post[]
+  comments: ProfileComment[]
+  favorites: Post[]
+}
+
+export type NotificationType = 'comment' | 'like' | 'favorite' | 'follow' | 'profile' | 'policy' | 'system'
+
+export interface AppNotification {
+  id: number
+  type: NotificationType
+  title: string
+  summary: string
+  targetUrl: string
+  actorName?: string
+  createdAt: string
+  readAt?: string
+}
+
 export interface AuthSession {
   user: User
   token: string

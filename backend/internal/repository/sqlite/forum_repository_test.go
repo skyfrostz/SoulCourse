@@ -167,3 +167,103 @@ func newVerificationLimitTestRepository(t *testing.T) *ForumRepository {
 	})
 	return NewForumRepository(db)
 }
+
+func TestAccountProfileAndNotificationsPersist(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	db, err := storage.NewSQLiteDB(config.Config{
+		SQLitePath:     filepath.Join(tempDir, "forum.db"),
+		MediaUploadDir: filepath.Join(tempDir, "uploads"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+	repository := NewForumRepository(db)
+	owner, err := repository.CreateUser(ctx, domain.RegisterInput{
+		Email: "owner@example.com", Nickname: "资料用户", Role: "student", Province: "广东", Grade: "高一",
+	}, "owner-hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor, err := repository.CreateUser(ctx, domain.RegisterInput{
+		Email: "actor@example.com", Nickname: "互动用户", Role: "student", Province: "广东", Grade: "高一",
+	}, "actor-hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := repository.UpdateAccountProfile(ctx, owner.ID, domain.UpdateProfileInput{
+		Bio: "目标计算机专业。",
+		ChoiceProfile: domain.ChoiceProfile{
+			SchoolType: "普通高中", MBTI: "INTJ", TargetMajors: "计算机科学与技术",
+			PreferredTrack:    domain.TrackPhysics,
+			PreferredSubjects: []domain.Subject{domain.SubjectChemistry, domain.SubjectGeography},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Bio != "目标计算机专业。" || updated.ChoiceProfile.MBTI != "INTJ" {
+		t.Fatalf("profile did not persist: %#v", updated)
+	}
+
+	publicProfile, err := repository.GetAccountProfile(ctx, nil, owner.Nickname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if publicProfile.User.Email != "" {
+		t.Fatal("public profile must not expose email")
+	}
+
+	post, err := repository.CreatePost(ctx, owner, domain.CreatePostInput{
+		Title: "通知链路测试帖子", Content: "用于验证真实互动通知可以正确持久化。",
+		Track: domain.TrackPhysics, Electives: []domain.Subject{domain.SubjectChemistry, domain.SubjectGeography},
+		Category: domain.CategoryQuestion, Grade: "高一", Province: "广东",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.CreateComment(ctx, actor, post.ID, domain.CreateCommentInput{Content: "这是一条真实评论。"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.TogglePostLike(ctx, actor.ID, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.TogglePostFavorite(ctx, actor.ID, post.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.ToggleFollowAuthor(ctx, actor.ID, owner.Nickname); err != nil {
+		t.Fatal(err)
+	}
+
+	notifications, err := repository.ListNotifications(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	types := make(map[string]bool, len(notifications))
+	for _, notification := range notifications {
+		types[notification.Type] = true
+	}
+	for _, notificationType := range []string{"profile", "comment", "like", "favorite", "follow"} {
+		if !types[notificationType] {
+			t.Fatalf("missing %q notification in %#v", notificationType, types)
+		}
+	}
+
+	if err := repository.MarkNotificationRead(ctx, owner.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	notifications, err = repository.ListNotifications(ctx, owner.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, notification := range notifications {
+		if notification.ReadAt == nil {
+			t.Fatalf("notification %d was not marked read", notification.ID)
+		}
+	}
+}

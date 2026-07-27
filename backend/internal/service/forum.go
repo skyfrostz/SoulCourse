@@ -48,6 +48,10 @@ type ForumRepository interface {
 	TogglePostLike(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error)
 	TogglePostFavorite(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error)
 	ToggleFollowAuthor(ctx context.Context, followerID int64, authorName string) (bool, error)
+	GetAccountProfile(ctx context.Context, viewerID *int64, name string) (domain.AccountProfile, error)
+	UpdateAccountProfile(ctx context.Context, userID int64, input domain.UpdateProfileInput) (domain.AccountProfile, error)
+	ListNotifications(ctx context.Context, userID int64) ([]domain.Notification, error)
+	MarkNotificationRead(ctx context.Context, userID int64, notificationID *int64) error
 }
 
 type ForumService struct {
@@ -261,6 +265,25 @@ func (s *ForumService) TogglePostFavorite(ctx context.Context, userID int64, pos
 
 func (s *ForumService) ToggleFollowAuthor(ctx context.Context, followerID int64, authorName string) (bool, error) {
 	return s.repo.ToggleFollowAuthor(ctx, followerID, authorName)
+}
+
+func (s *ForumService) GetAccountProfile(ctx context.Context, viewerID *int64, name string) (domain.AccountProfile, error) {
+	return s.repo.GetAccountProfile(ctx, viewerID, strings.TrimSpace(name))
+}
+
+func (s *ForumService) UpdateAccountProfile(ctx context.Context, userID int64, input domain.UpdateProfileInput) (domain.AccountProfile, error) {
+	if len(input.ChoiceProfile.PreferredSubjects) != 2 || input.ChoiceProfile.PreferredSubjects[0] == input.ChoiceProfile.PreferredSubjects[1] {
+		return domain.AccountProfile{}, ErrInvalidElectives
+	}
+	return s.repo.UpdateAccountProfile(ctx, userID, input)
+}
+
+func (s *ForumService) ListNotifications(ctx context.Context, userID int64) ([]domain.Notification, error) {
+	return s.repo.ListNotifications(ctx, userID)
+}
+
+func (s *ForumService) MarkNotificationRead(ctx context.Context, userID int64, notificationID *int64) error {
+	return s.repo.MarkNotificationRead(ctx, userID, notificationID)
 }
 
 func (s *ForumService) issueToken(user domain.User) (string, error) {

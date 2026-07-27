@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
-import { authStorageKey } from '../lib/api'
-import { notificationSeeds } from '../lib/notifications'
+import { authStorageKey, fetchMyProfile, fetchNotifications, markAllNotificationsRead, markNotificationRead } from '../lib/api'
 import type {
+  AppNotification,
   AuthSession,
   Category,
   ChoiceProfile,
@@ -43,6 +43,8 @@ export interface FollowProfile {
   followedAt: string
 }
 
+export const currentProfileAuthRedirect = '@current-profile'
+
 interface LocalFollowState {
   following: Record<string, Record<string, FollowProfile>>
   followers: Record<string, Record<string, FollowProfile>>
@@ -62,11 +64,11 @@ export const useForumStore = defineStore('forum', {
     pageSize: 12,
     session: readStoredSession(),
     authOpen: false,
+    authRedirect: '',
     publishOpen: false,
     publishCategory: 'question' as Category,
     refreshHint: '',
-    readNotificationIds: readStoredNotificationReads(),
-    messageUnread: 3,
+    notifications: [] as AppNotification[],
     choiceProfile: readStoredChoiceProfile(),
     localEngagement: readStoredLocalEngagement(),
     detailPanel: { kind: 'none' } as DetailPanel,
@@ -74,8 +76,7 @@ export const useForumStore = defineStore('forum', {
   getters: {
     isAuthed: (state) => Boolean(state.session?.token),
     currentUser: (state) => state.session?.user ?? null,
-    unreadNotificationCount: (state) =>
-      notificationSeeds.filter((notification) => !state.readNotificationIds[notification.id]).length,
+    unreadNotificationCount: (state) => state.notifications.filter((notification) => !notification.readAt).length,
   },
   actions: {
     setTrack(track: Track | 'all') {
@@ -126,18 +127,16 @@ export const useForumStore = defineStore('forum', {
         this.refreshHint = ''
       }, 1600)
     },
-    markNotificationsRead(ids?: string[]) {
-      const next = { ...this.readNotificationIds }
-      const targetIds = ids ?? notificationSeeds.map((notification) => notification.id)
-      targetIds.forEach((id) => {
-        next[id] = true
-      })
-      this.readNotificationIds = next
-      localStorage.setItem(notificationReadsStorageKey, JSON.stringify(next))
-    },
-    markMessagesRead(count?: number) {
-      const readCount = count ?? this.messageUnread
-      this.messageUnread = Math.max(0, this.messageUnread - readCount)
+    async markNotificationsRead(ids?: number[]) {
+      if (!this.isAuthed) return
+      if (ids?.length) {
+        await Promise.all(ids.map((id) => markNotificationRead(id)))
+        this.notifications = this.notifications.map((item) => ids.includes(item.id) ? { ...item, readAt: new Date().toISOString() } : item)
+        return
+      }
+      await markAllNotificationsRead()
+      const readAt = new Date().toISOString()
+      this.notifications = this.notifications.map((item) => ({ ...item, readAt: item.readAt ?? readAt }))
     },
     setPage(page: number) {
       this.page = Math.max(1, page)
@@ -150,14 +149,22 @@ export const useForumStore = defineStore('forum', {
       this.session = session
       localStorage.setItem(authStorageKey, JSON.stringify(session))
       this.authOpen = false
+      void this.hydrateAccount()
     },
     logout() {
       this.session = null
+      this.notifications = []
+      localStorage.removeItem(choiceProfileStorageKey)
+      this.choiceProfile = readStoredChoiceProfile(true)
       localStorage.removeItem(authStorageKey)
     },
-    requireAuth() {
+    openAuth(redirect = '') {
+      this.authRedirect = redirect
+      this.authOpen = true
+    },
+    requireAuth(redirect = '') {
       if (!this.isAuthed) {
-        this.authOpen = true
+        this.openAuth(redirect)
         return false
       }
       return true
@@ -171,6 +178,17 @@ export const useForumStore = defineStore('forum', {
     saveChoiceProfile(profile: ChoiceProfile) {
       this.choiceProfile = profile
       localStorage.setItem(choiceProfileStorageKey, JSON.stringify(profile))
+    },
+    async hydrateAccount() {
+      if (!this.isAuthed) return
+      try {
+        const [profile, notifications] = await Promise.all([fetchMyProfile(), fetchNotifications()])
+        this.choiceProfile = profile.choiceProfile
+        this.notifications = notifications
+        localStorage.setItem(choiceProfileStorageKey, JSON.stringify(profile.choiceProfile))
+      } catch {
+        this.notifications = []
+      }
     },
     openTopic(detail: TopicDetail) {
       this.detailPanel = { kind: 'topic', detail }
@@ -251,7 +269,6 @@ export const useForumStore = defineStore('forum', {
 })
 
 export const choiceProfileStorageKey = 'scf_choice_profile'
-export const notificationReadsStorageKey = 'scf_notification_reads'
 
 function readStoredSession(): AuthSession | null {
   try {
@@ -263,7 +280,7 @@ function readStoredSession(): AuthSession | null {
   }
 }
 
-function readStoredChoiceProfile(): ChoiceProfile {
+function readStoredChoiceProfile(reset = false): ChoiceProfile {
   const defaults: ChoiceProfile = {
     realName: '',
     city: '',
@@ -287,21 +304,11 @@ function readStoredChoiceProfile(): ChoiceProfile {
   }
 
   try {
-    const raw = localStorage.getItem(choiceProfileStorageKey)
+    const raw = reset ? null : localStorage.getItem(choiceProfileStorageKey)
     return raw ? { ...defaults, ...(JSON.parse(raw) as ChoiceProfile) } : defaults
   } catch {
     localStorage.removeItem(choiceProfileStorageKey)
     return defaults
-  }
-}
-
-function readStoredNotificationReads(): Record<string, boolean> {
-  try {
-    const raw = localStorage.getItem(notificationReadsStorageKey)
-    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
-  } catch {
-    localStorage.removeItem(notificationReadsStorageKey)
-    return {}
   }
 }
 

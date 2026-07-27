@@ -1,68 +1,61 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Bell, ChevronLeft, ExternalLink, Heart, MessageCircle, Plus, Search, ShieldCheck, UserPlus } from '@lucide/vue'
-import { notificationSeeds, notificationTypeLabels, type NotificationType } from '../lib/notifications'
+import { notificationTypeLabels } from '../lib/notifications'
 import { useForumStore } from '../stores/forum'
+import type { NotificationType } from '../types/forum'
 
 const router = useRouter()
 const forumStore = useForumStore()
-const activeType = ref<NotificationType | 'all'>('all')
-const activeId = ref(notificationSeeds[0]?.id ?? '')
+type NotificationFilter = NotificationType | 'all' | 'engagement'
+const activeType = ref<NotificationFilter>('all')
+const activeId = ref<number | null>(null)
 const keyword = ref('')
 const mobileSearchOpen = ref(false)
 
-const typeTabs: Array<{ label: string; value: NotificationType | 'all' }> = [
+const typeTabs: Array<{ label: string; value: NotificationFilter }> = [
   { label: '全部', value: 'all' },
   { label: '评论互动', value: 'comment' },
-  { label: '政策更新', value: 'policy' },
+  { label: '赞与收藏', value: 'engagement' },
   { label: '画像建议', value: 'profile' },
   { label: '关注动态', value: 'follow' },
   { label: '系统提醒', value: 'system' },
 ]
 
-const notifications = computed(() =>
-  notificationSeeds.map((item) => ({
-    ...item,
-    unread: !forumStore.readNotificationIds[item.id],
-  })),
-)
+const notifications = computed(() => forumStore.notifications.map((item) => ({ ...item, unread: !item.readAt })))
 
 const filteredNotifications = computed(() => {
   const q = keyword.value.trim()
   return notifications.value.filter((item) =>
-    (activeType.value === 'all' || item.type === activeType.value) &&
-    (!q || [item.title, item.summary, item.body, notificationTypeLabels[item.type]].some((value) => value.includes(q))),
+    (activeType.value === 'all' || item.type === activeType.value || (activeType.value === 'engagement' && ['like', 'favorite'].includes(item.type))) &&
+    (!q || [item.title, item.summary, notificationTypeLabels[item.type]].some((value) => value.includes(q))),
   )
 })
 
 const activeNotification = computed(() =>
-  notifications.value.find((item) => item.id === activeId.value) ?? filteredNotifications.value[0] ?? notifications.value[0],
+  notifications.value.find((item) => item.id === activeId.value) ?? filteredNotifications.value[0],
 )
 
-function selectNotification(id: string) {
+function selectNotification(id: number) {
   activeId.value = id
-  forumStore.markNotificationsRead([id])
+  void forumStore.markNotificationsRead([id])
 }
 
-function openMobileNotification(id: string, targetUrl: string) {
+function openMobileNotification(id: number, targetUrl: string) {
   selectNotification(id)
   router.push(targetUrl)
 }
 
-function openFavorites() {
-  if (!forumStore.currentUser) {
-    forumStore.authOpen = true
-    return
-  }
-  router.push(`/users/${encodeURIComponent(forumStore.currentUser.nickname)}#favorites`)
-}
-
 function openTarget() {
   if (!activeNotification.value) return
-  forumStore.markNotificationsRead([activeNotification.value.id])
+  void forumStore.markNotificationsRead([activeNotification.value.id])
   router.push(activeNotification.value.targetUrl)
 }
+
+onMounted(() => {
+  void forumStore.hydrateAccount()
+})
 
 function formatTime(value: string) {
   return new Date(value).toLocaleString('zh-CN', {
@@ -96,7 +89,7 @@ function formatShortTime(value: string) {
     </label>
 
     <nav class="mobile-message-shortcuts" aria-label="消息快捷入口">
-      <button type="button" @click="openFavorites">
+      <button type="button" :class="{ active: activeType === 'engagement' }" @click="activeType = 'engagement'">
         <span class="tone-like"><Heart :size="25" /></span>
         <strong>赞与收藏</strong>
       </button>
@@ -113,7 +106,8 @@ function formatShortTime(value: string) {
     <section class="mobile-notification-list" aria-label="通知列表">
       <button v-for="item in filteredNotifications" :key="item.id" type="button" @click="openMobileNotification(item.id, item.targetUrl)">
         <span class="mobile-notification-avatar" :class="`tone-${item.type}`">
-          <MessageCircle v-if="item.type === 'comment'" :size="21" />
+          <Heart v-if="['like', 'favorite'].includes(item.type)" :size="21" />
+          <MessageCircle v-else-if="item.type === 'comment'" :size="21" />
           <UserPlus v-else-if="item.type === 'follow'" :size="21" />
           <ShieldCheck v-else :size="21" />
         </span>
@@ -124,6 +118,11 @@ function formatShortTime(value: string) {
         <time>{{ formatShortTime(item.createdAt) }}</time>
         <i v-if="item.unread"></i>
       </button>
+      <div v-if="!filteredNotifications.length" class="mobile-message-empty">
+        <Bell :size="28" />
+        <strong>暂时没有新消息</strong>
+        <p>与你有关的赞、收藏、关注和评论会出现在这里。</p>
+      </div>
     </section>
 
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
@@ -147,7 +146,6 @@ function formatShortTime(value: string) {
     <nav class="content-lens-tabs notification-tabs" aria-label="通知筛选">
       <RouterLink class="notification-private-link" to="/messages">
         <MessageCircle :size="15" /> 私信
-        <span v-if="forumStore.messageUnread">{{ forumStore.messageUnread }}</span>
       </RouterLink>
       <button
         v-for="tab in typeTabs"
@@ -180,10 +178,10 @@ function formatShortTime(value: string) {
       <article v-if="activeNotification" class="notification-detail-panel">
         <small>{{ notificationTypeLabels[activeNotification.type] }} · {{ formatTime(activeNotification.createdAt) }}</small>
         <h2>{{ activeNotification.title }}</h2>
-        <p>{{ activeNotification.body }}</p>
+        <p>{{ activeNotification.summary }}</p>
         <div class="notification-detail-actions">
           <button class="primary-wide compact" type="button" @click="openTarget">
-            {{ activeNotification.targetLabel }} <ExternalLink :size="15" />
+            查看相关内容 <ExternalLink :size="15" />
           </button>
           <button type="button" @click="forumStore.markNotificationsRead([activeNotification.id])">标记已读</button>
         </div>

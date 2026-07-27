@@ -1,6 +1,8 @@
 import axios from 'axios'
 import { defaultApiBasePath } from './runtime'
 import type {
+  AccountProfile,
+  AppNotification,
   AuthSession,
   ChoiceAdvice,
   ChoiceProfile,
@@ -91,6 +93,34 @@ export interface EmailVerificationCodeResult {
   hourlyLimit: number
   hourlyRemaining: number
   debugCode?: string
+}
+
+export async function fetchMyProfile(): Promise<AccountProfile> {
+  const response = await api.get<ApiEnvelope<AccountProfile>>('/me/profile')
+  return response.data.data
+}
+
+export async function fetchProfile(name: string): Promise<AccountProfile> {
+  const response = await api.get<ApiEnvelope<AccountProfile>>(`/profiles/${encodeURIComponent(name)}`)
+  return response.data.data
+}
+
+export async function updateMyProfile(payload: { bio: string; choiceProfile: ChoiceProfile }): Promise<AccountProfile> {
+  const response = await api.put<ApiEnvelope<AccountProfile>>('/me/profile', payload)
+  return response.data.data
+}
+
+export async function fetchNotifications(): Promise<AppNotification[]> {
+  const response = await api.get<ApiEnvelope<AppNotification[]>>('/notifications')
+  return response.data.data
+}
+
+export async function markNotificationRead(id: number): Promise<void> {
+  await api.post(`/notifications/${id}/read`)
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await api.post('/notifications/read-all')
 }
 
 export async function fetchPosts(filter: FeedFilter, page = 1, pageSize = 4): Promise<Post[]> {

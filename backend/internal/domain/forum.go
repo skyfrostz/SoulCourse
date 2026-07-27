@@ -65,15 +65,16 @@ type Comment struct {
 }
 
 type FeedFilter struct {
-	Track    SubjectTrack
-	Subject  Subject
-	Subjects []Subject
-	Category PostCategory
-	Province string
-	Keyword  string
-	Sort     FeedSort
-	Limit    int
-	Offset   int
+	Track      SubjectTrack
+	Subject    Subject
+	Subjects   []Subject
+	Category   PostCategory
+	Province   string
+	Keyword    string
+	AuthorName string
+	Sort       FeedSort
+	Limit      int
+	Offset     int
 }
 
 type CreatePostInput struct {
@@ -111,6 +112,68 @@ type User struct {
 	Province  string    `json:"province"`
 	Grade     string    `json:"grade"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+type ChoiceProfile struct {
+	RealName            string       `json:"realName" binding:"max=40"`
+	City                string       `json:"city" binding:"max=40"`
+	SchoolType          string       `json:"schoolType" binding:"max=60"`
+	GradeRank           string       `json:"gradeRank" binding:"max=40"`
+	MBTI                string       `json:"mbti" binding:"max=12"`
+	TargetMajors        string       `json:"targetMajors" binding:"max=240"`
+	TargetCities        string       `json:"targetCities" binding:"max=120"`
+	SubjectStability    string       `json:"subjectStability" binding:"max=20"`
+	PhysicsScore        string       `json:"physicsScore" binding:"max=20"`
+	HistoryScore        string       `json:"historyScore" binding:"max=20"`
+	ChemistryScore      string       `json:"chemistryScore" binding:"max=20"`
+	BiologyScore        string       `json:"biologyScore" binding:"max=20"`
+	PoliticsScore       string       `json:"politicsScore" binding:"max=20"`
+	GeographyScore      string       `json:"geographyScore" binding:"max=20"`
+	PreferredTrack      SubjectTrack `json:"preferredTrack" binding:"required,oneof=physics history"`
+	PreferredSubjects   []Subject    `json:"preferredSubjects" binding:"required,len=2,dive,oneof=chemistry biology politics geography"`
+	LearningStyle       string       `json:"learningStyle" binding:"max=40"`
+	PressureTolerance   string       `json:"pressureTolerance" binding:"max=20"`
+	RecommendationFocus string       `json:"recommendationFocus" binding:"max=60"`
+}
+
+type UpdateProfileInput struct {
+	Bio           string        `json:"bio" binding:"max=300"`
+	ChoiceProfile ChoiceProfile `json:"choiceProfile" binding:"required"`
+}
+
+type ProfileStats struct {
+	Posts      int `json:"posts"`
+	Comments   int `json:"comments"`
+	Following  int `json:"following"`
+	Followers  int `json:"followers"`
+	Favorites  int `json:"favorites"`
+	Engagement int `json:"engagement"`
+}
+
+type ProfileComment struct {
+	Comment   Comment `json:"comment"`
+	PostTitle string  `json:"postTitle"`
+}
+
+type AccountProfile struct {
+	User          User             `json:"user"`
+	Bio           string           `json:"bio"`
+	ChoiceProfile ChoiceProfile    `json:"choiceProfile"`
+	Stats         ProfileStats     `json:"stats"`
+	Posts         []Post           `json:"posts"`
+	Comments      []ProfileComment `json:"comments"`
+	Favorites     []Post           `json:"favorites"`
+}
+
+type Notification struct {
+	ID        int64      `json:"id"`
+	Type      string     `json:"type"`
+	Title     string     `json:"title"`
+	Summary   string     `json:"summary"`
+	TargetURL string     `json:"targetUrl"`
+	ActorName string     `json:"actorName,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	ReadAt    *time.Time `json:"readAt,omitempty"`
 }
 
 type RegisterInput struct {

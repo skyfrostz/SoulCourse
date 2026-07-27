@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import AuthModal from './components/AuthModal.vue'
 import MobileBottomNav from './components/MobileBottomNav.vue'
 import PublishModal from './components/PublishModal.vue'
@@ -12,6 +12,10 @@ const forumStore = useForumStore()
 const { source } = useForumData()
 const route = useRoute()
 const isAdminLayout = computed(() => route.meta.layout === 'admin')
+
+onMounted(() => {
+  if (forumStore.isAuthed) void forumStore.hydrateAccount()
+})
 </script>
 
 <template>

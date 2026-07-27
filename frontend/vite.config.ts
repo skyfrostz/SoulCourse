@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
   const localEnv = loadEnv(mode, process.cwd(), '')
   const env = { ...workspaceEnv, ...localEnv }
   const devProxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://localhost:1309'
+  const devServerPort = Number.parseInt(env.FRONTEND_HOST_PORT || '5712', 10)
   const base = normalizeBasePath(env.VITE_APP_BASE_PATH || env.APP_BASE_PATH)
   const apiProxyPrefix = `${base}api`
   const uploadsProxyPrefix = `${base}uploads`
@@ -24,7 +25,7 @@ export default defineConfig(({ mode }) => {
     plugins: [vue()],
     server: {
       host: '0.0.0.0',
-      port: 5712,
+      port: Number.isNaN(devServerPort) ? 5712 : devServerPort,
       proxy: {
         [apiProxyPrefix]: {
           target: devProxyTarget,

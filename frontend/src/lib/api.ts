@@ -17,8 +17,10 @@ import type {
 export const authStorageKey = 'scf_auth_session'
 export const apiDataEnabled = true
 
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? defaultApiBasePath(),
+  baseURL: configuredApiBaseUrl || defaultApiBasePath(),
   timeout: 8000,
 })
 

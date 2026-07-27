@@ -33,7 +33,6 @@
   -webkit-font-smoothing: antialiased;
 }
 
-
 * {
   box-sizing: border-box;
 }
@@ -7712,5 +7711,189 @@ textarea {
     min-height: 260px;
     border: 0;
     background: #fff;
+  }
+}
+
+/* Compact discovery grids for the two mobile reference tools. */
+@media (max-width: 760px) {
+  .requirements-page,
+  .knowledge-page {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .requirements-page .requirement-note-waterfall,
+  .knowledge-page .knowledge-source-grid,
+  .knowledge-page .xhs-province-waterfall {
+    display: block;
+    column-count: 2;
+    column-gap: 8px;
+  }
+
+  .requirements-page .requirement-note-card,
+  .knowledge-page .knowledge-source-card,
+  .knowledge-page .xhs-province-card {
+    display: inline-block;
+    width: 100%;
+    margin: 0 0 8px;
+    break-inside: avoid;
+  }
+
+  .requirements-page .requirement-note-cover {
+    min-height: 118px;
+    padding: 12px;
+  }
+
+  .requirements-page .requirement-note-cover strong {
+    margin-top: 12px;
+    font-size: 30px;
+  }
+
+  .requirements-page .requirement-note-cover small,
+  .requirements-page .requirement-note-cover > span {
+    font-size: 11px;
+  }
+
+  .requirements-page .cover-bars {
+    right: 10px;
+    bottom: 10px;
+    gap: 4px;
+  }
+
+  .requirements-page .cover-bars i {
+    width: 9px;
+  }
+
+  .requirements-page .requirement-note-body {
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .requirements-page .requirement-note-body > small,
+  .requirements-page .requirement-subjects span,
+  .requirements-page .note-social-row {
+    font-size: 11px;
+  }
+
+  .requirements-page .requirement-note-body h2 {
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  .requirements-page .requirement-subjects {
+    gap: 4px;
+  }
+
+  .requirements-page .requirement-subjects span {
+    height: auto;
+    padding: 4px 6px;
+  }
+
+  .requirements-page .requirement-note-body p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .requirements-page .requirement-note-body > p:nth-of-type(2),
+  .requirements-page .requirement-note-body .mini-tag-row,
+  .requirements-page .requirement-note-body footer {
+    display: none;
+  }
+
+  .requirements-page .note-social-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .knowledge-page .knowledge-source-card {
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .knowledge-page .knowledge-source-cover {
+    aspect-ratio: 4 / 3;
+    margin-bottom: 2px;
+  }
+
+  .knowledge-page .knowledge-source-card h2 {
+    font-size: 15px;
+    line-height: 1.4;
+  }
+
+  .knowledge-page .knowledge-source-card p,
+  .knowledge-page .province-note-body p {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .knowledge-page .knowledge-source-card .mini-tag-row {
+    display: none;
+  }
+
+  .knowledge-page .province-note-cover {
+    min-width: 0;
+    min-height: 126px;
+    padding: 12px;
+  }
+
+  .knowledge-page .province-card-main {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .knowledge-page .province-note-cover strong {
+    font-size: 30px;
+  }
+
+  .knowledge-page .province-note-cover em {
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+
+  .knowledge-page .province-note-body {
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .knowledge-page .province-note-body .province-card-head span {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .knowledge-page .province-card-head small {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .knowledge-page .province-note-body p {
+    -webkit-line-clamp: 2;
+  }
+
+  .knowledge-page .province-checklist {
+    display: none;
+  }
+
+  .knowledge-page .province-note-footer {
+    padding: 0 10px 10px;
+  }
+
+  .knowledge-page .province-note-footer a,
+  .knowledge-page .knowledge-source-card a {
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 560px) and (max-width: 760px) {
+  .requirements-page .requirement-note-waterfall,
+  .knowledge-page .knowledge-source-grid,
+  .knowledge-page .xhs-province-waterfall {
+    column-count: 3;
   }
 }

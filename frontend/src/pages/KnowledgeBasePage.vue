@@ -95,7 +95,7 @@ function sourceCover(url: string) {
 </script>
 
 <template>
-  <main class="detail-page">
+  <main class="detail-page knowledge-page">
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
 
     <section class="knowledge-hero">

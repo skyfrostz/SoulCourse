@@ -42,7 +42,7 @@ const goMajorForum = (major: string) => {
 </script>
 
 <template>
-  <main class="detail-page">
+  <main class="detail-page requirements-page">
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
     <section class="requirements-xhs-hero">
       <div>

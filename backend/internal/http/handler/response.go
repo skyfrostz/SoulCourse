@@ -19,11 +19,19 @@ func created(c *gin.Context, data any) {
 }
 
 func fail(c *gin.Context, status int, code string, message string) {
+	failWithDetails(c, status, code, message, nil)
+}
+
+func failWithDetails(c *gin.Context, status int, code string, message string, details envelope) {
+	errorPayload := envelope{
+		"code":    code,
+		"message": message,
+	}
+	for key, value := range details {
+		errorPayload[key] = value
+	}
 	c.JSON(status, envelope{
-		"error": envelope{
-			"code":    code,
-			"message": message,
-		},
+		"error": errorPayload,
 	})
 }
 

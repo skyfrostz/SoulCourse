@@ -94,6 +94,10 @@ export interface AdminEmailConfig {
   useTLS: boolean
   startTLS: boolean
   emailVerificationTTLMinutes: number
+  emailVerificationCooldownSeconds: number
+  emailVerificationEmailHourlyLimit: number
+  emailVerificationIPHourlyLimit: number
+  emailVerificationMaxValidationAttempts: number
   missing: string[]
 }
 
@@ -539,7 +543,14 @@ async function requestAdmin<T>(apiBase: string, path: string, options?: { method
     return response.data.data
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      const message = error.response?.data?.error?.message || error.message
+      const responseError = error.response?.data?.error
+      if (responseError?.code === 'email_verification_rate_limited') {
+        const retryAfterSeconds = Math.max(1, Number(responseError.retryAfterSeconds) || 60)
+        const retryText =
+          retryAfterSeconds < 60 ? `${retryAfterSeconds} 秒` : `${Math.ceil(retryAfterSeconds / 60)} 分钟`
+        throw new Error(`验证码请求受限，请在 ${retryText}后重试（本小时剩余 ${responseError.hourlyRemaining ?? 0} 次）`)
+      }
+      const message = responseError?.message || error.message
       throw new Error(message)
     }
     throw error
@@ -624,7 +635,13 @@ export async function uploadAdminImage(apiBase: string, token: string, file: Fil
 }
 
 export async function sendAdminTestEmail(apiBase: string, token: string, email: string) {
-  return requestAdmin<{ email: string; debugCode?: string }>(apiBase, '/admin/email-test', {
+  return requestAdmin<{
+    email: string
+    retryAfterSeconds: number
+    hourlyLimit: number
+    hourlyRemaining: number
+    debugCode?: string
+  }>(apiBase, '/admin/email-test', {
     method: 'POST',
     token,
     data: { email },

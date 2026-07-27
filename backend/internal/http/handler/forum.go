@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"errors"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,13 +30,40 @@ func (h *ForumHandler) SendEmailVerificationCode(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "invalid_payload", err.Error())
 		return
 	}
+	input.ClientIP = requestRemoteIP(c.Request)
 
 	result, err := h.service.SendEmailVerificationCode(c.Request.Context(), input)
 	if err != nil {
+		if handleEmailVerificationRateLimit(c, err) {
+			return
+		}
 		fail(c, http.StatusInternalServerError, "email_send_failed", "could not send verification code")
 		return
 	}
 	ok(c, result)
+}
+
+func requestRemoteIP(request *http.Request) string {
+	host, _, err := net.SplitHostPort(request.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return strings.TrimSpace(request.RemoteAddr)
+}
+
+func handleEmailVerificationRateLimit(c *gin.Context, err error) bool {
+	var rateLimitError *service.EmailVerificationRateLimitError
+	if !errors.As(err, &rateLimitError) {
+		return false
+	}
+	limit := rateLimitError.Limit
+	c.Header("Retry-After", strconv.Itoa(limit.RetryAfterSeconds))
+	failWithDetails(c, http.StatusTooManyRequests, "email_verification_rate_limited", "too many verification code requests", envelope{
+		"retryAfterSeconds": limit.RetryAfterSeconds,
+		"hourlyLimit":       limit.EmailHourlyLimit,
+		"hourlyRemaining":   limit.EmailHourlyRemaining,
+	})
+	return true
 }
 
 func (h *ForumHandler) Register(c *gin.Context) {

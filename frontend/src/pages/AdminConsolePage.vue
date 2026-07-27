@@ -524,6 +524,10 @@ async function checkConnection() {
       useTLS: false,
       startTLS: false,
       emailVerificationTTLMinutes: 0,
+      emailVerificationCooldownSeconds: 0,
+      emailVerificationEmailHourlyLimit: 0,
+      emailVerificationIPHourlyLimit: 0,
+      emailVerificationMaxValidationAttempts: 0,
       missing: [toErrorMessage(error)],
     }
   }
@@ -534,7 +538,10 @@ async function sendTestMailNow() {
   testEmailResult.value = '正在发送...'
   try {
     const data = await sendAdminTestEmail(settings.value.apiBase, settings.value.adminToken, testEmail.value.trim())
-    testEmailResult.value = data.debugCode ? `SMTP 未启用，本地调试验证码：${data.debugCode}` : `测试验证码已发送到 ${data.email}`
+    const quota = `本邮箱本小时剩余 ${data.hourlyRemaining} / ${data.hourlyLimit} 次`
+    testEmailResult.value = data.debugCode
+      ? `SMTP 未启用，本地调试验证码：${data.debugCode}（${quota}）`
+      : `测试验证码已发送到 ${data.email}（${quota}）`
   } catch (error) {
     testEmailResult.value = toErrorMessage(error)
   }
@@ -561,6 +568,10 @@ function formatSmtpRows(data: AdminEmailConfig) {
     ['TLS', data.useTLS ? '开启' : '关闭'],
     ['STARTTLS', data.startTLS ? '开启' : '关闭'],
     ['验证码有效期', `${data.emailVerificationTTLMinutes} 分钟`],
+    ['发送冷却', `${data.emailVerificationCooldownSeconds} 秒`],
+    ['单邮箱小时上限', `${data.emailVerificationEmailHourlyLimit} 次`],
+    ['单 IP 小时上限', `${data.emailVerificationIPHourlyLimit} 次`],
+    ['单个验证码校验上限', `${data.emailVerificationMaxValidationAttempts} 次`],
   ]
 }
 

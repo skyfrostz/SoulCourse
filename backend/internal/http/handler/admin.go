@@ -173,17 +173,21 @@ func (h *AdminHandler) EmailConfig(c *gin.Context) {
 		missing = append(missing, "SMTP_FROM_EMAIL")
 	}
 	ok(c, envelope{
-		"enabled":                     h.cfg.SMTPEnabled(),
-		"host":                        h.cfg.SMTPHost,
-		"port":                        h.cfg.SMTPPort,
-		"usernameConfigured":          h.cfg.SMTPUsername != "",
-		"passwordConfigured":          h.cfg.SMTPPassword != "",
-		"fromEmail":                   h.cfg.SMTPFromEmail,
-		"fromName":                    h.cfg.SMTPFromName,
-		"useTLS":                      h.cfg.SMTPUseTLS,
-		"startTLS":                    h.cfg.SMTPStartTLS,
-		"emailVerificationTTLMinutes": h.cfg.EmailVerificationTTLMinutes,
-		"missing":                     missing,
+		"enabled":                                h.cfg.SMTPEnabled(),
+		"host":                                   h.cfg.SMTPHost,
+		"port":                                   h.cfg.SMTPPort,
+		"usernameConfigured":                     h.cfg.SMTPUsername != "",
+		"passwordConfigured":                     h.cfg.SMTPPassword != "",
+		"fromEmail":                              h.cfg.SMTPFromEmail,
+		"fromName":                               h.cfg.SMTPFromName,
+		"useTLS":                                 h.cfg.SMTPUseTLS,
+		"startTLS":                               h.cfg.SMTPStartTLS,
+		"emailVerificationTTLMinutes":            h.cfg.EmailVerificationTTLMinutes,
+		"emailVerificationCooldownSeconds":       h.cfg.EmailVerificationCooldownSeconds,
+		"emailVerificationEmailHourlyLimit":      h.cfg.EmailVerificationEmailHourlyLimit,
+		"emailVerificationIPHourlyLimit":         h.cfg.EmailVerificationIPHourlyLimit,
+		"emailVerificationMaxValidationAttempts": h.cfg.EmailVerificationMaxValidationAttempts,
+		"missing":                                missing,
 	})
 }
 
@@ -193,8 +197,12 @@ func (h *AdminHandler) SendTestEmail(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "invalid_payload", err.Error())
 		return
 	}
+	input.ClientIP = requestRemoteIP(c.Request)
 	result, err := h.service.SendEmailVerificationCode(c.Request.Context(), input)
 	if err != nil {
+		if handleEmailVerificationRateLimit(c, err) {
+			return
+		}
 		fail(c, http.StatusInternalServerError, "email_send_failed", "could not send test email")
 		return
 	}

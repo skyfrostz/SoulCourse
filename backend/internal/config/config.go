@@ -29,16 +29,20 @@ type Config struct {
 	AIBaseURL string
 	AIModel   string
 
-	SMTPHost                    string
-	SMTPPort                    int
-	SMTPUsername                string
-	SMTPPassword                string
-	SMTPFromEmail               string
-	SMTPFromName                string
-	SMTPUseTLS                  bool
-	SMTPStartTLS                bool
-	EmailVerificationTTLMinutes int
-	EmailVerificationSubject    string
+	SMTPHost                               string
+	SMTPPort                               int
+	SMTPUsername                           string
+	SMTPPassword                           string
+	SMTPFromEmail                          string
+	SMTPFromName                           string
+	SMTPUseTLS                             bool
+	SMTPStartTLS                           bool
+	EmailVerificationTTLMinutes            int
+	EmailVerificationSubject               string
+	EmailVerificationCooldownSeconds       int
+	EmailVerificationEmailHourlyLimit      int
+	EmailVerificationIPHourlyLimit         int
+	EmailVerificationMaxValidationAttempts int
 }
 
 func Load() (Config, error) {
@@ -49,6 +53,22 @@ func Load() (Config, error) {
 	emailVerificationTTLMinutes, err := strconv.Atoi(getEnv("EMAIL_VERIFICATION_TTL_MINUTES", "10"))
 	if err != nil {
 		return Config{}, errors.New("EMAIL_VERIFICATION_TTL_MINUTES must be an integer")
+	}
+	emailVerificationCooldownSeconds, err := getPositiveEnvInt("EMAIL_VERIFICATION_COOLDOWN_SECONDS", 60)
+	if err != nil {
+		return Config{}, err
+	}
+	emailVerificationEmailHourlyLimit, err := getPositiveEnvInt("EMAIL_VERIFICATION_EMAIL_HOURLY_LIMIT", 5)
+	if err != nil {
+		return Config{}, err
+	}
+	emailVerificationIPHourlyLimit, err := getPositiveEnvInt("EMAIL_VERIFICATION_IP_HOURLY_LIMIT", 20)
+	if err != nil {
+		return Config{}, err
+	}
+	emailVerificationMaxValidationAttempts, err := getPositiveEnvInt("EMAIL_VERIFICATION_MAX_VALIDATION_ATTEMPTS", 5)
+	if err != nil {
+		return Config{}, err
 	}
 
 	sqlitePath := getEnv("SQLITE_PATH", filepath.Join("data", "soulcourse.db"))
@@ -75,16 +95,20 @@ func Load() (Config, error) {
 		AIBaseURL: getEnv("AI_BASE_URL", "https://api.deepseek.com/v1"),
 		AIModel:   getEnv("AI_MODEL", "deepseek-chat"),
 
-		SMTPHost:                    strings.TrimSpace(os.Getenv("SMTP_HOST")),
-		SMTPPort:                    smtpPort,
-		SMTPUsername:                strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
-		SMTPPassword:                os.Getenv("SMTP_PASSWORD"),
-		SMTPFromEmail:               strings.TrimSpace(os.Getenv("SMTP_FROM_EMAIL")),
-		SMTPFromName:                getEnv("SMTP_FROM_NAME", getEnv("APP_NAME", "选科π")),
-		SMTPUseTLS:                  getEnvBool("SMTP_USE_TLS", true),
-		SMTPStartTLS:                getEnvBool("SMTP_START_TLS", false),
-		EmailVerificationTTLMinutes: emailVerificationTTLMinutes,
-		EmailVerificationSubject:    getEnv("EMAIL_VERIFICATION_SUBJECT", "选科π邮箱验证码"),
+		SMTPHost:                               strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:                               smtpPort,
+		SMTPUsername:                           strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:                           os.Getenv("SMTP_PASSWORD"),
+		SMTPFromEmail:                          strings.TrimSpace(os.Getenv("SMTP_FROM_EMAIL")),
+		SMTPFromName:                           getEnv("SMTP_FROM_NAME", getEnv("APP_NAME", "选科π")),
+		SMTPUseTLS:                             getEnvBool("SMTP_USE_TLS", true),
+		SMTPStartTLS:                           getEnvBool("SMTP_START_TLS", false),
+		EmailVerificationTTLMinutes:            emailVerificationTTLMinutes,
+		EmailVerificationSubject:               getEnv("EMAIL_VERIFICATION_SUBJECT", "选科π邮箱验证码"),
+		EmailVerificationCooldownSeconds:       emailVerificationCooldownSeconds,
+		EmailVerificationEmailHourlyLimit:      emailVerificationEmailHourlyLimit,
+		EmailVerificationIPHourlyLimit:         emailVerificationIPHourlyLimit,
+		EmailVerificationMaxValidationAttempts: emailVerificationMaxValidationAttempts,
 	}
 
 	if cfg.JWTSecret == "" {
@@ -136,6 +160,18 @@ func getEnvBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return parsed
+}
+
+func getPositiveEnvInt(key string, fallback int) (int, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return 0, errors.New(key + " must be a positive integer")
+	}
+	return parsed, nil
 }
 
 func splitCSV(value string) []string {

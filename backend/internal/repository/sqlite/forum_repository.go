@@ -408,9 +408,154 @@ func (r *ForumRepository) CreateEmailVerificationCode(ctx context.Context, email
 	return err
 }
 
-func (r *ForumRepository) ConsumeEmailVerificationCode(ctx context.Context, email string, codeHash string) error {
-	now := nowString()
+func (r *ForumRepository) ReserveEmailVerificationAttempt(
+	ctx context.Context,
+	email string,
+	clientIP string,
+	now time.Time,
+	cooldown time.Duration,
+	emailHourlyLimit int,
+	ipHourlyLimit int,
+) (domain.EmailVerificationAttemptLimit, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	clientIP = strings.TrimSpace(clientIP)
+	nowUnix := now.UTC().Unix()
+	cooldownCutoff := now.Add(-cooldown).UTC().Unix()
+	hourCutoff := now.Add(-time.Hour).UTC().Unix()
+
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM email_verification_attempts WHERE created_at < ?`,
+		now.Add(-24*time.Hour).UTC().Unix(),
+	); err != nil {
+		return domain.EmailVerificationAttemptLimit{}, err
+	}
+
 	result, err := r.db.ExecContext(ctx, `
+		INSERT INTO email_verification_attempts (email, client_ip, created_at)
+		SELECT ?, ?, ?
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM email_verification_attempts
+			WHERE email = ? AND created_at > ?
+		)
+		  AND (
+			SELECT COUNT(*)
+			FROM email_verification_attempts
+			WHERE email = ? AND created_at > ?
+		  ) < ?
+		  AND (
+			? = '' OR (
+				SELECT COUNT(*)
+				FROM email_verification_attempts
+				WHERE client_ip = ? AND created_at > ?
+			) < ?
+		  )
+	`, email, clientIP, nowUnix,
+		email, cooldownCutoff,
+		email, hourCutoff, emailHourlyLimit,
+		clientIP, clientIP, hourCutoff, ipHourlyLimit,
+	)
+	if err != nil {
+		return domain.EmailVerificationAttemptLimit{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return domain.EmailVerificationAttemptLimit{}, err
+	}
+
+	emailStats, err := r.emailVerificationAttemptStats(ctx, "email", email, hourCutoff)
+	if err != nil {
+		return domain.EmailVerificationAttemptLimit{}, err
+	}
+	ipStats := verificationAttemptStats{}
+	if clientIP != "" {
+		ipStats, err = r.emailVerificationAttemptStats(ctx, "client_ip", clientIP, hourCutoff)
+		if err != nil {
+			return domain.EmailVerificationAttemptLimit{}, err
+		}
+	}
+
+	remaining := emailHourlyLimit - emailStats.count
+	if remaining < 0 {
+		remaining = 0
+	}
+	limit := domain.EmailVerificationAttemptLimit{
+		Allowed:              affected == 1,
+		RetryAfterSeconds:    int(cooldown.Seconds()),
+		EmailHourlyLimit:     emailHourlyLimit,
+		EmailHourlyRemaining: remaining,
+	}
+	if limit.Allowed {
+		return limit, nil
+	}
+
+	retryAt := now.Add(time.Second)
+	limit.Scope = "cooldown"
+	if emailStats.latest.Valid {
+		cooldownRetryAt := time.Unix(emailStats.latest.Int64, 0).Add(cooldown)
+		if cooldownRetryAt.After(retryAt) {
+			retryAt = cooldownRetryAt
+		}
+	}
+	if emailStats.count >= emailHourlyLimit && emailStats.earliest.Valid {
+		emailRetryAt := time.Unix(emailStats.earliest.Int64, 0).Add(time.Hour)
+		if emailRetryAt.After(retryAt) {
+			retryAt = emailRetryAt
+			limit.Scope = "email_hourly"
+		}
+	}
+	if clientIP != "" && ipStats.count >= ipHourlyLimit && ipStats.earliest.Valid {
+		ipRetryAt := time.Unix(ipStats.earliest.Int64, 0).Add(time.Hour)
+		if ipRetryAt.After(retryAt) {
+			retryAt = ipRetryAt
+			limit.Scope = "ip_hourly"
+		}
+	}
+	retryDuration := retryAt.Sub(now)
+	retryAfter := int((retryDuration + time.Second - 1) / time.Second)
+	if retryAfter < 1 {
+		retryAfter = 1
+	}
+	limit.RetryAfterSeconds = retryAfter
+	return limit, nil
+}
+
+type verificationAttemptStats struct {
+	count    int
+	earliest sql.NullInt64
+	latest   sql.NullInt64
+}
+
+func (r *ForumRepository) emailVerificationAttemptStats(
+	ctx context.Context,
+	column string,
+	value string,
+	since int64,
+) (verificationAttemptStats, error) {
+	if column != "email" && column != "client_ip" {
+		return verificationAttemptStats{}, errors.New("invalid verification attempt column")
+	}
+	var stats verificationAttemptStats
+	err := r.db.QueryRowContext(ctx, fmt.Sprintf(`
+		SELECT COUNT(*), MIN(created_at), MAX(created_at)
+		FROM email_verification_attempts
+		WHERE %s = ? AND created_at > ?
+	`, column), value, since).Scan(&stats.count, &stats.earliest, &stats.latest)
+	return stats, err
+}
+
+func (r *ForumRepository) ConsumeEmailVerificationCode(ctx context.Context, email string, codeHash string, maxAttempts int) error {
+	if maxAttempts <= 0 {
+		maxAttempts = 5
+	}
+	now := nowString()
+	transaction, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback()
+
+	result, err := transaction.ExecContext(ctx, `
 		UPDATE email_verification_codes
 		SET used_at = ?
 		WHERE id = (
@@ -420,10 +565,11 @@ func (r *ForumRepository) ConsumeEmailVerificationCode(ctx context.Context, emai
 			  AND code_hash = ?
 			  AND used_at IS NULL
 			  AND expires_at > ?
+			  AND failed_attempts < ?
 			ORDER BY created_at DESC
 			LIMIT 1
 		)
-	`, now, email, codeHash, now)
+	`, now, email, codeHash, now, maxAttempts)
 	if err != nil {
 		return err
 	}
@@ -431,10 +577,31 @@ func (r *ForumRepository) ConsumeEmailVerificationCode(ctx context.Context, emai
 	if err != nil {
 		return err
 	}
-	if affected == 0 {
-		return sql.ErrNoRows
+	if affected > 0 {
+		return transaction.Commit()
 	}
-	return nil
+
+	if _, err := transaction.ExecContext(ctx, `
+		UPDATE email_verification_codes
+		SET failed_attempts = failed_attempts + 1,
+		    used_at = CASE WHEN failed_attempts + 1 >= ? THEN ? ELSE used_at END
+		WHERE id = (
+			SELECT id
+			FROM email_verification_codes
+			WHERE lower(email) = lower(?)
+			  AND used_at IS NULL
+			  AND expires_at > ?
+			  AND failed_attempts < ?
+			ORDER BY created_at DESC
+			LIMIT 1
+		)
+	`, maxAttempts, now, email, now, maxAttempts); err != nil {
+		return err
+	}
+	if err := transaction.Commit(); err != nil {
+		return err
+	}
+	return sql.ErrNoRows
 }
 
 func (r *ForumRepository) TogglePostLike(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error) {

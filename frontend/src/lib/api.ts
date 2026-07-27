@@ -69,15 +69,8 @@ export async function register(payload: {
   return response.data.data
 }
 
-export async function sendEmailVerificationCode(email: string): Promise<{
-  email: string
-  expiresInSeconds: number
-  debugCode?: string
-}> {
-  const response = await api.post<ApiEnvelope<{ email: string; expiresInSeconds: number; debugCode?: string }>>(
-    '/auth/email-verification-code',
-    { email },
-  )
+export async function sendEmailVerificationCode(email: string): Promise<EmailVerificationCodeResult> {
+  const response = await api.post<ApiEnvelope<EmailVerificationCodeResult>>('/auth/email-verification-code', { email })
   return response.data.data
 }
 
@@ -89,6 +82,15 @@ export async function login(email: string, password: string): Promise<AuthSessio
 export async function fetchMe(): Promise<User> {
   const response = await api.get<ApiEnvelope<User>>('/me')
   return response.data.data
+}
+
+export interface EmailVerificationCodeResult {
+  email: string
+  expiresInSeconds: number
+  retryAfterSeconds: number
+  hourlyLimit: number
+  hourlyRemaining: number
+  debugCode?: string
 }
 
 export async function fetchPosts(filter: FeedFilter, page = 1, pageSize = 4): Promise<Post[]> {

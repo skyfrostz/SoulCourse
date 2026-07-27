@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { X } from '@lucide/vue'
 import axios from 'axios'
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { login, register, sendEmailVerificationCode } from '../lib/api'
 import { useForumStore } from '../stores/forum'
 import type { Role } from '../types/forum'
@@ -20,6 +20,12 @@ const codeMessage = ref('')
 const loading = ref(false)
 const codeLoading = ref(false)
 const codeCountdown = ref(0)
+const codeCountdownLabel = computed(() => {
+  if (codeCountdown.value < 60) return `${codeCountdown.value}s`
+  const minutes = Math.floor(codeCountdown.value / 60)
+  const seconds = String(codeCountdown.value % 60).padStart(2, '0')
+  return `${minutes}:${seconds}`
+})
 let countdownTimer: number | undefined
 const gradeOptions = ['初中', '高一', '高二', '高三']
 const provinceOptions = [
@@ -103,11 +109,25 @@ async function requestCode() {
   codeLoading.value = true
   try {
     const result = await sendEmailVerificationCode(email.value)
-    startCountdown(Math.min(result.expiresInSeconds, 60))
-    codeMessage.value = result.debugCode ? `本地调试验证码：${result.debugCode}` : '验证码已发送，请查看邮箱'
+    startCountdown(result.retryAfterSeconds)
+    const quotaMessage = `本邮箱本小时还可发送 ${result.hourlyRemaining} 次`
+    codeMessage.value = result.debugCode
+      ? `本地调试验证码：${result.debugCode}（${quotaMessage}）`
+      : `验证码已发送，请查看邮箱（${quotaMessage}）`
   } catch (err) {
     if (axios.isAxiosError(err) && !err.response) {
       error.value = '无法连接后端服务，验证码未发送'
+    } else if (axios.isAxiosError(err) && err.response?.data?.error?.code === 'email_verification_rate_limited') {
+      const rateLimit = err.response.data.error as {
+        retryAfterSeconds?: number
+        hourlyRemaining?: number
+      }
+      const retryAfterSeconds = Math.max(1, Number(rateLimit.retryAfterSeconds) || 60)
+      startCountdown(retryAfterSeconds)
+      codeMessage.value =
+        rateLimit.hourlyRemaining === 0
+          ? `本邮箱本小时发送次数已用完，请在 ${formatRetryAfter(retryAfterSeconds)}后重试`
+          : `请求过于频繁，请在 ${formatRetryAfter(retryAfterSeconds)}后重试（本小时剩余 ${rateLimit.hourlyRemaining ?? 0} 次）`
     } else {
       error.value = '验证码发送失败，请稍后重试'
     }
@@ -117,7 +137,7 @@ async function requestCode() {
 }
 
 function startCountdown(seconds: number) {
-  codeCountdown.value = seconds
+  codeCountdown.value = Math.max(1, Math.ceil(seconds))
   if (countdownTimer) window.clearInterval(countdownTimer)
   countdownTimer = window.setInterval(() => {
     codeCountdown.value -= 1
@@ -128,9 +148,19 @@ function startCountdown(seconds: number) {
   }, 1000)
 }
 
+function formatRetryAfter(seconds: number) {
+  if (seconds < 60) return `${seconds} 秒`
+  return `${Math.ceil(seconds / 60)} 分钟`
+}
+
 watch([email, mode], () => {
   codeMessage.value = ''
   verificationCode.value = ''
+  codeCountdown.value = 0
+  if (countdownTimer) {
+    window.clearInterval(countdownTimer)
+    countdownTimer = undefined
+  }
 })
 
 onUnmounted(() => {
@@ -196,7 +226,7 @@ onUnmounted(() => {
             <div class="verification-code-row">
               <input v-model="verificationCode" inputmode="numeric" maxlength="6" required placeholder="6 位验证码" />
               <button type="button" :disabled="codeLoading || codeCountdown > 0" @click="requestCode">
-                {{ codeLoading ? '发送中' : codeCountdown > 0 ? `${codeCountdown}s` : '发送验证码' }}
+                {{ codeLoading ? '发送中' : codeCountdown > 0 ? codeCountdownLabel : '发送验证码' }}
               </button>
             </div>
           </label>

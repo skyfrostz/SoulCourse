@@ -157,7 +157,14 @@ func initSQLiteSchema(db *sql.DB) error {
 			code_hash TEXT NOT NULL,
 			expires_at TEXT NOT NULL,
 			used_at TEXT,
+			failed_attempts INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS email_verification_attempts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL,
+			client_ip TEXT NOT NULL,
+			created_at INTEGER NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS admin_content_records (
 			id TEXT PRIMARY KEY,
@@ -215,6 +222,10 @@ func initSQLiteSchema(db *sql.DB) error {
 			ON comments (post_id, deleted_at, created_at ASC);`,
 		`CREATE INDEX IF NOT EXISTS idx_email_verification_lookup
 			ON email_verification_codes (email, used_at, expires_at, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_email_verification_attempts_email
+			ON email_verification_attempts (email, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_email_verification_attempts_ip
+			ON email_verification_attempts (client_ip, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_admin_content_listing
 			ON admin_content_records (deleted_at, module, status, sort_order, updated_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_admin_audit_created
@@ -226,6 +237,9 @@ func initSQLiteSchema(db *sql.DB) error {
 		}
 	}
 	if err := ensureSQLiteColumn(db, "content_sources", "source_avatar_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureSQLiteColumn(db, "email_verification_codes", "failed_attempts", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
 

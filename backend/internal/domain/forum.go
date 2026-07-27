@@ -129,13 +129,25 @@ type LoginInput struct {
 }
 
 type EmailVerificationCodeInput struct {
-	Email string `json:"email" binding:"required,email,max=120"`
+	Email    string `json:"email" binding:"required,email,max=120"`
+	ClientIP string `json:"-"`
+}
+
+type EmailVerificationAttemptLimit struct {
+	Allowed              bool
+	RetryAfterSeconds    int
+	EmailHourlyLimit     int
+	EmailHourlyRemaining int
+	Scope                string
 }
 
 type EmailVerificationCodeResult struct {
-	Email            string `json:"email"`
-	ExpiresInSeconds int    `json:"expiresInSeconds"`
-	DebugCode        string `json:"debugCode,omitempty"`
+	Email             string `json:"email"`
+	ExpiresInSeconds  int    `json:"expiresInSeconds"`
+	RetryAfterSeconds int    `json:"retryAfterSeconds"`
+	HourlyLimit       int    `json:"hourlyLimit"`
+	HourlyRemaining   int    `json:"hourlyRemaining"`
+	DebugCode         string `json:"debugCode,omitempty"`
 }
 
 type AuthSession struct {

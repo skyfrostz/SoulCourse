@@ -22,6 +22,14 @@ var ErrInvalidElectives = errors.New("electives must contain two different subje
 var ErrInvalidCredentials = errors.New("invalid email or password")
 var ErrInvalidEmailVerificationCode = errors.New("invalid or expired email verification code")
 
+type EmailVerificationRateLimitError struct {
+	Limit domain.EmailVerificationAttemptLimit
+}
+
+func (e *EmailVerificationRateLimitError) Error() string {
+	return "email verification request rate limited"
+}
+
 type ForumRepository interface {
 	ListPosts(ctx context.Context, viewerID *int64, filter domain.FeedFilter) ([]domain.Post, error)
 	GetPost(ctx context.Context, viewerID *int64, id int64) (domain.Post, []domain.Comment, error)
@@ -34,19 +42,24 @@ type ForumRepository interface {
 	CreateUser(ctx context.Context, input domain.RegisterInput, passwordHash string) (domain.User, error)
 	GetUserByEmail(ctx context.Context, email string) (domain.User, string, error)
 	GetUserByID(ctx context.Context, id int64) (domain.User, error)
+	ReserveEmailVerificationAttempt(ctx context.Context, email string, clientIP string, now time.Time, cooldown time.Duration, emailHourlyLimit int, ipHourlyLimit int) (domain.EmailVerificationAttemptLimit, error)
 	CreateEmailVerificationCode(ctx context.Context, email string, codeHash string, expiresAt time.Time) error
-	ConsumeEmailVerificationCode(ctx context.Context, email string, codeHash string) error
+	ConsumeEmailVerificationCode(ctx context.Context, email string, codeHash string, maxAttempts int) error
 	TogglePostLike(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error)
 	TogglePostFavorite(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error)
 	ToggleFollowAuthor(ctx context.Context, followerID int64, authorName string) (bool, error)
 }
 
 type ForumService struct {
-	repo                 ForumRepository
-	jwtSecret            []byte
-	emailSender          EmailSender
-	emailVerificationTTL time.Duration
-	emailDebugMode       bool
+	repo                                   ForumRepository
+	jwtSecret                              []byte
+	emailSender                            EmailSender
+	emailVerificationTTL                   time.Duration
+	emailVerificationCooldown              time.Duration
+	emailVerificationEmailHourlyLimit      int
+	emailVerificationIPHourlyLimit         int
+	emailVerificationMaxValidationAttempts int
+	emailDebugMode                         bool
 }
 
 func NewForumService(repo ForumRepository, cfg config.Config, emailSender EmailSender) *ForumService {
@@ -54,12 +67,32 @@ func NewForumService(repo ForumRepository, cfg config.Config, emailSender EmailS
 	if ttl <= 0 {
 		ttl = 10 * time.Minute
 	}
+	cooldownSeconds := cfg.EmailVerificationCooldownSeconds
+	if cooldownSeconds <= 0 {
+		cooldownSeconds = 60
+	}
+	emailHourlyLimit := cfg.EmailVerificationEmailHourlyLimit
+	if emailHourlyLimit <= 0 {
+		emailHourlyLimit = 5
+	}
+	ipHourlyLimit := cfg.EmailVerificationIPHourlyLimit
+	if ipHourlyLimit <= 0 {
+		ipHourlyLimit = 20
+	}
+	maxValidationAttempts := cfg.EmailVerificationMaxValidationAttempts
+	if maxValidationAttempts <= 0 {
+		maxValidationAttempts = 5
+	}
 	return &ForumService{
-		repo:                 repo,
-		jwtSecret:            []byte(cfg.JWTSecret),
-		emailSender:          emailSender,
-		emailVerificationTTL: ttl,
-		emailDebugMode:       cfg.AppEnv == "local" || cfg.AppEnv == "development",
+		repo:                                   repo,
+		jwtSecret:                              []byte(cfg.JWTSecret),
+		emailSender:                            emailSender,
+		emailVerificationTTL:                   ttl,
+		emailVerificationCooldown:              time.Duration(cooldownSeconds) * time.Second,
+		emailVerificationEmailHourlyLimit:      emailHourlyLimit,
+		emailVerificationIPHourlyLimit:         ipHourlyLimit,
+		emailVerificationMaxValidationAttempts: maxValidationAttempts,
+		emailDebugMode:                         cfg.AppEnv == "local" || cfg.AppEnv == "development",
 	}
 }
 
@@ -110,7 +143,12 @@ func (s *ForumService) GetTopic(ctx context.Context, viewerID *int64, slug strin
 func (s *ForumService) Register(ctx context.Context, input domain.RegisterInput) (domain.AuthSession, error) {
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
 	input.VerificationCode = strings.TrimSpace(input.VerificationCode)
-	if err := s.repo.ConsumeEmailVerificationCode(ctx, input.Email, hashVerificationCode(input.Email, input.VerificationCode)); err != nil {
+	if err := s.repo.ConsumeEmailVerificationCode(
+		ctx,
+		input.Email,
+		hashVerificationCode(input.Email, input.VerificationCode),
+		s.emailVerificationMaxValidationAttempts,
+	); err != nil {
 		return domain.AuthSession{}, ErrInvalidEmailVerificationCode
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
@@ -130,29 +168,50 @@ func (s *ForumService) Register(ctx context.Context, input domain.RegisterInput)
 
 func (s *ForumService) SendEmailVerificationCode(ctx context.Context, input domain.EmailVerificationCodeInput) (domain.EmailVerificationCodeResult, error) {
 	email := strings.ToLower(strings.TrimSpace(input.Email))
+	now := time.Now()
+	limit, err := s.repo.ReserveEmailVerificationAttempt(
+		ctx,
+		email,
+		input.ClientIP,
+		now,
+		s.emailVerificationCooldown,
+		s.emailVerificationEmailHourlyLimit,
+		s.emailVerificationIPHourlyLimit,
+	)
+	if err != nil {
+		return domain.EmailVerificationCodeResult{}, err
+	}
+	if !limit.Allowed {
+		return domain.EmailVerificationCodeResult{}, &EmailVerificationRateLimitError{Limit: limit}
+	}
+
 	code, err := generateVerificationCode()
 	if err != nil {
 		return domain.EmailVerificationCodeResult{}, err
 	}
-	expiresAt := time.Now().Add(s.emailVerificationTTL)
+	expiresAt := now.Add(s.emailVerificationTTL)
 	if err := s.repo.CreateEmailVerificationCode(ctx, email, hashVerificationCode(email, code), expiresAt); err != nil {
 		return domain.EmailVerificationCodeResult{}, err
+	}
+	result := domain.EmailVerificationCodeResult{
+		Email:             email,
+		ExpiresInSeconds:  int(s.emailVerificationTTL.Seconds()),
+		RetryAfterSeconds: limit.RetryAfterSeconds,
+		HourlyLimit:       limit.EmailHourlyLimit,
+		HourlyRemaining:   limit.EmailHourlyRemaining,
 	}
 	if s.emailSender != nil && s.emailSender.Enabled() {
 		if err := s.emailSender.SendVerificationCode(ctx, email, code, s.emailVerificationTTL); err != nil {
 			return domain.EmailVerificationCodeResult{}, err
 		}
-		return domain.EmailVerificationCodeResult{Email: email, ExpiresInSeconds: int(s.emailVerificationTTL.Seconds())}, nil
+		return result, nil
 	}
 	if !s.emailDebugMode {
 		return domain.EmailVerificationCodeResult{}, errors.New("email sender is not configured")
 	}
 
-	return domain.EmailVerificationCodeResult{
-		Email:            email,
-		ExpiresInSeconds: int(s.emailVerificationTTL.Seconds()),
-		DebugCode:        code,
-	}, nil
+	result.DebugCode = code
+	return result, nil
 }
 
 func (s *ForumService) Login(ctx context.Context, input domain.LoginInput) (domain.AuthSession, error) {

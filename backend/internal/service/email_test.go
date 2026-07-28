@@ -20,7 +20,7 @@ func TestVerificationEmailMessage(t *testing.T) {
 		SMTPFromEmail:            "no-reply@soulcourse.cn",
 		SMTPFromName:             "SoulCourse",
 		EmailVerificationSubject: "SoulCourse 邮箱验证码",
-	})
+	}, nil)
 
 	rawMessage, err := sender.message("student@example.com", "482731", 10*time.Minute)
 	if err != nil {
@@ -135,7 +135,7 @@ func TestVerificationEmailSanitizesHeaders(t *testing.T) {
 		SMTPFromEmail:            "no-reply@soulcourse.cn",
 		SMTPFromName:             "SoulCourse\r\nBcc: attacker@example.com",
 		EmailVerificationSubject: "验证码\r\nBcc: attacker@example.com",
-	})
+	}, nil)
 
 	rawMessage, err := sender.message("student@example.com", "123456", time.Minute)
 	if err != nil {

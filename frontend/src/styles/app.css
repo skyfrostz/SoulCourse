@@ -4897,6 +4897,7 @@ textarea {
 
 .auth-close-button {
   position: absolute;
+  z-index: 3;
   top: 18px;
   right: 18px;
   display: grid;
@@ -4907,6 +4908,7 @@ textarea {
   border-radius: 50%;
   background: #f2f2f4;
   color: #5f5f66;
+  touch-action: manipulation;
 }
 
 .auth-close-button:active,
@@ -5299,8 +5301,13 @@ textarea {
   .auth-experience {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
+    height: calc(100dvh - 16px);
     max-height: calc(100dvh - 16px);
     border-radius: 20px;
+  }
+
+  .auth-experience.is-registering {
+    height: calc(100dvh - 16px);
   }
 
   .auth-brand-panel {
@@ -5326,8 +5333,8 @@ textarea {
   }
 
   .auth-close-button {
-    top: 14px;
-    right: 14px;
+    top: max(14px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
   }
 
   .auth-form-heading {

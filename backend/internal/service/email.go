@@ -19,6 +19,7 @@ import (
 
 	"subject-choice-forum/backend/internal/brandassets"
 	"subject-choice-forum/backend/internal/config"
+	"subject-choice-forum/backend/internal/logx"
 )
 
 type EmailSender interface {
@@ -27,7 +28,8 @@ type EmailSender interface {
 }
 
 type SMTPEmailSender struct {
-	cfg config.Config
+	cfg    config.Config
+	logger *logx.Logger
 }
 
 type verificationEmailTemplateData struct {
@@ -116,8 +118,8 @@ var verificationEmailHTMLTemplate = template.Must(template.New("verification-ema
 </body>
 </html>`))
 
-func NewSMTPEmailSender(cfg config.Config) *SMTPEmailSender {
-	return &SMTPEmailSender{cfg: cfg}
+func NewSMTPEmailSender(cfg config.Config, logger *logx.Logger) *SMTPEmailSender {
+	return &SMTPEmailSender{cfg: cfg, logger: logger}
 }
 
 func (s *SMTPEmailSender) Enabled() bool {
@@ -138,6 +140,9 @@ func (s *SMTPEmailSender) SendVerificationCode(ctx context.Context, to string, c
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-errCh:
+		if err != nil && s.logger != nil {
+			s.logger.Error("邮件", "验证码发送失败", logx.F("SMTP服务器", net.JoinHostPort(s.cfg.SMTPHost, fmt.Sprintf("%d", s.cfg.SMTPPort))), logx.F("错误", err))
+		}
 		return err
 	}
 }
@@ -147,28 +152,37 @@ func (s *SMTPEmailSender) send(to string, code string, ttl time.Duration) error 
 	auth := smtp.PlainAuth("", s.cfg.SMTPUsername, s.cfg.SMTPPassword, s.cfg.SMTPHost)
 	message, err := s.message(to, code, ttl)
 	if err != nil {
-		return err
+		return fmt.Errorf("build message: %w", err)
 	}
 
 	if s.cfg.SMTPUseTLS {
-		return s.sendWithTLS(addr, auth, to, message)
+		if err := s.sendWithTLS(addr, auth, to, message); err != nil {
+			return fmt.Errorf("implicit TLS delivery: %w", err)
+		}
+		return nil
 	}
 	if s.cfg.SMTPStartTLS {
-		return s.sendWithStartTLS(addr, auth, to, message)
+		if err := s.sendWithStartTLS(addr, auth, to, message); err != nil {
+			return fmt.Errorf("STARTTLS delivery: %w", err)
+		}
+		return nil
 	}
-	return smtp.SendMail(addr, auth, s.cfg.SMTPFromEmail, []string{to}, message)
+	if err := smtp.SendMail(addr, auth, s.cfg.SMTPFromEmail, []string{to}, message); err != nil {
+		return fmt.Errorf("plain SMTP delivery: %w", err)
+	}
+	return nil
 }
 
 func (s *SMTPEmailSender) sendWithTLS(addr string, auth smtp.Auth, to string, message []byte) error {
 	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: s.cfg.SMTPHost, MinVersion: tls.VersionTLS12})
 	if err != nil {
-		return err
+		return fmt.Errorf("connect: %w", err)
 	}
 	defer conn.Close()
 
 	client, err := smtp.NewClient(conn, s.cfg.SMTPHost)
 	if err != nil {
-		return err
+		return fmt.Errorf("create client: %w", err)
 	}
 	defer client.Quit()
 
@@ -178,35 +192,38 @@ func (s *SMTPEmailSender) sendWithTLS(addr string, auth smtp.Auth, to string, me
 func (s *SMTPEmailSender) sendWithStartTLS(addr string, auth smtp.Auth, to string, message []byte) error {
 	client, err := smtp.Dial(addr)
 	if err != nil {
-		return err
+		return fmt.Errorf("connect: %w", err)
 	}
 	defer client.Quit()
 
 	if err := client.StartTLS(&tls.Config{ServerName: s.cfg.SMTPHost, MinVersion: tls.VersionTLS12}); err != nil {
-		return err
+		return fmt.Errorf("negotiate TLS: %w", err)
 	}
 	return s.sendWithClient(client, auth, to, message)
 }
 
 func (s *SMTPEmailSender) sendWithClient(client *smtp.Client, auth smtp.Auth, to string, message []byte) error {
 	if err := client.Auth(auth); err != nil {
-		return err
+		return fmt.Errorf("authenticate: %w", err)
 	}
 	if err := client.Mail(s.cfg.SMTPFromEmail); err != nil {
-		return err
+		return fmt.Errorf("set sender: %w", err)
 	}
 	if err := client.Rcpt(to); err != nil {
-		return err
+		return fmt.Errorf("set recipient: %w", err)
 	}
 	writer, err := client.Data()
 	if err != nil {
-		return err
+		return fmt.Errorf("open message body: %w", err)
 	}
 	if _, err := writer.Write(message); err != nil {
 		writer.Close()
-		return err
+		return fmt.Errorf("write message body: %w", err)
 	}
-	return writer.Close()
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("commit message: %w", err)
+	}
+	return nil
 }
 
 func (s *SMTPEmailSender) message(to string, code string, ttl time.Duration) ([]byte, error) {

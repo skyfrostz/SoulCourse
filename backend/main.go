@@ -41,9 +41,14 @@ func main() {
 	}
 	defer db.Close()
 	logger.Info("系统", "数据库已连接", logx.F("路径", cfg.SQLitePath))
+	if cfg.SMTPEnabled() {
+		logger.Info("邮件", "SMTP已启用", logx.F("服务器", fmt.Sprintf("%s:%d", cfg.SMTPHost, cfg.SMTPPort)))
+	} else {
+		logger.Warn("邮件", "SMTP未完整配置，邮箱验证码不可用")
+	}
 
 	forumRepo := sqlite.NewForumRepository(db)
-	emailSender := service.NewSMTPEmailSender(cfg)
+	emailSender := service.NewSMTPEmailSender(cfg, logger)
 	forumService := service.NewForumService(forumRepo, cfg, emailSender)
 	server := httpserver.NewServer(cfg, logger, db, forumService)
 

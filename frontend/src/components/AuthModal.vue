@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowRight, AtSign, Eye, EyeOff, GraduationCap, LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound, X } from '@lucide/vue'
 import axios from 'axios'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { login, register, sendEmailVerificationCode } from '../lib/api'
 import { currentProfileAuthRedirect, useForumStore } from '../stores/forum'
@@ -24,6 +24,7 @@ const codeMessage = ref('')
 const loading = ref(false)
 const codeLoading = ref(false)
 const codeCountdown = ref(0)
+const authFormPanel = ref<HTMLElement | null>(null)
 const codeCountdownLabel = computed(() => {
   if (codeCountdown.value < 60) return `${codeCountdown.value}s`
   const minutes = Math.floor(codeCountdown.value / 60)
@@ -179,6 +180,11 @@ watch([email, mode], () => {
   }
 })
 
+watch(mode, async () => {
+  await nextTick()
+  if (authFormPanel.value) authFormPanel.value.scrollTop = 0
+})
+
 function close() {
   forumStore.authRedirect = ''
   forumStore.authOpen = false
@@ -206,7 +212,7 @@ onUnmounted(() => {
       </aside>
 
       <button class="auth-close-button" type="button" aria-label="关闭" @click="close"><X :size="19" /></button>
-      <div class="auth-form-panel">
+      <div ref="authFormPanel" class="auth-form-panel">
         <header class="auth-form-heading">
           <span>{{ mode === 'login' ? '欢迎回来' : '从这里开始' }}</span>
           <h2>{{ mode === 'login' ? '登录你的账号' : '创建选科档案' }}</h2>

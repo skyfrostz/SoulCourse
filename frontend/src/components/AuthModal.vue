@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRight, AtSign, Eye, EyeOff, GraduationCap, LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound, X } from '@lucide/vue'
+import { ArrowRight, AtSign, CheckCircle2, CircleAlert, Eye, EyeOff, GraduationCap, LoaderCircle, LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound, X } from '@lucide/vue'
 import axios from 'axios'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -21,6 +21,7 @@ const province = ref('浙江')
 const grade = ref('高一')
 const error = ref('')
 const codeMessage = ref('')
+const codeState = ref<'idle' | 'sending' | 'sent' | 'warning' | 'error'>('idle')
 const loading = ref(false)
 const codeLoading = ref(false)
 const codeCountdown = ref(0)
@@ -30,6 +31,17 @@ const codeCountdownLabel = computed(() => {
   const minutes = Math.floor(codeCountdown.value / 60)
   const seconds = String(codeCountdown.value % 60).padStart(2, '0')
   return `${minutes}:${seconds}`
+})
+const codeFeedbackTitle = computed(() => {
+  if (codeState.value === 'sending') return '正在安全发送'
+  if (codeState.value === 'sent') return '验证码已发送'
+  if (codeState.value === 'warning') return '请稍后再试'
+  return '暂时无法发送'
+})
+const codeButtonLabel = computed(() => {
+  if (codeLoading.value) return '正在发送'
+  if (codeCountdown.value > 0) return codeCountdownLabel.value
+  return '获取验证码'
 })
 let countdownTimer: number | undefined
 const gradeOptions = ['初中', '高一', '高二', '高三']
@@ -120,20 +132,25 @@ async function requestCode() {
   error.value = ''
   codeMessage.value = ''
   if (!email.value) {
-    error.value = '请先填写邮箱'
+    codeState.value = 'error'
+    codeMessage.value = '请先填写接收验证码的邮箱地址。'
     return
   }
   codeLoading.value = true
+  codeState.value = 'sending'
+  codeMessage.value = `正在发送至 ${maskEmail(email.value)}，请稍候。`
   try {
     const result = await sendEmailVerificationCode(email.value)
     startCountdown(result.retryAfterSeconds)
     const quotaMessage = `本邮箱本小时还可发送 ${result.hourlyRemaining} 次`
+    codeState.value = 'sent'
     codeMessage.value = result.debugCode
       ? `本地调试验证码：${result.debugCode}（${quotaMessage}）`
-      : `验证码已发送，请查看邮箱（${quotaMessage}）`
+      : `${maskEmail(email.value)} · 10 分钟内有效 · ${quotaMessage}`
   } catch (err) {
     if (axios.isAxiosError(err) && !err.response) {
-      error.value = '无法连接后端服务，验证码未发送'
+      codeState.value = 'error'
+      codeMessage.value = '暂时无法连接邮件服务，请检查网络后重试。'
     } else if (axios.isAxiosError(err) && err.response?.data?.error?.code === 'email_verification_rate_limited') {
       const rateLimit = err.response.data.error as {
         retryAfterSeconds?: number
@@ -141,16 +158,25 @@ async function requestCode() {
       }
       const retryAfterSeconds = Math.max(1, Number(rateLimit.retryAfterSeconds) || 60)
       startCountdown(retryAfterSeconds)
+      codeState.value = 'warning'
       codeMessage.value =
         rateLimit.hourlyRemaining === 0
           ? `本邮箱本小时发送次数已用完，请在 ${formatRetryAfter(retryAfterSeconds)}后重试`
           : `请求过于频繁，请在 ${formatRetryAfter(retryAfterSeconds)}后重试（本小时剩余 ${rateLimit.hourlyRemaining ?? 0} 次）`
     } else {
-      error.value = '验证码发送失败，请稍后重试'
+      codeState.value = 'error'
+      codeMessage.value = '邮件服务暂时不可用，请稍后重新发送。'
     }
   } finally {
     codeLoading.value = false
   }
+}
+
+function maskEmail(value: string) {
+  const [localPart, domain] = value.trim().split('@')
+  if (!localPart || !domain) return value.trim()
+  const visible = localPart.slice(0, Math.min(2, localPart.length))
+  return `${visible}${'•'.repeat(Math.max(3, localPart.length - visible.length))}@${domain}`
 }
 
 function startCountdown(seconds: number) {
@@ -172,6 +198,7 @@ function formatRetryAfter(seconds: number) {
 
 watch([email, mode], () => {
   codeMessage.value = ''
+  codeState.value = 'idle'
   verificationCode.value = ''
   codeCountdown.value = 0
   if (countdownTimer) {
@@ -254,9 +281,25 @@ onUnmounted(() => {
             <label><span>省份</span><select v-model="province"><option v-for="item in provinceOptions" :key="item" :value="item">{{ item }}</option></select></label>
             <label>
               <span>邮箱验证码</span>
-              <span class="verification-code-row auth-code-row"><span class="auth-input-shell"><AtSign :size="17" /><input v-model="verificationCode" inputmode="numeric" maxlength="6" required placeholder="6 位验证码" /></span><button type="button" :disabled="codeLoading || codeCountdown > 0" @click="requestCode">{{ codeLoading ? '发送中' : codeCountdown > 0 ? codeCountdownLabel : '获取验证码' }}</button></span>
+              <span class="verification-code-row auth-code-row">
+                <span class="auth-input-shell"><AtSign :size="17" /><input v-model="verificationCode" inputmode="numeric" maxlength="6" required placeholder="6 位验证码" aria-describedby="auth-code-feedback" /></span>
+                <button class="auth-code-send" :class="`is-${codeState}`" type="button" :disabled="codeLoading || codeCountdown > 0" :aria-busy="codeLoading" @click="requestCode">
+                  <LoaderCircle v-if="codeLoading" class="auth-code-spinner" :size="15" />
+                  <CheckCircle2 v-else-if="codeCountdown > 0 && codeState === 'sent'" :size="15" />
+                  <span>{{ codeButtonLabel }}</span>
+                </button>
+              </span>
             </label>
-            <p v-if="codeMessage" class="helper-text compact">{{ codeMessage }}</p>
+            <Transition name="auth-code-status">
+              <div v-if="codeMessage" id="auth-code-feedback" class="auth-code-feedback" :class="`is-${codeState}`" role="status" aria-live="polite">
+                <span class="auth-code-feedback-icon">
+                  <LoaderCircle v-if="codeState === 'sending'" class="auth-code-spinner" :size="16" />
+                  <CheckCircle2 v-else-if="codeState === 'sent'" :size="16" />
+                  <CircleAlert v-else :size="16" />
+                </span>
+                <span><strong>{{ codeFeedbackTitle }}</strong><small>{{ codeMessage }}</small></span>
+              </div>
+            </Transition>
           </template>
 
           <p v-if="error" class="form-error auth-error-banner">{{ error }}</p>

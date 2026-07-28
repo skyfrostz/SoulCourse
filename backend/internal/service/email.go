@@ -32,10 +32,13 @@ type SMTPEmailSender struct {
 	logger *logx.Logger
 }
 
+const smtpOperationTimeout = 12 * time.Second
+
 type verificationEmailTemplateData struct {
 	BrandName        string
 	Digits           []string
 	ExpiresInMinutes int
+	SupportText      string
 }
 
 var verificationEmailHTMLTemplate = template.Must(template.New("verification-email").Parse(`<!doctype html>
@@ -108,7 +111,7 @@ var verificationEmailHTMLTemplate = template.Must(template.New("verification-ema
           </tr>
           <tr>
             <td style="padding:18px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:12px;line-height:1.6;color:#86868b;">
-              此邮件由选科π系统自动发送，请勿直接回复。
+              {{.SupportText}}
             </td>
           </tr>
         </table>
@@ -131,23 +134,14 @@ func (s *SMTPEmailSender) SendVerificationCode(ctx context.Context, to string, c
 		return nil
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- s.send(to, code, ttl)
-	}()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-errCh:
-		if err != nil && s.logger != nil {
-			s.logger.Error("邮件", "验证码发送失败", logx.F("SMTP服务器", net.JoinHostPort(s.cfg.SMTPHost, fmt.Sprintf("%d", s.cfg.SMTPPort))), logx.F("错误", err))
-		}
-		return err
+	err := s.send(ctx, to, code, ttl)
+	if err != nil && s.logger != nil {
+		s.logger.Error("邮件", "验证码发送失败", logx.F("SMTP服务器", net.JoinHostPort(s.cfg.SMTPHost, fmt.Sprintf("%d", s.cfg.SMTPPort))), logx.F("错误", err))
 	}
+	return err
 }
 
-func (s *SMTPEmailSender) send(to string, code string, ttl time.Duration) error {
+func (s *SMTPEmailSender) send(ctx context.Context, to string, code string, ttl time.Duration) error {
 	addr := net.JoinHostPort(s.cfg.SMTPHost, fmt.Sprintf("%d", s.cfg.SMTPPort))
 	auth := smtp.PlainAuth("", s.cfg.SMTPUsername, s.cfg.SMTPPassword, s.cfg.SMTPHost)
 	message, err := s.message(to, code, ttl)
@@ -156,31 +150,35 @@ func (s *SMTPEmailSender) send(to string, code string, ttl time.Duration) error 
 	}
 
 	if s.cfg.SMTPUseTLS {
-		if err := s.sendWithTLS(addr, auth, to, message); err != nil {
+		if err := s.sendWithTLS(ctx, addr, auth, to, message); err != nil {
 			return fmt.Errorf("implicit TLS delivery: %w", err)
 		}
 		return nil
 	}
 	if s.cfg.SMTPStartTLS {
-		if err := s.sendWithStartTLS(addr, auth, to, message); err != nil {
+		if err := s.sendWithStartTLS(ctx, addr, auth, to, message); err != nil {
 			return fmt.Errorf("STARTTLS delivery: %w", err)
 		}
 		return nil
 	}
-	if err := smtp.SendMail(addr, auth, s.cfg.SMTPFromEmail, []string{to}, message); err != nil {
+	if err := s.sendWithoutTLS(ctx, addr, auth, to, message); err != nil {
 		return fmt.Errorf("plain SMTP delivery: %w", err)
 	}
 	return nil
 }
 
-func (s *SMTPEmailSender) sendWithTLS(addr string, auth smtp.Auth, to string, message []byte) error {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: s.cfg.SMTPHost, MinVersion: tls.VersionTLS12})
+func (s *SMTPEmailSender) sendWithTLS(ctx context.Context, addr string, auth smtp.Auth, to string, message []byte) error {
+	conn, err := s.dial(ctx, addr)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
 	defer conn.Close()
+	tlsConn := tls.Client(conn, &tls.Config{ServerName: s.cfg.SMTPHost, MinVersion: tls.VersionTLS12})
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		return fmt.Errorf("negotiate TLS: %w", err)
+	}
 
-	client, err := smtp.NewClient(conn, s.cfg.SMTPHost)
+	client, err := smtp.NewClient(tlsConn, s.cfg.SMTPHost)
 	if err != nil {
 		return fmt.Errorf("create client: %w", err)
 	}
@@ -189,10 +187,15 @@ func (s *SMTPEmailSender) sendWithTLS(addr string, auth smtp.Auth, to string, me
 	return s.sendWithClient(client, auth, to, message)
 }
 
-func (s *SMTPEmailSender) sendWithStartTLS(addr string, auth smtp.Auth, to string, message []byte) error {
-	client, err := smtp.Dial(addr)
+func (s *SMTPEmailSender) sendWithStartTLS(ctx context.Context, addr string, auth smtp.Auth, to string, message []byte) error {
+	conn, err := s.dial(ctx, addr)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
+	}
+	defer conn.Close()
+	client, err := smtp.NewClient(conn, s.cfg.SMTPHost)
+	if err != nil {
+		return fmt.Errorf("create client: %w", err)
 	}
 	defer client.Quit()
 
@@ -200,6 +203,37 @@ func (s *SMTPEmailSender) sendWithStartTLS(addr string, auth smtp.Auth, to strin
 		return fmt.Errorf("negotiate TLS: %w", err)
 	}
 	return s.sendWithClient(client, auth, to, message)
+}
+
+func (s *SMTPEmailSender) sendWithoutTLS(ctx context.Context, addr string, auth smtp.Auth, to string, message []byte) error {
+	conn, err := s.dial(ctx, addr)
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer conn.Close()
+	client, err := smtp.NewClient(conn, s.cfg.SMTPHost)
+	if err != nil {
+		return fmt.Errorf("create client: %w", err)
+	}
+	defer client.Quit()
+	return s.sendWithClient(client, auth, to, message)
+}
+
+func (s *SMTPEmailSender) dial(ctx context.Context, addr string) (net.Conn, error) {
+	dialer := net.Dialer{Timeout: smtpOperationTimeout, KeepAlive: -1}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	deadline := time.Now().Add(smtpOperationTimeout)
+	if contextDeadline, ok := ctx.Deadline(); ok && contextDeadline.Before(deadline) {
+		deadline = contextDeadline
+	}
+	if err := conn.SetDeadline(deadline); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, nil
 }
 
 func (s *SMTPEmailSender) sendWithClient(client *smtp.Client, auth smtp.Auth, to string, message []byte) error {
@@ -240,6 +274,11 @@ func (s *SMTPEmailSender) message(to string, code string, ttl time.Duration) ([]
 		Digits:           strings.Split(code, ""),
 		ExpiresInMinutes: expiresInMinutes,
 	}
+	supportText := "此邮件由选科π系统自动发送，请勿直接回复。"
+	if strings.TrimSpace(s.cfg.SMTPReplyTo) != "" {
+		supportText = "此邮件由选科π系统自动发送，如需帮助可直接回复本邮件。"
+	}
+	templateData.SupportText = supportText
 
 	plainBody := fmt.Sprintf(`%s 邮箱验证
 
@@ -250,8 +289,8 @@ func (s *SMTPEmailSender) message(to string, code string, ttl time.Duration) ([]
 验证码将在 %d 分钟后失效，请勿转发给任何人。
 如果这不是你的操作，可以忽略此邮件，你的账号不会受到影响。
 
-此邮件由 %s 系统自动发送，请勿直接回复。`,
-		brandName, brandName, code, expiresInMinutes, brandName)
+%s`,
+		brandName, brandName, code, expiresInMinutes, supportText)
 
 	var htmlBody bytes.Buffer
 	if err := verificationEmailHTMLTemplate.Execute(&htmlBody, templateData); err != nil {
@@ -296,11 +335,17 @@ func (s *SMTPEmailSender) message(to string, code string, ttl time.Duration) ([]
 	headers := [][2]string{
 		{"From", from.String()},
 		{"To", toAddress.String()},
-		{"Subject", subject},
-		{"Date", time.Now().Format(time.RFC1123Z)},
-		{"MIME-Version", "1.0"},
-		{"Content-Type", fmt.Sprintf(`multipart/related; boundary="%s"`, relatedWriter.Boundary())},
 	}
+	if replyTo := sanitizeEmailHeader(strings.TrimSpace(s.cfg.SMTPReplyTo)); replyTo != "" {
+		replyToAddress := mail.Address{Address: replyTo}
+		headers = append(headers, [2]string{"Reply-To", replyToAddress.String()})
+	}
+	headers = append(headers,
+		[2]string{"Subject", subject},
+		[2]string{"Date", time.Now().Format(time.RFC1123Z)},
+		[2]string{"MIME-Version", "1.0"},
+		[2]string{"Content-Type", fmt.Sprintf(`multipart/related; boundary="%s"`, relatedWriter.Boundary())},
+	)
 	for _, header := range headers {
 		message.WriteString(header[0])
 		message.WriteString(": ")

@@ -2,7 +2,9 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -18,6 +20,7 @@ import (
 func TestVerificationEmailMessage(t *testing.T) {
 	sender := NewSMTPEmailSender(config.Config{
 		SMTPFromEmail:            "no-reply@soulcourse.cn",
+		SMTPReplyTo:              "contact@soulcourse.cn",
 		SMTPFromName:             "SoulCourse",
 		EmailVerificationSubject: "SoulCourse 邮箱验证码",
 	}, nil)
@@ -33,6 +36,9 @@ func TestVerificationEmailMessage(t *testing.T) {
 	}
 	if got := message.Header.Get("From"); !strings.Contains(got, "no-reply@soulcourse.cn") {
 		t.Fatalf("unexpected From header: %q", got)
+	}
+	if got := message.Header.Get("Reply-To"); got != "<contact@soulcourse.cn>" {
+		t.Fatalf("unexpected Reply-To header: %q", got)
 	}
 	toAddress, err := mail.ParseAddress(message.Header.Get("To"))
 	if err != nil {
@@ -122,6 +128,9 @@ func TestVerificationEmailMessage(t *testing.T) {
 			t.Fatalf("HTML body does not contain frontend brand value %q", value)
 		}
 	}
+	if !strings.Contains(plainBody, "可直接回复本邮件") || !strings.Contains(htmlBody, "可直接回复本邮件") {
+		t.Fatal("message does not explain the reply path")
+	}
 	if len(logo) < 8 || !bytes.Equal(logo[:8], []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}) {
 		t.Fatal("message does not contain the embedded PNG logo")
 	}
@@ -143,5 +152,23 @@ func TestVerificationEmailSanitizesHeaders(t *testing.T) {
 	}
 	if bytes.Contains(rawMessage, []byte("\r\nBcc:")) {
 		t.Fatal("message contains injected Bcc header")
+	}
+}
+
+func TestVerificationEmailHonorsCanceledContext(t *testing.T) {
+	sender := NewSMTPEmailSender(config.Config{
+		SMTPHost:      "smtp.example.com",
+		SMTPPort:      465,
+		SMTPUsername:  "sender@example.com",
+		SMTPPassword:  "secret",
+		SMTPFromEmail: "sender@example.com",
+		SMTPUseTLS:    true,
+	}, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := sender.SendVerificationCode(ctx, "student@example.com", "123456", time.Minute)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected canceled context, got %v", err)
 	}
 }

@@ -34,6 +34,7 @@ type Config struct {
 	SMTPUsername                           string
 	SMTPPassword                           string
 	SMTPFromEmail                          string
+	SMTPReplyTo                            string
 	SMTPFromName                           string
 	SMTPUseTLS                             bool
 	SMTPStartTLS                           bool
@@ -100,6 +101,7 @@ func Load() (Config, error) {
 		SMTPUsername:                           strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
 		SMTPPassword:                           os.Getenv("SMTP_PASSWORD"),
 		SMTPFromEmail:                          strings.TrimSpace(os.Getenv("SMTP_FROM_EMAIL")),
+		SMTPReplyTo:                            strings.TrimSpace(os.Getenv("SMTP_REPLY_TO")),
 		SMTPFromName:                           getEnv("SMTP_FROM_NAME", getEnv("APP_NAME", "选科π")),
 		SMTPUseTLS:                             getEnvBool("SMTP_USE_TLS", true),
 		SMTPStartTLS:                           getEnvBool("SMTP_START_TLS", false),

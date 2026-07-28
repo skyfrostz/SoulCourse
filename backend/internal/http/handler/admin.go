@@ -179,6 +179,7 @@ func (h *AdminHandler) EmailConfig(c *gin.Context) {
 		"usernameConfigured":                     h.cfg.SMTPUsername != "",
 		"passwordConfigured":                     h.cfg.SMTPPassword != "",
 		"fromEmail":                              h.cfg.SMTPFromEmail,
+		"replyTo":                                h.cfg.SMTPReplyTo,
 		"fromName":                               h.cfg.SMTPFromName,
 		"useTLS":                                 h.cfg.SMTPUseTLS,
 		"startTLS":                               h.cfg.SMTPStartTLS,

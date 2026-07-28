@@ -90,6 +90,7 @@ export interface AdminEmailConfig {
   usernameConfigured: boolean
   passwordConfigured: boolean
   fromEmail: string
+  replyTo: string
   fromName: string
   useTLS: boolean
   startTLS: boolean

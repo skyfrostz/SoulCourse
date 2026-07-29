@@ -325,10 +325,7 @@ func initSQLiteSchema(db *sql.DB) error {
 			}
 		}
 	}
-	if err := seedGuangdongPhaseOne(db); err != nil {
-		return err
-	}
-	return seedXHSImports(db)
+	return nil
 }
 
 func ensureSQLiteColumn(db *sql.DB, table string, column string, definition string) error {

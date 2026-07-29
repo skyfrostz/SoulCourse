@@ -32,3 +32,8 @@ backend/data/
 /release
 backend/data/soulcourse.db-shm
 backend/data/soulcourse.db-wal
+
+# Runtime research data stays on the deployment server, never in Git.
+backend/internal/storage/xhs_data/
+frontend/public/content/xhs/
+frontend/public/content/guangdong/

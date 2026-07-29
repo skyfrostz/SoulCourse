@@ -1170,10 +1170,11 @@ func scanTopic(scanner topicScanner) (domain.Topic, error) {
 
 func scanUser(scanner userScanner) (domain.User, error) {
 	var user domain.User
+	var email sql.NullString
 	var createdAt string
 	err := scanner.Scan(
 		&user.ID,
-		&user.Email,
+		&email,
 		&user.Nickname,
 		&user.Role,
 		&user.Province,
@@ -1183,6 +1184,7 @@ func scanUser(scanner userScanner) (domain.User, error) {
 	if err != nil {
 		return domain.User{}, err
 	}
+	user.Email = email.String
 	user.PublicID = formatUserPublicID(user.ID)
 	user.CreatedAt = parseTime(createdAt)
 	return user, nil

@@ -93,6 +93,44 @@ func TestUserPublicIDsFollowInternalCreationOrderAndKeepSourceIDsSeparate(t *tes
 	}
 }
 
+func TestShadowUserProfileSupportsNullCredentials(t *testing.T) {
+	repository := newVerificationLimitTestRepository(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := repository.db.ExecContext(ctx, `
+		INSERT INTO users (email, password_hash, nickname, role, province, grade, is_shadow, created_at, updated_at)
+		VALUES (NULL, NULL, '外部作者主页测试', 'counselor', '广东', '选科用户', 1, ?, ?)
+	`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := repository.GetUserByID(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Email != "" || user.PublicID != formatUserPublicID(userID) {
+		t.Fatalf("unexpected shadow user: %+v", user)
+	}
+	post, err := repository.CreatePost(ctx, user, domain.CreatePostInput{
+		Title: "外部作者的真实公开帖子", Content: "该帖子用于验证迁移作者主页可以按 user ID 正常加载。",
+		Track: domain.TrackPhysics, Electives: []domain.Subject{domain.SubjectChemistry, domain.SubjectBiology}, Category: domain.CategoryExperience,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := repository.GetAccountProfile(ctx, nil, user.Nickname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(profile.Posts) != 1 || profile.Posts[0].ID != post.ID || profile.User.ID != userID {
+		t.Fatalf("shadow profile did not resolve its post by user ID: %+v", profile)
+	}
+}
+
 func TestPostTagFilterUsesExactJSONValue(t *testing.T) {
 	repository := newVerificationLimitTestRepository(t)
 	ctx := context.Background()

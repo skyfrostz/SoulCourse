@@ -45,11 +45,11 @@ func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error)
 	return fn(request)
 }
 
-func TestCreatePostMergesTagsAndDegradesWhenAITaggerFails(t *testing.T) {
+func TestCreatePostSkipsAITaggerWhenManualTagsExist(t *testing.T) {
 	repository := &createPostRepositoryStub{}
 	forum := NewForumService(repository, config.Config{JWTSecret: "test"}, nil)
-	warnings := 0
-	forum.ConfigurePostTagger(failingPostTagger{}, func(error) { warnings++ })
+	calls := 0
+	forum.ConfigurePostTagger(countingPostTagger{calls: &calls}, nil)
 
 	post, err := forum.CreatePost(context.Background(), domain.User{ID: 1, Nickname: "测试用户"}, domain.CreatePostInput{
 		Title: "测试帖子标题", Content: "这是一段足够长的测试帖子内容。",
@@ -60,12 +60,44 @@ func TestCreatePostMergesTagsAndDegradesWhenAITaggerFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if warnings != 1 {
-		t.Fatalf("expected one observable warning, got %d", warnings)
+	if calls != 0 {
+		t.Fatalf("expected manual tags to skip AI, got %d calls", calls)
 	}
 	if !slices.Equal(post.Tags, []string{"自定义", "物化生"}) {
 		t.Fatalf("manual and deterministic tags were not preserved: %#v", post.Tags)
 	}
+}
+
+func TestCreatePostUsesAIOnlyWithoutManualTagsAndDegradesOnFailure(t *testing.T) {
+	repository := &createPostRepositoryStub{}
+	forum := NewForumService(repository, config.Config{JWTSecret: "test"}, nil)
+	warnings := 0
+	forum.ConfigurePostTagger(failingPostTagger{}, func(error) { warnings++ })
+
+	post, err := forum.CreatePost(context.Background(), domain.User{ID: 1, Nickname: "测试用户"}, domain.CreatePostInput{
+		Title: "测试帖子标题", Content: "这是一段足够长的测试帖子内容。",
+		Track:     domain.TrackPhysics,
+		Electives: []domain.Subject{domain.SubjectBiology, domain.SubjectChemistry},
+		Category:  domain.CategoryQuestion, Grade: "高一", Province: "广东",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if warnings != 1 {
+		t.Fatalf("expected one observable warning, got %d", warnings)
+	}
+	if !slices.Equal(post.Tags, []string{"物化生"}) {
+		t.Fatalf("deterministic fallback tag was not preserved: %#v", post.Tags)
+	}
+}
+
+type countingPostTagger struct {
+	calls *int
+}
+
+func (tagger countingPostTagger) TagPost(context.Context, string, string) ([]string, error) {
+	(*tagger.calls)++
+	return []string{domain.TopicTagPhysicsTrack}, nil
 }
 
 type failingPostTagger struct{}

@@ -1078,6 +1078,10 @@ textarea {
   font-weight: 850;
 }
 
+.feed-grid .tag-row.post-card-tags {
+  display: flex;
+}
+
 .verified-badge {
   display: inline-flex;
   align-items: center;
@@ -2300,6 +2304,32 @@ textarea {
   background: #eff6ff;
   color: #1d4ed8;
   font-weight: 850;
+}
+
+.tag-add-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 34px;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid #0f9f7a;
+  border-radius: 7px;
+  background: #fff;
+  color: #0f766e;
+  font-weight: 850;
+}
+
+.tag-section-title {
+  color: #334155;
+  font-size: 13px;
+}
+
+.controlled-tag-row button.active {
+  border-color: #0f9f7a;
+  background: #0f9f7a;
+  color: #fff;
 }
 
 .publish-subjects {

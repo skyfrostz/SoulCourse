@@ -129,6 +129,7 @@ function submit() {
     error.value = '请选择两个再选科目。'
     return
   }
+  addTag()
   publishMutation.mutate()
 }
 </script>
@@ -177,7 +178,7 @@ function submit() {
         <div class="tag-editor">
           <label>
             标签
-            <span>输入关键词后按回车生成标签</span>
+            <span>可自定义名称，输入后按回车或逗号添加</span>
             <input
               v-model="tagInput"
               maxlength="20"
@@ -185,23 +186,28 @@ function submit() {
               @keydown="handleTagKeydown"
             />
           </label>
+          <button v-if="tagInput.trim()" class="tag-add-button" type="button" @click="addTag">
+            <Tag :size="14" /> 添加“{{ tagInput.trim() }}”
+          </button>
           <div v-if="tags.length" class="tag-chip-row">
             <button v-for="tag in tags" :key="tag" type="button" @click="removeTag(tag)">
               <Tag :size="13" /> {{ tag }} <X :size="12" />
             </button>
           </div>
+          <strong v-if="taxonomyQuery.data.value" class="tag-section-title">热门标签 · 点击即可选择</strong>
           <div v-if="taxonomyQuery.data.value" class="tag-chip-row controlled-tag-row">
             <button
               v-for="tag in [...taxonomyQuery.data.value.topicTags, ...taxonomyQuery.data.value.subjectTags]"
               :key="tag.value"
               type="button"
               :class="{ active: tags.includes(tag.value) }"
+              :aria-pressed="tags.includes(tag.value)"
               @click="toggleControlledTag(tag.value)"
             >
               # {{ tag.value }}
             </button>
           </div>
-          <small>可手动选择受控标签；发布后 AI 会根据正文自动补充并去重。</small>
+          <small>已选标签会直接使用；未选标签时，AI 才会根据正文自动打标。</small>
         </div>
         <div class="form-row">
           <label>

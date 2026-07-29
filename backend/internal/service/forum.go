@@ -133,10 +133,7 @@ func (s *ForumService) CreatePost(ctx context.Context, user domain.User, input d
 		return domain.Post{}, ErrInvalidElectives
 	}
 	tags := normalizePostTags(input.Tags)
-	if subjectTag, ok := domain.SubjectTagForChoice(input.Track, input.Electives); ok {
-		tags = appendUniqueTag(tags, subjectTag)
-	}
-	if s.postTagger != nil {
+	if len(tags) == 0 && s.postTagger != nil {
 		aiTags, err := s.postTagger.TagPost(ctx, input.Title, input.Content)
 		if err != nil {
 			if s.onPostTagError != nil {
@@ -149,6 +146,9 @@ func (s *ForumService) CreatePost(ctx context.Context, user domain.User, input d
 				}
 			}
 		}
+	}
+	if subjectTag, ok := domain.SubjectTagForChoice(input.Track, input.Electives); ok {
+		tags = appendUniqueTag(tags, subjectTag)
 	}
 	input.Tags = tags
 	return s.repo.CreatePost(ctx, user, input)

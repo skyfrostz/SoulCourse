@@ -69,10 +69,6 @@ function toggleFavorite() {
       <RouterLink class="post-hit-area" :to="`/posts/${livePost.id}`">
         <h2>{{ livePost.title }}</h2>
         <p>{{ livePost.content }}</p>
-
-        <div v-if="livePost.tags?.length" class="tag-row">
-          <span v-for="tag in livePost.tags.slice(0, 4)" :key="tag"># {{ tag }}</span>
-        </div>
       </RouterLink>
 
       <header class="post-card-head">
@@ -95,6 +91,10 @@ function toggleFavorite() {
           </span>
         </RouterLink>
       </header>
+
+      <div v-if="livePost.tags?.length" class="tag-row post-card-tags" aria-label="帖子标签">
+        <span v-for="tag in livePost.tags" :key="tag"># {{ tag }}</span>
+      </div>
     </div>
 
     <footer class="post-card-actions">

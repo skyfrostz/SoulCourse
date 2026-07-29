@@ -11,7 +11,7 @@ const railCollapsed = ref(false)
 
 <template>
   <main class="workspace forum-home-workspace" :class="{ 'filter-collapsed': railCollapsed }">
-    <FilterRail :collapsed="railCollapsed" @toggle-collapse="railCollapsed = !railCollapsed" />
+    <FilterRail :collapsed="railCollapsed" :insights="insights" @toggle-collapse="railCollapsed = !railCollapsed" />
     <FeedGrid :posts="posts" :is-loading="isLoading" />
     <InsightPanel :insights="insights" :topics="topics" />
   </main>

@@ -52,6 +52,16 @@ export interface SubjectInsight {
   coverageRate?: number
   advice: string
   details: string
+  metricType: string
+  unit: string
+  province: string
+  dataYear: number
+  sourceName: string
+  sourceUrl: string
+  scope: string
+  sampleSize: number
+  capturedAt: string
+  methodology: string
   updatedAt: string
 }
 
@@ -61,6 +71,8 @@ export interface FeedFilter {
   category: Category | 'all'
   keyword: string
   sort: FeedSort
+  tag?: string
+  province?: string
 }
 
 export interface User {
@@ -140,11 +152,22 @@ export interface AuthSession {
 export interface Topic {
   id: number
   slug: string
+  topicTag: string
   title: string
   summary: string
   viewsCount: number
   postsCount: number
   createdAt: string
+}
+
+export interface TagDefinition {
+  value: string
+  label: string
+}
+
+export interface Taxonomy {
+  topicTags: TagDefinition[]
+  subjectTags: TagDefinition[]
 }
 
 export interface TopicDetail {

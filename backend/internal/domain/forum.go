@@ -68,6 +68,7 @@ type FeedFilter struct {
 	Track      SubjectTrack
 	Subject    Subject
 	Subjects   []Subject
+	Tag        string
 	Category   PostCategory
 	Province   string
 	Keyword    string
@@ -101,6 +102,16 @@ type SubjectInsight struct {
 	MatchRate   float64   `json:"matchRate"`
 	Advice      string    `json:"advice"`
 	Details     string    `json:"details"`
+	MetricType  string    `json:"metricType"`
+	Unit        string    `json:"unit"`
+	Province    string    `json:"province"`
+	DataYear    int       `json:"dataYear"`
+	SourceName  string    `json:"sourceName"`
+	SourceURL   string    `json:"sourceUrl"`
+	Scope       string    `json:"scope"`
+	SampleSize  int       `json:"sampleSize"`
+	CapturedAt  time.Time `json:"capturedAt"`
+	Methodology string    `json:"methodology"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
@@ -221,6 +232,7 @@ type AuthSession struct {
 type Topic struct {
 	ID         int64     `json:"id"`
 	Slug       string    `json:"slug"`
+	TopicTag   string    `json:"topicTag"`
 	Title      string    `json:"title"`
 	Summary    string    `json:"summary"`
 	ViewsCount int       `json:"viewsCount"`

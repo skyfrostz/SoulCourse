@@ -94,7 +94,7 @@ func Load() (Config, error) {
 
 		AIAPIKey:  os.Getenv("AI_API_KEY"),
 		AIBaseURL: getEnv("AI_BASE_URL", "https://api.deepseek.com/v1"),
-		AIModel:   getEnv("AI_MODEL", "deepseek-chat"),
+		AIModel:   getEnv("AI_MODEL", "deepseek-v4-flash"),
 
 		SMTPHost:                               strings.TrimSpace(os.Getenv("SMTP_HOST")),
 		SMTPPort:                               smtpPort,

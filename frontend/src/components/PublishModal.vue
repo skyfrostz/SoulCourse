@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ImagePlus, Tag, Trash2, X } from '@lucide/vue'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createPost } from '../lib/api'
+import { createPost, fetchTaxonomy } from '../lib/api'
 import { subjectLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
 import type { Category, Subject, Track } from '../types/forum'
@@ -22,6 +22,7 @@ const tags = ref<string[]>([])
 const track = ref<Track>(forumStore.filter.track === 'all' ? 'physics' : forumStore.filter.track)
 const electives = ref<Subject[]>(forumStore.filter.subjects.length === 2 ? [...forumStore.filter.subjects] : ['chemistry', 'biology'])
 const error = ref('')
+const taxonomyQuery = useQuery({ queryKey: ['taxonomy'], queryFn: fetchTaxonomy, staleTime: 10 * 60 * 1000 })
 
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']
 
@@ -114,6 +115,14 @@ function removeTag(tag: string) {
   tags.value = tags.value.filter((item) => item !== tag)
 }
 
+function toggleControlledTag(tag: string) {
+  if (tags.value.includes(tag)) {
+    removeTag(tag)
+  } else if (tags.value.length < 8) {
+    tags.value = [...tags.value, tag]
+  }
+}
+
 function submit() {
   error.value = ''
   if (electives.value.length !== 2) {
@@ -181,6 +190,18 @@ function submit() {
               <Tag :size="13" /> {{ tag }} <X :size="12" />
             </button>
           </div>
+          <div v-if="taxonomyQuery.data.value" class="tag-chip-row controlled-tag-row">
+            <button
+              v-for="tag in [...taxonomyQuery.data.value.topicTags, ...taxonomyQuery.data.value.subjectTags]"
+              :key="tag.value"
+              type="button"
+              :class="{ active: tags.includes(tag.value) }"
+              @click="toggleControlledTag(tag.value)"
+            >
+              # {{ tag.value }}
+            </button>
+          </div>
+          <small>可手动选择受控标签；发布后 AI 会根据正文自动补充并去重。</small>
         </div>
         <div class="form-row">
           <label>

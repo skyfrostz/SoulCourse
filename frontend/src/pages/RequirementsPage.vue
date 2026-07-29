@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { Bookmark, ChevronLeft, MessageCircle, Search, ShieldCheck, SlidersHorizontal, Sparkles, ThumbsUp } from '@lucide/vue'
 import { useRouter } from 'vue-router'
+import { fetchPostCollection } from '../lib/api'
 import { majorRequirementCategories, majorRequirements, majorRequirementStats } from '../lib/majorRequirements'
 import { formatCompactCount, getMajorForumStats, majorForumPath } from '../lib/majorForum'
-import { samplePosts } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 
 const router = useRouter()
 const forumStore = useForumStore()
+const postsQuery = useQuery({
+  queryKey: ['requirement-forum-posts'],
+  queryFn: () => fetchPostCollection({ sort: 'latest', limit: 50 }),
+})
 const keyword = ref('')
 const activeCategory = ref('全部')
 const activeType = ref('全部')
@@ -31,10 +36,10 @@ const setKeyword = (value: string) => {
 }
 
 const statsByMajor = computed(() =>
-  new Map(majorRequirements.map((item) => [item.major, getMajorForumStats(item.major, forumStore, samplePosts)])),
+  new Map(majorRequirements.map((item) => [item.major, getMajorForumStats(item.major, forumStore, postsQuery.data.value ?? [])])),
 )
 
-const statsFor = (major: string) => statsByMajor.value.get(major) ?? getMajorForumStats(major, forumStore, samplePosts)
+const statsFor = (major: string) => statsByMajor.value.get(major) ?? getMajorForumStats(major, forumStore, [])
 
 const goMajorForum = (major: string) => {
   router.push(majorForumPath(major))

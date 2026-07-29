@@ -3,11 +3,11 @@ import { ChevronDown, CircleCheck, Dna, FlaskConical, Globe2, Landmark, PanelLef
 import { computed, ref } from 'vue'
 import { categoryLabels, subjectAccent, subjectLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
-import type { Category, Subject, Track } from '../types/forum'
+import type { Category, Subject, SubjectInsight, Track } from '../types/forum'
 
 const forumStore = useForumStore()
 const filterExpanded = ref(false)
-defineProps<{ collapsed: boolean }>()
+const props = defineProps<{ collapsed: boolean; insights: SubjectInsight[] }>()
 defineEmits<{ toggleCollapse: [] }>()
 
 const tracks: Array<Track | 'all'> = ['all', 'physics', 'history']
@@ -36,20 +36,8 @@ const activeFilterCount = computed(() =>
   Number(forumStore.filter.track !== 'all') + forumStore.filter.subjects.length + Number(forumStore.filter.category !== 'all'),
 )
 
-const hotCombos = computed(() => [
-  { label: '物化生', count: '12.6k', color: '#0f9f7a', track: 'physics' as Track, subjects: ['chemistry', 'biology'] as Subject[] },
-  { label: '物化地', count: '9.8k', color: '#2563eb', track: 'physics' as Track, subjects: ['chemistry', 'geography'] as Subject[] },
-  { label: '物生地', count: '7.3k', color: '#38bdf8', track: 'physics' as Track, subjects: ['biology', 'geography'] as Subject[] },
-  { label: '物化政', count: '6.1k', color: '#ef4444', track: 'physics' as Track, subjects: ['chemistry', 'politics'] as Subject[] },
-  { label: '史政地', count: '5.7k', color: '#f97316', track: 'history' as Track, subjects: ['politics', 'geography'] as Subject[] },
-  { label: '史地生', count: '4.2k', color: '#f59e0b', track: 'history' as Track, subjects: ['geography', 'biology'] as Subject[] },
-])
-
-function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }) {
-  forumStore.setTrack(combo.track)
-  forumStore.setSubjects(combo.subjects)
-  forumStore.setKeyword('')
-}
+const officialRequirements = computed(() => props.insights.slice(0, 6))
+const requirementColors = ['#0f9f7a', '#2563eb', '#38bdf8', '#ef4444', '#f97316', '#f59e0b']
 </script>
 
 <template>
@@ -147,12 +135,12 @@ function selectCombo(combo: { label: string; track: Track; subjects: Subject[] }
     </section>
 
     <section class="filter-section hot-list">
-      <h3>热门组合</h3>
-      <button v-for="combo in hotCombos" :key="combo.label" class="hot-row" type="button" @click="selectCombo(combo)">
-        <span class="hot-dot" :style="{ background: combo.color }"></span>
-        <span>{{ combo.label }}</span>
-        <strong>{{ combo.count }}</strong>
-      </button>
+      <h3>官方计划要求</h3>
+      <RouterLink v-for="(insight, index) in officialRequirements" :key="insight.id" class="hot-row" :to="`/insights/${insight.id}`">
+        <span class="hot-dot" :style="{ background: requirementColors[index % requirementColors.length] }"></span>
+        <span>{{ insight.combination }}</span>
+        <strong>{{ insight.heat }}个</strong>
+      </RouterLink>
     </section>
 
     <RouterLink class="outline-wide" to="/insights">查看全部组合</RouterLink>

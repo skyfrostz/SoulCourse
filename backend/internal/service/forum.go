@@ -22,6 +22,10 @@ var ErrInvalidElectives = errors.New("electives must contain two different subje
 var ErrInvalidCredentials = errors.New("invalid email or password")
 var ErrInvalidEmailVerificationCode = errors.New("invalid or expired email verification code")
 
+type PostTagger interface {
+	TagPost(ctx context.Context, title string, content string) ([]string, error)
+}
+
 type EmailVerificationRateLimitError struct {
 	Limit domain.EmailVerificationAttemptLimit
 }
@@ -56,6 +60,8 @@ type ForumRepository interface {
 
 type ForumService struct {
 	repo                                   ForumRepository
+	postTagger                             PostTagger
+	onPostTagError                         func(error)
 	jwtSecret                              []byte
 	emailSender                            EmailSender
 	emailVerificationTTL                   time.Duration
@@ -64,6 +70,11 @@ type ForumService struct {
 	emailVerificationIPHourlyLimit         int
 	emailVerificationMaxValidationAttempts int
 	emailDebugMode                         bool
+}
+
+func (s *ForumService) ConfigurePostTagger(tagger PostTagger, onError func(error)) {
+	s.postTagger = tagger
+	s.onPostTagError = onError
 }
 
 func NewForumService(repo ForumRepository, cfg config.Config, emailSender EmailSender) *ForumService {
@@ -121,7 +132,50 @@ func (s *ForumService) CreatePost(ctx context.Context, user domain.User, input d
 	if len(input.Electives) != 2 || input.Electives[0] == input.Electives[1] {
 		return domain.Post{}, ErrInvalidElectives
 	}
+	tags := normalizePostTags(input.Tags)
+	if subjectTag, ok := domain.SubjectTagForChoice(input.Track, input.Electives); ok {
+		tags = appendUniqueTag(tags, subjectTag)
+	}
+	if s.postTagger != nil {
+		aiTags, err := s.postTagger.TagPost(ctx, input.Title, input.Content)
+		if err != nil {
+			if s.onPostTagError != nil {
+				s.onPostTagError(err)
+			}
+		} else {
+			for _, tag := range aiTags {
+				if domain.IsControlledTag(tag) {
+					tags = appendUniqueTag(tags, tag)
+				}
+			}
+		}
+	}
+	input.Tags = tags
 	return s.repo.CreatePost(ctx, user, input)
+}
+
+func normalizePostTags(tags []string) []string {
+	result := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		result = appendUniqueTag(result, truncateRunes(tag, 24))
+		if len(result) == 8 {
+			break
+		}
+	}
+	return result
+}
+
+func appendUniqueTag(tags []string, tag string) []string {
+	for _, existing := range tags {
+		if existing == tag {
+			return tags
+		}
+	}
+	return append(tags, tag)
 }
 
 func (s *ForumService) CreateComment(ctx context.Context, user domain.User, postID int64, input domain.CreateCommentInput) (domain.Comment, error) {

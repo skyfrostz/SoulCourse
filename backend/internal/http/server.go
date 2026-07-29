@@ -40,6 +40,9 @@ func NewServer(
 
 	healthHandler := handler.NewHealthHandler(db)
 	aiService := service.NewAIService(cfg)
+	forumService.ConfigurePostTagger(aiService, func(err error) {
+		logger.Warn("AI", "帖子自动打标失败，保留手动标签", logx.F("错误", err))
+	})
 	forumHandler := handler.NewForumHandler(forumService, aiService)
 	adminHandler := handler.NewAdminHandler(cfg, forumService, db)
 

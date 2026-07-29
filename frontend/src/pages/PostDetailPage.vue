@@ -92,10 +92,13 @@ function toggleFollow() {
 }
 
 function submitComment() {
-  const content = draft.value.trim()
-  if (!content) return
   if (!forumStore.isAuthed) {
     forumStore.authOpen = true
+    return
+  }
+  const content = draft.value.trim()
+  if (!content) {
+    commentInput.value?.focus()
     return
   }
   commentError.value = ''
@@ -104,6 +107,11 @@ function submitComment() {
       commentError.value = '评论发布失败，请确认已登录，且后端服务可用。'
     },
   })
+}
+
+function focusComments() {
+  document.getElementById('post-comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  window.setTimeout(() => commentInput.value?.focus(), 250)
 }
 
 function askCertifiedUser() {
@@ -254,7 +262,7 @@ onBeforeUnmount(() => {
           <button class="save-decision-button" :class="{ liked: post.viewerFavorited }" @click="toggleFavorite">
             <Bookmark :size="17" /> {{ post.viewerFavorited ? '已收藏' : '收藏' }}
           </button>
-          <span><MessageSquare :size="17" /> {{ displayedCommentCount }} 评论</span>
+          <button type="button" @click="focusComments"><MessageSquare :size="17" /> {{ displayedCommentCount }} 评论</button>
         </div>
       </article>
 
@@ -277,7 +285,7 @@ onBeforeUnmount(() => {
       <button class="primary-wide compact" type="button" @click="router.push('/')">返回论坛</button>
     </section>
 
-    <section v-if="post" class="comment-board">
+    <section v-if="post" id="post-comments" class="comment-board">
       <div class="comment-title-row">
         <h2>全部评论 {{ comments.length }}</h2>
         <button @click="askCertifiedUser">向认证用户提问</button>
@@ -315,7 +323,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-else class="empty-state">
+    <section v-else-if="detailQuery.isLoading.value" class="empty-state">
       <h2>正在加载帖子详情</h2>
       <p>如果长时间没有出现，请返回论坛重新选择帖子。</p>
     </section>

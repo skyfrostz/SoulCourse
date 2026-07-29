@@ -196,6 +196,8 @@ func (h *ForumHandler) Taxonomy(c *gin.Context) {
 			{"value": domain.CategoryQuestion, "label": "家长提问"},
 			{"value": domain.CategoryData, "label": "数据建议"},
 		},
+		"topicTags":   domain.TopicTags(),
+		"subjectTags": domain.SubjectTags(),
 	})
 }
 
@@ -247,6 +249,7 @@ func (h *ForumHandler) ListPosts(c *gin.Context) {
 		Track:    domain.SubjectTrack(c.Query("track")),
 		Subject:  domain.Subject(c.Query("subject")),
 		Subjects: parseSubjects(c.Query("subjects")),
+		Tag:      c.Query("tag"),
 		Category: domain.PostCategory(c.Query("category")),
 		Province: c.Query("province"),
 		Keyword:  c.Query("q"),

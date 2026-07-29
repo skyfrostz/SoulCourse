@@ -8,15 +8,15 @@ const props = defineProps<{
   topics: Topic[]
 }>()
 
-const palette = ['#10b981', '#2563eb', '#38bdf8', '#f59e0b', '#ef4444']
-const trendItems = computed(() => props.insights.slice(0, 5))
+const palette = ['#10b981', '#2563eb', '#38bdf8', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b']
+const trendItems = computed(() => props.insights)
 const trendTotal = computed(() => trendItems.value.reduce((sum, insight) => sum + insight.heat, 0) || 1)
 
 const donutStyle = computed(() => {
   let cursor = 0
   const slices = trendItems.value.map((insight, index) => {
     const start = cursor
-    const span = Math.max((insight.heat / trendTotal.value) * 100, 6)
+    const span = (insight.heat / trendTotal.value) * 100
     cursor += span
     return `${palette[index % palette.length]} ${start}% ${Math.min(cursor, 100)}%`
   })
@@ -32,20 +32,23 @@ const donutStyle = computed(() => {
   <aside class="insight-panel">
     <section class="insight-box insight-trend-section">
       <div class="panel-title-row">
-        <h2>广东选科观察</h2>
-        <span class="insight-section-badge"><TrendingUp :size="14" /> 趋势</span>
+        <h2>广东招生计划选科观察</h2>
+        <span class="insight-section-badge"><TrendingUp :size="14" /> 官方数据</span>
       </div>
-      <p class="caption">2026届考生组合热度</p>
-      <div class="trend-chart" aria-label="选科组合趋势图">
+      <p class="caption">2025专科第一次征集志愿 · 计划要求分布</p>
+      <div class="trend-chart" aria-label="招生计划选科要求分布图">
         <div class="trend-donut" :style="donutStyle"></div>
         <div class="trend-legend">
           <RouterLink v-for="(insight, index) in trendItems" :key="insight.id" :to="`/insights/${insight.id}`">
             <i :style="{ background: palette[index % palette.length] }"></i>
             <span>{{ insight.combination }}</span>
-            <strong>{{ insight.heat }}</strong>
+            <strong>{{ insight.heat }} 个</strong>
           </RouterLink>
         </div>
       </div>
+      <a v-if="trendItems[0]" class="insight-more" :href="trendItems[0].sourceUrl" target="_blank" rel="noreferrer">
+        来源：{{ trendItems[0].sourceName }} <ChevronRight :size="14" />
+      </a>
       <RouterLink class="insight-more" to="/insights">查看全部趋势 <ChevronRight :size="14" /></RouterLink>
     </section>
 

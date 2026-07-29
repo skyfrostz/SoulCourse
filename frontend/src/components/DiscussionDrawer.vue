@@ -16,6 +16,8 @@ const props = defineProps<{
 const forumStore = useForumStore()
 const queryClient = useQueryClient()
 const draft = ref('')
+const commentInput = ref<HTMLInputElement | null>(null)
+const commentSection = ref<HTMLElement | null>(null)
 const livePost = ref<Post>(props.post)
 const { comments, submitComment, isSubmitting } = usePostComments(() => props.post.id)
 
@@ -117,6 +119,12 @@ async function sharePost() {
 function replyTo(author: string) {
   if (!forumStore.requireAuth()) return
   draft.value = `@${author} `
+  window.setTimeout(() => commentInput.value?.focus(), 50)
+}
+
+function focusComments() {
+  commentSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  window.setTimeout(() => commentInput.value?.focus(), 250)
 }
 </script>
 
@@ -154,7 +162,7 @@ function replyTo(author: string) {
 
       <div class="drawer-actions">
         <button @click="sharePost"><Share2 :size="17" /> 分享</button>
-        <button><MessageSquare :size="17" /> {{ commentCount }}</button>
+        <button @click="focusComments"><MessageSquare :size="17" /> {{ commentCount }}</button>
         <button :class="{ liked: livePost.viewerLiked }" @click="like">
           <ThumbsUp :size="17" /> {{ livePost.likesCount }}
         </button>
@@ -164,17 +172,17 @@ function replyTo(author: string) {
       </div>
     </article>
 
-    <section class="comment-section">
+    <section ref="commentSection" class="comment-section">
       <div class="comment-title-row">
         <h2>评论 {{ commentCount }}</h2>
         <span class="comment-sort-label">按时间</span>
       </div>
 
       <form class="comment-form" @submit.prevent="submit">
-        <input v-model="draft" type="text" :placeholder="forumStore.isAuthed ? '发表评论' : '登录后发表评论'" />
-        <button :disabled="!draft.trim() || isSubmitting" type="submit">
+        <input ref="commentInput" v-model="draft" type="text" :placeholder="forumStore.isAuthed ? '发表评论' : '登录后发表评论'" />
+        <button :disabled="forumStore.isAuthed && (!draft.trim() || isSubmitting)" type="submit">
           <Send :size="16" />
-          发表评论
+          {{ forumStore.isAuthed ? '发表评论' : '登录评论' }}
         </button>
       </form>
 

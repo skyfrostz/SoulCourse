@@ -78,6 +78,14 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 		query += " AND p.province = ?"
 		args = append(args, province)
 	}
+	if tag := strings.TrimSpace(filter.Tag); tag != "" {
+		query += ` AND EXISTS (
+			SELECT 1
+			FROM json_each(CASE WHEN json_valid(p.tags) THEN p.tags ELSE '[]' END) post_tag
+			WHERE post_tag.value = ?
+		)`
+		args = append(args, tag)
+	}
 
 	subjects := make([]domain.Subject, 0, len(filter.Subjects)+1)
 	subjects = append(subjects, filter.Subjects...)
@@ -115,8 +123,10 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 			p.created_at DESC, p.id DESC`
 	}
 
-	query += " LIMIT ? OFFSET ?"
-	args = append(args, filter.Limit, filter.Offset)
+	if filter.Limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, filter.Limit, filter.Offset)
+	}
 	return query, args
 }
 
@@ -257,7 +267,9 @@ func (r *ForumRepository) CreateComment(ctx context.Context, user domain.User, p
 
 func (r *ForumRepository) ListInsights(ctx context.Context) ([]domain.SubjectInsight, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, combination, trend, heat, match_rate, advice, details, updated_at
+		SELECT id, combination, trend, heat, match_rate, advice, details,
+		       metric_type, unit, province, data_year, source_name, source_url, scope,
+		       sample_size, captured_at, methodology, updated_at
 		FROM subject_insights
 		ORDER BY heat DESC, id ASC
 		LIMIT 8
@@ -280,7 +292,9 @@ func (r *ForumRepository) ListInsights(ctx context.Context) ([]domain.SubjectIns
 
 func (r *ForumRepository) GetInsight(ctx context.Context, id int64) (domain.SubjectInsight, error) {
 	return scanInsight(r.db.QueryRowContext(ctx, `
-		SELECT id, combination, trend, heat, match_rate, advice, details, updated_at
+		SELECT id, combination, trend, heat, match_rate, advice, details,
+		       metric_type, unit, province, data_year, source_name, source_url, scope,
+		       sample_size, captured_at, methodology, updated_at
 		FROM subject_insights
 		WHERE id = ?
 	`, id))
@@ -288,9 +302,21 @@ func (r *ForumRepository) GetInsight(ctx context.Context, id int64) (domain.Subj
 
 func (r *ForumRepository) ListTopics(ctx context.Context) ([]domain.Topic, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, slug, title, summary, views_count, posts_count, created_at
-		FROM topics
-		ORDER BY views_count DESC, id ASC
+		SELECT t.id, t.slug, t.topic_tag, t.title, t.summary, t.views_count,
+		       (
+			   SELECT COUNT(*)
+			   FROM posts p
+			   WHERE p.deleted_at IS NULL
+			     AND t.topic_tag <> ''
+			     AND EXISTS (
+				   SELECT 1
+				   FROM json_each(CASE WHEN json_valid(p.tags) THEN p.tags ELSE '[]' END) post_tag
+				   WHERE post_tag.value = t.topic_tag
+			     )
+		       ),
+		       t.created_at
+		FROM topics t
+		ORDER BY t.views_count DESC, t.id ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -313,47 +339,36 @@ func (r *ForumRepository) GetTopic(ctx context.Context, viewerID *int64, slug st
 		return domain.TopicDetail{}, err
 	}
 	topic, err := scanTopic(r.db.QueryRowContext(ctx, `
-		SELECT id, slug, title, summary, views_count, posts_count, created_at
-		FROM topics
-		WHERE slug = ?
+		SELECT t.id, t.slug, t.topic_tag, t.title, t.summary, t.views_count,
+		       (
+			   SELECT COUNT(*)
+			   FROM posts p
+			   WHERE p.deleted_at IS NULL
+			     AND t.topic_tag <> ''
+			     AND EXISTS (
+				   SELECT 1
+				   FROM json_each(CASE WHEN json_valid(p.tags) THEN p.tags ELSE '[]' END) post_tag
+				   WHERE post_tag.value = t.topic_tag
+			     )
+		       ),
+		       t.created_at
+		FROM topics t
+		WHERE t.slug = ?
 	`, slug))
 	if err != nil {
 		return domain.TopicDetail{}, err
 	}
-
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT p.id, p.user_id, p.author_name, p.author_role, p.title, p.content, p.image_urls, p.tags, p.track, p.electives,
-		       p.category, p.grade, p.province, p.likes_count, p.comments_count, p.favorites_count, p.created_at, p.updated_at,
-		       COALESCE(cs.source_platform, ''), COALESCE(cs.source_url, ''), COALESCE(cs.source_title, ''),
-		       COALESCE(cs.source_author, ''), COALESCE(cs.source_avatar_url, '')
-		FROM posts p
-		JOIN topic_posts tp ON tp.post_id = p.id
-		LEFT JOIN content_sources cs ON cs.post_id = p.id
-		WHERE tp.topic_id = ? AND p.deleted_at IS NULL
-	`, topic.ID)
-	if err != nil {
-		return domain.TopicDetail{}, err
-	}
-	defer rows.Close()
-
-	liked, favorited, followed, err := r.viewerState(ctx, viewerID)
-	if err != nil {
-		return domain.TopicDetail{}, err
-	}
-
 	posts := make([]domain.Post, 0)
-	for rows.Next() {
-		post, err := scanPost(rows)
+	if topic.TopicTag != "" {
+		posts, err = r.ListPosts(ctx, viewerID, domain.FeedFilter{
+			Tag:  topic.TopicTag,
+			Sort: domain.SortLatest,
+		})
 		if err != nil {
 			return domain.TopicDetail{}, err
 		}
-		post.ViewerLiked = liked[post.ID]
-		post.ViewerFavorited = favorited[post.ID]
-		post.ViewerFollowing = post.SourcePlatform == "" && followed[post.AuthorName]
-		posts = append(posts, post)
 	}
-	sortPosts(posts, domain.SortLatest)
-	return domain.TopicDetail{Topic: topic, Posts: posts}, rows.Err()
+	return domain.TopicDetail{Topic: topic, Posts: posts}, nil
 }
 
 func (r *ForumRepository) CreateUser(ctx context.Context, input domain.RegisterInput, passwordHash string) (domain.User, error) {
@@ -1086,7 +1101,7 @@ func scanComment(scanner commentScanner) (domain.Comment, error) {
 
 func scanInsight(scanner insightScanner) (domain.SubjectInsight, error) {
 	var insight domain.SubjectInsight
-	var updatedAt string
+	var capturedAt, updatedAt string
 	err := scanner.Scan(
 		&insight.ID,
 		&insight.Combination,
@@ -1095,11 +1110,22 @@ func scanInsight(scanner insightScanner) (domain.SubjectInsight, error) {
 		&insight.MatchRate,
 		&insight.Advice,
 		&insight.Details,
+		&insight.MetricType,
+		&insight.Unit,
+		&insight.Province,
+		&insight.DataYear,
+		&insight.SourceName,
+		&insight.SourceURL,
+		&insight.Scope,
+		&insight.SampleSize,
+		&capturedAt,
+		&insight.Methodology,
 		&updatedAt,
 	)
 	if err != nil {
 		return domain.SubjectInsight{}, err
 	}
+	insight.CapturedAt = parseTime(capturedAt)
 	insight.UpdatedAt = parseTime(updatedAt)
 	return insight, nil
 }
@@ -1110,6 +1136,7 @@ func scanTopic(scanner topicScanner) (domain.Topic, error) {
 	err := scanner.Scan(
 		&topic.ID,
 		&topic.Slug,
+		&topic.TopicTag,
 		&topic.Title,
 		&topic.Summary,
 		&topic.ViewsCount,

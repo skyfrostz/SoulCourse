@@ -6,9 +6,8 @@ import { Bookmark, Brain, ChevronLeft, MessageSquare, PenLine, Settings, Sparkle
 import PostCard from '../components/PostCard.vue'
 import { fetchProfile } from '../lib/api'
 import { roleLabels, subjectLabels, trackLabels } from '../lib/labels'
-import { sampleComments, samplePosts } from '../lib/sampleData'
 import { useForumStore, type FollowProfile } from '../stores/forum'
-import type { Comment, Role } from '../types/forum'
+import type { Role } from '../types/forum'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,10 +22,9 @@ const accountProfileQuery = useQuery({
   retry: false,
 })
 const accountProfile = computed(() => accountProfileQuery.data.value)
-const allPosts = computed(() => accountProfile.value?.posts ?? samplePosts.map((post) => forumStore.hydratePost(post)))
-const authoredPosts = computed(() => accountProfile.value?.posts ?? allPosts.value.filter((post) => post.authorName === profileName.value))
-const allComments = computed(() => Object.values(sampleComments).flat())
-const authoredComments = computed(() => accountProfile.value?.comments.map((item) => item.comment) ?? allComments.value.filter((comment) => comment.author === profileName.value))
+const allPosts = computed(() => accountProfile.value?.posts ?? [])
+const authoredPosts = computed(() => accountProfile.value?.posts ?? [])
+const authoredComments = computed(() => accountProfile.value?.comments.map((item) => item.comment) ?? [])
 
 const profile = computed(() => {
   const fromPost = authoredPosts.value[0]
@@ -67,13 +65,7 @@ const profileAsFollow = computed<FollowProfile>(() => ({
   followedAt: new Date().toISOString(),
 }))
 const commentCards = computed(() =>
-  accountProfile.value?.comments.map((item) => ({ comment: item.comment, postId: item.comment.postId, postTitle: item.postTitle }))
-    ?? authoredComments.value
-      .map((comment) => {
-        const post = allPosts.value.find((item) => item.id === comment.postId)
-        return post ? { comment, postId: post.id, postTitle: post.title } : null
-      })
-      .filter((item): item is { comment: Comment; postId: number; postTitle: string } => Boolean(item)),
+  accountProfile.value?.comments.map((item) => ({ comment: item.comment, postId: item.comment.postId, postTitle: item.postTitle })) ?? [],
 )
 const profileStats = computed(() => accountProfile.value?.stats ?? {
   posts: authoredPosts.value.length,

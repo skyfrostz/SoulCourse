@@ -10,6 +10,7 @@ import type {
   FeedFilter,
   Post,
   SubjectInsight,
+  Taxonomy,
   ToggleResult,
   Topic,
   TopicDetail,
@@ -124,18 +125,43 @@ export async function markAllNotificationsRead(): Promise<void> {
 }
 
 export async function fetchPosts(filter: FeedFilter, page = 1, pageSize = 4): Promise<Post[]> {
+  return fetchPostCollection({
+    track: filter.track === 'all' ? undefined : filter.track,
+    subjects: filter.subjects,
+    category: filter.category === 'all' ? undefined : filter.category,
+    province: filter.province,
+    tag: filter.tag,
+    q: filter.keyword || undefined,
+    sort: filter.sort,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  })
+}
+
+export interface PostCollectionQuery {
+  track?: Exclude<FeedFilter['track'], 'all'>
+  subjects?: FeedFilter['subjects']
+  category?: Exclude<FeedFilter['category'], 'all'>
+  province?: string
+  tag?: string
+  q?: string
+  sort?: FeedFilter['sort']
+  limit?: number
+  offset?: number
+}
+
+export async function fetchPostCollection(query: PostCollectionQuery = {}): Promise<Post[]> {
   const response = await api.get<ApiEnvelope<Post[]>>('/posts', {
     params: {
-      track: filter.track === 'all' ? undefined : filter.track,
-      subjects: filter.subjects.join(','),
-      category: filter.category === 'all' ? undefined : filter.category,
-      province: '广东',
-      q: filter.keyword || undefined,
-      sort: filter.sort,
-      limit: pageSize,
-      offset: (page - 1) * pageSize,
+      ...query,
+      subjects: query.subjects?.join(','),
     },
   })
+  return response.data.data
+}
+
+export async function fetchTaxonomy(): Promise<Taxonomy> {
+  const response = await api.get<ApiEnvelope<Taxonomy>>('/taxonomy')
   return response.data.data
 }
 

@@ -1,12 +1,13 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { Bookmark, ChevronLeft, MessageCircle, PenLine, Search, ShieldCheck, Sparkles, ThumbsUp, TrendingUp } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
 import { categoryLabels } from '../lib/labels'
+import { fetchPostCollection } from '../lib/api'
 import { majorRequirements } from '../lib/majorRequirements'
 import { findMajorRequirement, formatCompactCount, getMajorForumStats, hydrateMajorPosts, majorForumPath } from '../lib/majorForum'
-import { samplePosts } from '../lib/sampleData'
 import { useForumStore } from '../stores/forum'
 import type { Category, Post } from '../types/forum'
 
@@ -19,7 +20,12 @@ const activeSort = ref<'hot' | 'latest' | 'saved'>('hot')
 const majorName = computed(() => decodeURIComponent(String(route.params.major ?? '')))
 const requirement = computed(() => findMajorRequirement(majorName.value))
 const displayMajor = computed(() => requirement.value?.major ?? majorName.value)
-const forumPosts = computed(() => samplePosts)
+const forumPostsQuery = useQuery({
+  queryKey: computed(() => ['major-posts', displayMajor.value]),
+  queryFn: () => fetchPostCollection({ q: displayMajor.value, sort: 'latest', limit: 50 }),
+  enabled: computed(() => Boolean(displayMajor.value)),
+})
+const forumPosts = computed(() => forumPostsQuery.data.value ?? [])
 const relatedPosts = computed(() => hydrateMajorPosts(displayMajor.value, forumStore, forumPosts.value))
 const stats = computed(() => getMajorForumStats(displayMajor.value, forumStore, forumPosts.value))
 const categoryTabs: Array<{ label: string; value: Category | 'all' }> = [

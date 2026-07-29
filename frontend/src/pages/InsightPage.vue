@@ -4,8 +4,7 @@ import { BarChart3, ChevronLeft, Gauge, TrendingUp } from '@lucide/vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
-import { apiDataEnabled, fetchInsight } from '../lib/api'
-import { samplePosts } from '../lib/sampleData'
+import { apiDataEnabled, fetchInsight, fetchPostCollection } from '../lib/api'
 import { useForumStore } from '../stores/forum'
 
 const route = useRoute()
@@ -18,11 +17,18 @@ const insightQuery = useQuery({
   enabled: apiDataEnabled,
 })
 const insight = computed(() => insightQuery.data.value)
-const relatedPosts = computed(() => {
-  const current = insight.value
-  if (!current) return []
-  return samplePosts.filter((post) => post.tags.includes(current.combination) || post.content.includes(current.combination)).slice(0, 6)
+const subjectTag = computed(() => combinationTag(insight.value?.combination ?? ''))
+const relatedPostsQuery = useQuery({
+  queryKey: computed(() => ['insight-posts', subjectTag.value]),
+  queryFn: () => fetchPostCollection({ tag: subjectTag.value, sort: 'latest', limit: 50 }),
+  enabled: computed(() => Boolean(subjectTag.value)),
 })
+const relatedPosts = computed(() => relatedPostsQuery.data.value ?? [])
+
+function combinationTag(combination: string) {
+  const abbreviations: Record<string, string> = { 物理: '物', 历史: '史', 化学: '化', 生物: '生', 政治: '政', 地理: '地' }
+  return combination.split('+').map((item) => abbreviations[item.trim()] ?? '').join('')
+}
 </script>
 
 <template>
@@ -33,11 +39,15 @@ const relatedPosts = computed(() => {
       <h1>{{ insight.combination }}</h1>
       <p class="article-lead">{{ insight.advice }}</p>
       <div class="insight-score insight-score-wide">
-        <span><TrendingUp :size="18" /><strong>{{ insight.heat }}</strong> 热度</span>
-        <span><Gauge :size="18" /><strong>{{ insight.matchRate }}%</strong> 匹配度</span>
-        <span><BarChart3 :size="18" /><strong>{{ insight.trend }}</strong> 趋势</span>
+        <span><TrendingUp :size="18" /><strong>{{ insight.heat }}</strong> {{ insight.unit }}</span>
+        <span><Gauge :size="18" /><strong>{{ insight.matchRate }}%</strong> 数据集占比</span>
+        <span><BarChart3 :size="18" /><strong>{{ insight.trend }}</strong> 选科要求</span>
       </div>
       <p class="article-body">{{ insight.details }}</p>
+      <p class="article-body">统计范围：{{ insight.scope }}。{{ insight.methodology }}</p>
+      <a class="note-source-link advice-source-large" :href="insight.sourceUrl" target="_blank" rel="noreferrer">
+        来源：{{ insight.sourceName }} · 抓取于 {{ new Date(insight.capturedAt).toLocaleDateString('zh-CN') }}
+      </a>
       <div class="publish-strip">
         <span>想结合你的成绩和目标专业继续讨论？</span>
         <button class="primary-wide" @click="forumStore.openPublish('question')">发布提问</button>

@@ -1,24 +1,33 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ExternalLink, FileText, ShieldCheck } from '@lucide/vue'
 import PostCard from '../components/PostCard.vue'
+import { fetchPostCollection } from '../lib/api'
 import { provinceKnowledge } from '../lib/knowledgeBase'
 import { createProvincePolicyDocuments, policyDocumentPath } from '../lib/policyDocuments'
 import { requirementData } from '../lib/realData'
-import { samplePosts } from '../lib/sampleData'
 
 const route = useRoute()
 const router = useRouter()
 const provinceName = computed(() => decodeURIComponent(String(route.params.province ?? '')))
 const province = computed(() => provinceKnowledge.find((item) => item.province === provinceName.value))
 const requirement = computed(() => requirementData.find((item) => item.province === provinceName.value))
+const provincePostsQuery = useQuery({
+  queryKey: computed(() => ['province-posts', provinceName.value]),
+  queryFn: () => fetchPostCollection({ province: provinceName.value, sort: 'latest', limit: 50 }),
+  enabled: computed(() => Boolean(province.value)),
+})
+const nationalPostsQuery = useQuery({
+  queryKey: ['province-posts', '全国'],
+  queryFn: () => fetchPostCollection({ province: '全国', sort: 'latest', limit: 20 }),
+})
 const provincePosts = computed(() => {
   if (!province.value) return []
-  const focused = samplePosts.filter((post) => post.province === province.value?.province)
-  const byPolicy = samplePosts.filter(
+  const focused = provincePostsQuery.data.value ?? []
+  const byPolicy = (nationalPostsQuery.data.value ?? []).filter(
     (post) =>
-      post.province === '全国' ||
       post.tags.some((tag) => province.value?.focus.some((focus) => tag.includes(focus) || focus.includes(tag))),
   )
   const merged = new Map([...focused, ...byPolicy].map((post) => [post.id, post]))

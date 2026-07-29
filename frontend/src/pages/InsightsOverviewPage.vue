@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
-import { BarChart3, ChevronLeft, Gauge, Search, ShieldCheck, TrendingUp } from '@lucide/vue'
+import { BarChart3, ChevronLeft, Search, ShieldCheck, TrendingUp } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, fetchInsights } from '../lib/api'
 import { policyTakeaways, requirementData } from '../lib/realData'
@@ -16,46 +16,39 @@ const insightsQuery = useQuery({
   queryFn: fetchInsights,
   enabled: apiDataEnabled,
 })
-const mode = ref<'heat' | 'match' | 'coverage'>(
-  route.query.mode === 'match' || route.query.mode === 'coverage' ? route.query.mode : 'heat',
-)
+const mode = ref<'count' | 'share'>(route.query.mode === 'share' ? 'share' : 'count')
 const modes = [
-  { value: 'heat', label: '热度排序', shortLabel: '热度', icon: TrendingUp },
-  { value: 'match', label: '匹配度', shortLabel: '匹配', icon: Gauge },
-  { value: 'coverage', label: '专业覆盖', shortLabel: '覆盖', icon: BarChart3 },
+  { value: 'count', label: '计划数排序', shortLabel: '计划数', icon: TrendingUp },
+  { value: 'share', label: '数据集占比', shortLabel: '占比', icon: BarChart3 },
 ] as const
 
-function coverageRate(insight: SubjectInsight) {
-  return insight.coverageRate ?? insight.matchRate
-}
-
 function scoreFor(insight: SubjectInsight) {
-  if (mode.value === 'heat') return insight.heat
-  if (mode.value === 'coverage') return coverageRate(insight)
-  return insight.matchRate
+  if (mode.value === 'share') return insight.matchRate
+  const maximum = Math.max(...(insightsQuery.data.value ?? []).map((item) => item.heat), 1)
+  return insight.heat / maximum * 100
 }
 
 const insightCards = computed(() => {
   const source = [...(insightsQuery.data.value ?? [])]
-  if (mode.value === 'match') return source.sort((a, b) => b.matchRate - a.matchRate)
-  if (mode.value === 'coverage') return source.sort((a, b) => coverageRate(b) - coverageRate(a))
+  if (mode.value === 'share') return source.sort((a, b) => b.matchRate - a.matchRate)
   return source.sort((a, b) => b.heat - a.heat)
 })
 
 watch(
   () => route.query.mode,
   (value) => {
-    mode.value = value === 'match' || value === 'coverage' || value === 'heat' ? value : 'heat'
+    mode.value = value === 'share' ? 'share' : 'count'
   },
 )
 
-function setMode(value: 'heat' | 'match' | 'coverage') {
+function setMode(value: 'count' | 'share') {
   mode.value = value
-  router.replace({ path: '/insights', query: value === 'heat' ? {} : { mode: value } })
+  router.replace({ path: '/insights', query: value === 'count' ? {} : { mode: value } })
 }
 
 function donutStyle(index: number) {
   const data = requirementData[index]
+  if (!data?.slices.length) return { background: '#e2e8f0' }
   let cursor = 0
   const stops = data.slices.map((slice) => {
     const start = cursor
@@ -77,8 +70,8 @@ function searchCombination(combination: string) {
     <section class="overview-hero insights-overview-hero">
       <div class="insights-hero-copy">
         <div class="breadcrumb">首页 / 选科组合趋势</div>
-        <h1>选科组合趋势中心</h1>
-        <p>把组合热度、专业覆盖、学习强度和后续讨论放在同一个页面里比较，避免只凭“热门”做决定。</p>
+        <h1>官方选科要求数据中心</h1>
+        <p>只展示能够从考试招生机构原始材料复算的指标，并把统计范围、来源和抓取时间一并公开。</p>
       </div>
       <div class="insights-sort-panel" aria-label="趋势排序">
         <span>排序方式</span>
@@ -110,9 +103,9 @@ function searchCombination(combination: string) {
             <span :style="{ width: `${Math.min(scoreFor(insight), 100)}%` }"></span>
           </div>
           <div class="overview-score">
-            <span>热度 {{ insight.heat }}</span>
-            <span>匹配 {{ insight.matchRate }}%</span>
-            <span>覆盖 {{ coverageRate(insight) }}%</span>
+            <span>{{ insight.unit }} {{ insight.heat }}</span>
+            <span>占数据集 {{ insight.matchRate }}%</span>
+            <span>{{ insight.dataYear }} · {{ insight.province }}</span>
           </div>
         </RouterLink>
         <button type="button" @click="searchCombination(insight.combination)">
@@ -124,16 +117,16 @@ function searchCombination(combination: string) {
     <section class="data-lab">
       <div class="section-heading">
         <span>真实数据看板</span>
-        <h2>34 个省级招生政策与选考入口</h2>
-        <p>前三张为公开统计数据，其余为省级考试院/港澳台招生入口核对卡。适合先建立全国视野，再回到本省最新目录和高校章程逐条核对。</p>
+        <h2>省级官方来源与公开情况</h2>
+        <p>广东展示已复算的官方招生计划数据；其他省份没有可靠组合级数据时明确标记缺失，只保留官方查询入口。</p>
       </div>
       <div class="data-lab-grid">
         <article v-for="(item, index) in requirementData" :key="item.province" class="data-chart-card">
           <div>
-            <small>{{ item.province }} · {{ item.total ? `${item.total} 条专业数据` : '公开目录' }}</small>
+            <small>{{ item.province }} · {{ item.total ? `${item.total} 个计划数` : '暂无组合级统计' }}</small>
             <h3>{{ item.note }}</h3>
           </div>
-          <div class="source-donut-row">
+          <div v-if="item.slices.length" class="source-donut-row">
             <span class="source-donut" :style="donutStyle(index)"></span>
             <div class="source-legend">
               <span v-for="slice in item.slices" :key="slice.label">
@@ -143,8 +136,12 @@ function searchCombination(combination: string) {
               </span>
             </div>
           </div>
+          <div v-else class="empty-state compact-empty">
+            <strong>暂无官方公开数据</strong>
+            <p>不使用专业覆盖率、门户分类或公式生成值代替考生组合热度。</p>
+          </div>
           <a :href="item.source.url" target="_blank" rel="noreferrer">来源：{{ item.source.publisher }}</a>
-          <p class="source-note"><ShieldCheck :size="15" /> 建议与本省最新考试院目录交叉核对。</p>
+          <p class="source-note"><ShieldCheck :size="15" /> {{ item.capturedAt ? `抓取于 ${item.capturedAt}` : '请从官方入口核对最新公告' }}</p>
         </article>
       </div>
     </section>

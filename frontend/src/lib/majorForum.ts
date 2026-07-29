@@ -1,10 +1,8 @@
 import { majorRequirements, type MajorRequirement } from './majorRequirements'
-import { sampleComments, samplePosts } from './sampleData'
-import type { Comment, Post } from '../types/forum'
+import type { Post } from '../types/forum'
 
 interface ForumStoreLike {
   hydratePost(post: Post): Post
-  getActualCommentCount(postId: number, fallback?: Comment[]): number
 }
 
 export interface MajorForumStats {
@@ -24,7 +22,7 @@ export function findMajorRequirement(major: string): MajorRequirement | undefine
   return majorRequirements.find((item) => normalizeText(item.major) === normalizeText(decoded))
 }
 
-export function getRelatedMajorPosts(major: string, posts: Post[] = samplePosts): Post[] {
+export function getRelatedMajorPosts(major: string, posts: Post[] = []): Post[] {
   const query = normalizeText(major)
   const exactTagMatches = posts.filter((post) => post.tags.some((tag) => normalizeText(tag) === query))
   const matchedPosts = exactTagMatches.length
@@ -38,20 +36,11 @@ export function getRelatedMajorPosts(major: string, posts: Post[] = samplePosts)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 }
 
-export function hydrateMajorPosts(major: string, forumStore: ForumStoreLike, posts: Post[] = samplePosts): Post[] {
-  return getRelatedMajorPosts(major, posts).map((post) => {
-    const hydrated = forumStore.hydratePost(post)
-    const fallbackComments = sampleComments[post.id]
-    return {
-      ...hydrated,
-      commentsCount: fallbackComments
-        ? forumStore.getActualCommentCount(post.id, fallbackComments)
-        : Math.max(hydrated.commentsCount, forumStore.getActualCommentCount(post.id, [])),
-    }
-  })
+export function hydrateMajorPosts(major: string, forumStore: ForumStoreLike, posts: Post[] = []): Post[] {
+  return getRelatedMajorPosts(major, posts).map((post) => forumStore.hydratePost(post))
 }
 
-export function getMajorForumStats(major: string, forumStore: ForumStoreLike, posts: Post[] = samplePosts): MajorForumStats {
+export function getMajorForumStats(major: string, forumStore: ForumStoreLike, posts: Post[] = []): MajorForumStats {
   const relatedPosts = hydrateMajorPosts(major, forumStore, posts)
   const likesCount = relatedPosts.reduce((sum, post) => sum + post.likesCount, 0)
   const commentsCount = relatedPosts.reduce((sum, post) => sum + post.commentsCount, 0)

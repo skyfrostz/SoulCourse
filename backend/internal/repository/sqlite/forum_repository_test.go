@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,82 @@ func TestRecommendedFeedPrioritizesSubjectChoiceContent(t *testing.T) {
 	if !strings.Contains(query, "p.title LIKE '%选科%'") {
 		t.Fatal("recommended feed must prioritize subject-choice posts")
 	}
+}
+
+func TestPostTagFilterUsesExactJSONValue(t *testing.T) {
+	repository := newVerificationLimitTestRepository(t)
+	ctx := context.Background()
+	user, err := repository.CreateUser(ctx, domain.RegisterInput{
+		Email: "tag-filter@example.com", Nickname: "标签测试用户", Role: "student", Province: "广东", Grade: "高一",
+	}, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct {
+		title string
+		tag   string
+	}{
+		{title: "精确标签测试帖子", tag: "精确标签"},
+		{title: "相似标签测试帖子", tag: "精确标签扩展"},
+	} {
+		if _, err := repository.CreatePost(ctx, user, domain.CreatePostInput{
+			Title: item.title, Content: "这是一条用于验证 JSON 标签精确匹配的测试内容。", Tags: []string{item.tag},
+			Track: domain.TrackPhysics, Electives: []domain.Subject{domain.SubjectChemistry, domain.SubjectBiology},
+			Category: domain.CategoryQuestion,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	posts, err := repository.ListPosts(ctx, nil, domain.FeedFilter{Tag: "精确标签", Sort: domain.SortLatest, Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(posts) != 1 || posts[0].Title != "精确标签测试帖子" {
+		t.Fatalf("tag filter must match one exact JSON value: %#v", posts)
+	}
+}
+
+func TestTopicsUsePostTagsAfterLegacyMigration(t *testing.T) {
+	repository := newVerificationLimitTestRepository(t)
+	ctx := context.Background()
+
+	if _, err := repository.db.ExecContext(ctx, `DELETE FROM topic_posts`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.db.ExecContext(ctx, `UPDATE topics SET posts_count = 999 WHERE slug = 'physics-track-how-to-choose'`); err != nil {
+		t.Fatal(err)
+	}
+	topics, err := repository.ListTopics(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	physicsTopic := findTopic(topics, "physics-track-how-to-choose")
+	if physicsTopic == nil || physicsTopic.TopicTag != domain.TopicTagPhysicsTrack || physicsTopic.PostsCount != 3 {
+		t.Fatalf("legacy topic links were not migrated into post tags: %#v", physicsTopic)
+	}
+
+	detail, err := repository.GetTopic(ctx, nil, "physics-track-how-to-choose")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Posts) != physicsTopic.PostsCount {
+		t.Fatalf("topic detail and dynamic count diverged: count=%d posts=%d", physicsTopic.PostsCount, len(detail.Posts))
+	}
+	for _, post := range detail.Posts {
+		if !slices.Contains(post.Tags, domain.TopicTagPhysicsTrack) {
+			t.Fatalf("topic returned a post without its exact tag: %#v", post.Tags)
+		}
+	}
+}
+
+func findTopic(topics []domain.Topic, slug string) *domain.Topic {
+	for index := range topics {
+		if topics[index].Slug == slug {
+			return &topics[index]
+		}
+	}
+	return nil
 }
 
 func TestReserveEmailVerificationAttemptEnforcesCooldownAndEmailLimit(t *testing.T) {

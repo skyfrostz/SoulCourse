@@ -3,9 +3,12 @@ package storage
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"subject-choice-forum/backend/internal/config"
@@ -63,6 +66,7 @@ func initSQLiteSchema(db *sql.DB) error {
 			role TEXT NOT NULL,
 			province TEXT NOT NULL DEFAULT '',
 			grade TEXT NOT NULL DEFAULT '',
+			is_shadow INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			deleted_at TEXT
@@ -252,6 +256,8 @@ func initSQLiteSchema(db *sql.DB) error {
 			ON posts (deleted_at, track, category, province, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_posts_author
 			ON posts (author_name, deleted_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_posts_user
+			ON posts (user_id, deleted_at, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_comments_post
 			ON comments (post_id, deleted_at, created_at ASC);`,
 		`CREATE INDEX IF NOT EXISTS idx_notifications_recipient
@@ -271,6 +277,13 @@ func initSQLiteSchema(db *sql.DB) error {
 		if _, err := db.Exec(statement); err != nil {
 			return err
 		}
+	}
+	if err := ensureSQLiteColumn(db, "users", "is_shadow", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_shadow_nickname
+		ON users (nickname) WHERE is_shadow = 1 AND deleted_at IS NULL`); err != nil {
+		return err
 	}
 	if err := ensureSQLiteColumn(db, "content_sources", "source_avatar_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
@@ -311,7 +324,7 @@ func initSQLiteSchema(db *sql.DB) error {
 			('小周同学', 'student', '物化生适合目标不太明确的人吗？', '我现在数学和物理还可以，化学中上，生物背诵压力能接受。想听听大家对物化生后续专业覆盖和学习强度的真实感受。', '[]', '["物化生","专业覆盖"]', 'physics', '["chemistry","biology"]', 'question', '高一', '浙江', 128, 3, 42, '%[1]s', '%[1]s'),
 			('林妈妈', 'parent', '孩子想选史政地，家长应该怎么判断风险？', '孩子文科表达不错，但我们担心专业选择变窄。想请教史政地在赋分和未来专业方向上要提前注意什么。', '[]', '["史政地","风险核对"]', 'history', '["politics","geography"]', 'question', '高一', '山东', 96, 2, 31, '%[1]s', '%[1]s'),
 			('陈老师', 'teacher', '从最近三届学生看物化地的优劣势', '物化地通常适合物理基础稳、空间理解强、但不想承受生物记忆量的学生。它的优势是工科覆盖较好，地理赋分在部分地区也较友好。', '[]', '["物化地","工科"]', 'physics', '["chemistry","geography"]', 'experience', '高一', '广东', 212, 4, 88, '%[1]s', '%[1]s'),
-			('选科研究所', 'counselor', '广东2025专科征集志愿：16071个计划的选科要求', '按广东省教育考试院2025年专科批次第一次征集志愿普通类物理、历史计划表逐行汇总：物理类1048条、历史类436条，共16071个计划数。该统计是招生计划要求，不是考生选科人数或录取概率。', '[]', '["数据建议","广东考试院","招生计划"]', 'physics', '["chemistry","biology"]', 'data', '高一', '广东', 0, 0, 0, '%[1]s', '%[1]s');`, now),
+			('选科研究所', 'counselor', '广东2025本科征集志愿：27681个计划的选科要求', '按广东省教育考试院2025年本科批次征集志愿普通类物理、历史计划表逐行汇总：物理类569条、历史类280条，共849条专业计划记录、27681个计划数。该统计是本科征集志愿招生计划要求，不是考生选科人数或录取概率。', '[]', '["数据建议","广东考试院","本科招生计划"]', 'physics', '["chemistry","biology"]', 'data', '高一', '广东', 0, 0, 0, '%[1]s', '%[1]s');`, now),
 			fmt.Sprintf(`INSERT INTO comments (post_id, author, role, content, created_at)
 			VALUES
 			(1, '一只铅笔', 'student', '我也是物化生，最大感受是节奏很满，但专业覆盖确实安心。', '%[1]s'),
@@ -361,6 +374,12 @@ func initSQLiteSchema(db *sql.DB) error {
 	if err := backfillSubjectPostTags(db); err != nil {
 		return err
 	}
+	if err := backfillPostUserOwnership(db); err != nil {
+		return err
+	}
+	if err := hideNonPublicAdminPosts(db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -372,11 +391,12 @@ func migrateOfficialSubjectInsights(db *sql.DB) error {
 	}
 	if _, err := db.Exec(`
 		UPDATE posts
-		SET title = '广东2025专科征集志愿：16071个计划的选科要求',
-		    content = '按广东省教育考试院2025年专科批次第一次征集志愿普通类物理、历史计划表逐行汇总：物理类1048条、历史类436条，共16071个计划数。该统计是招生计划要求，不是考生选科人数或录取概率。',
-		    tags = '["数据建议","广东考试院","招生计划"]', province = '广东',
+		SET title = '广东2025本科征集志愿：27681个计划的选科要求',
+		    content = '按广东省教育考试院2025年本科批次征集志愿普通类物理、历史计划表逐行汇总：物理类569条、历史类280条，共849条专业计划记录、27681个计划数。该统计是本科征集志愿招生计划要求，不是考生选科人数或录取概率。',
+		    tags = '["数据建议","广东考试院","本科招生计划"]', province = '广东',
 		    likes_count = 0, comments_count = 0, favorites_count = 0, updated_at = ?
-		WHERE author_name = '选科研究所' AND title = '2026届各组合专业覆盖率汇总'
+		WHERE author_name = '选科研究所'
+		  AND title IN ('2026届各组合专业覆盖率汇总', '广东2025专科征集志愿：16071个计划的选科要求', '广东2025本科征集志愿：27681个计划的选科要求')
 	`, now); err != nil {
 		return err
 	}
@@ -384,7 +404,7 @@ func migrateOfficialSubjectInsights(db *sql.DB) error {
 	if err := db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(heat), 0) FROM subject_insights WHERE metric_type = ? AND province = '广东' AND data_year = 2025`, metricType).Scan(&rowCount, &total); err != nil {
 		return err
 	}
-	if rowCount == 7 && total == 16071 {
+	if rowCount == 8 && total == 27681 {
 		return nil
 	}
 	type officialInsight struct {
@@ -395,13 +415,14 @@ func migrateOfficialSubjectInsights(db *sql.DB) error {
 		sourceURL   string
 	}
 	items := []officialInsight{
-		{combination: "物理 + 再选不限", trend: "再选科目不限", value: 10675, share: 66.4240, sourceURL: "https://eea.gd.gov.cn/attachment/0/587/587942/4755952.pdf"},
-		{combination: "历史 + 再选不限", trend: "再选科目不限", value: 5318, share: 33.0907, sourceURL: "https://eea.gd.gov.cn/attachment/0/587/587941/4755940.pdf"},
-		{combination: "物理 + 化学", trend: "再选科目要求化学", value: 67, share: 0.4169, sourceURL: "https://eea.gd.gov.cn/attachment/0/587/587942/4755952.pdf"},
-		{combination: "物理 + 化学 + 生物", trend: "再选科目要求化学和生物", value: 6, share: 0.0373, sourceURL: "https://eea.gd.gov.cn/attachment/0/587/587942/4755952.pdf"},
-		{combination: "物理 + 生物", trend: "再选科目要求生物", value: 2, share: 0.0124, sourceURL: "https://eea.gd.gov.cn/attachment/0/587/587942/4755952.pdf"},
-		{combination: "历史 + 生物", trend: "再选科目要求生物", value: 2, share: 0.0124, sourceURL: "https://eea.gd.gov.cn/attachment/0/587/587941/4755940.pdf"},
-		{combination: "历史 + 政治 + 地理", trend: "再选科目要求政治和地理", value: 1, share: 0.0062, sourceURL: "https://eea.gd.gov.cn/attachment/0/587/587941/4755940.pdf"},
+		{combination: "物理 + 再选不限", trend: "再选科目不限", value: 10810, share: 39.0521, sourceURL: "https://eea.gd.gov.cn/attachment/0/586/586507/4749214.zip"},
+		{combination: "物理 + 化学", trend: "再选科目要求化学", value: 8446, share: 30.5119, sourceURL: "https://eea.gd.gov.cn/attachment/0/586/586507/4749214.zip"},
+		{combination: "历史 + 再选不限", trend: "再选科目不限", value: 7928, share: 28.6406, sourceURL: "https://eea.gd.gov.cn/attachment/0/586/586507/4749214.zip"},
+		{combination: "历史 + 政治", trend: "再选科目要求政治", value: 324, share: 1.1705, sourceURL: "https://eea.gd.gov.cn/attachment/0/586/586507/4749214.zip"},
+		{combination: "物理 + 生物", trend: "再选科目要求生物", value: 69, share: 0.2493, sourceURL: "https://eea.gd.gov.cn/attachment/0/586/586507/4749214.zip"},
+		{combination: "历史 + 生物", trend: "再选科目要求生物", value: 57, share: 0.2059, sourceURL: "https://eea.gd.gov.cn/attachment/0/586/586507/4749214.zip"},
+		{combination: "历史 + 化学", trend: "再选科目要求化学", value: 45, share: 0.1626, sourceURL: "https://eea.gd.gov.cn/attachment/0/586/586507/4749214.zip"},
+		{combination: "物理 + 化学 + 生物", trend: "再选科目要求化学和生物", value: 2, share: 0.0072, sourceURL: "https://eea.gd.gov.cn/attachment/0/586/586507/4749214.zip"},
 	}
 	transaction, err := db.Begin()
 	if err != nil {
@@ -416,16 +437,90 @@ func migrateOfficialSubjectInsights(db *sql.DB) error {
 			INSERT INTO subject_insights
 			(combination, trend, heat, match_rate, advice, details, metric_type, unit, province, data_year,
 			 source_name, source_url, scope, sample_size, captured_at, methodology, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, '招生计划数', '广东', 2025, '广东省教育考试院', ?, ?, 16071, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, '招生计划数', '广东', 2025, '广东省教育考试院', ?, ?, 27681, ?, ?, ?)
 		`, item.combination, item.trend, item.value, item.share,
 			"该指标只反映招生计划的选科要求，不代表考生选科人数、录取概率或组合优劣。",
 			fmt.Sprintf("该类别共有 %d 个招生计划，占本数据集 %.4f%%。", item.value, item.share),
 			metricType, item.sourceURL,
-			"广东省2025年普通高校招生专科批次第一次征集志愿（普通类）",
+			"广东省2025年普通高校招生本科院校征集志愿（普通类历史、物理）",
 			now,
-			"逐行读取物理类1048条、历史类436条官方计划，按首选科目和再选科目要求汇总计划数。",
+			"逐行读取物理类569条、历史类280条官方本科计划记录，按首选科目和再选科目要求汇总27681个计划数。",
 			now,
 		); err != nil {
+			return err
+		}
+	}
+	return transaction.Commit()
+}
+
+func backfillUnownedPostAuthors(db *sql.DB) error {
+	rows, err := db.Query(`
+		SELECT author_name, author_role, province, grade
+		FROM posts
+		WHERE user_id IS NULL AND TRIM(author_name) <> ''
+		ORDER BY created_at ASC, id ASC
+	`)
+	if err != nil {
+		return err
+	}
+	type authorIdentity struct {
+		name     string
+		role     string
+		province string
+		grade    string
+	}
+	authors := make([]authorIdentity, 0)
+	seen := make(map[string]bool)
+	for rows.Next() {
+		var author authorIdentity
+		if err := rows.Scan(&author.name, &author.role, &author.province, &author.grade); err != nil {
+			rows.Close()
+			return err
+		}
+		author.name = strings.TrimSpace(author.name)
+		if author.name == "" || seen[author.name] {
+			continue
+		}
+		seen[author.name] = true
+		authors = append(authors, author)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	transaction, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback()
+	now := sqliteNow()
+	for _, author := range authors {
+		var userID int64
+		err := transaction.QueryRow(`
+			SELECT id FROM users
+			WHERE nickname = ? AND is_shadow = 1 AND deleted_at IS NULL
+			ORDER BY id ASC LIMIT 1
+		`, author.name).Scan(&userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			result, insertErr := transaction.Exec(`
+				INSERT INTO users (email, password_hash, nickname, role, province, grade, is_shadow, created_at, updated_at)
+				VALUES (NULL, NULL, ?, ?, ?, ?, 1, ?, ?)
+			`, author.name, author.role, author.province, author.grade, now, now)
+			if insertErr != nil {
+				return insertErr
+			}
+			userID, err = result.LastInsertId()
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := transaction.Exec(`
+			UPDATE posts SET user_id = ?
+			WHERE user_id IS NULL AND author_name = ?
+		`, userID, author.name); err != nil {
 			return err
 		}
 	}
@@ -569,6 +664,132 @@ func backfillSubjectPostTags(db *sql.DB) error {
 			return err
 		}
 		if _, err := transaction.Exec(`UPDATE posts SET tags = ? WHERE id = ?`, string(encoded), postID); err != nil {
+			return err
+		}
+	}
+	return transaction.Commit()
+}
+
+func backfillPostUserOwnership(db *sql.DB) error {
+	rows, err := db.Query(`
+		SELECT payload
+		FROM admin_content_records
+		WHERE module = 'posts' AND deleted_at IS NULL
+		ORDER BY created_at ASC, id ASC
+	`)
+	if err != nil {
+		return err
+	}
+	ownersByPost := make(map[int64]int64)
+	for rows.Next() {
+		var rawPayload string
+		if err := rows.Scan(&rawPayload); err != nil {
+			rows.Close()
+			return err
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+			rows.Close()
+			return fmt.Errorf("migrate post ownership: %w", err)
+		}
+		postID := migrationPayloadID(payload, "postId")
+		userID := migrationPayloadID(payload, "createdByUserId")
+		if userID == 0 {
+			userID = migrationPayloadID(payload, "userId")
+		}
+		if postID == 0 || userID == 0 {
+			continue
+		}
+		if existing, ok := ownersByPost[postID]; ok && existing != userID {
+			ownersByPost[postID] = 0
+			continue
+		}
+		ownersByPost[postID] = userID
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	transaction, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback()
+	for postID, userID := range ownersByPost {
+		if userID == 0 {
+			continue
+		}
+		if _, err := transaction.Exec(`
+			UPDATE posts
+			SET user_id = ?
+			WHERE id = ? AND user_id IS NULL
+			  AND EXISTS (SELECT 1 FROM users WHERE id = ?)
+		`, userID, postID, userID); err != nil {
+			return err
+		}
+	}
+	if err := transaction.Commit(); err != nil {
+		return err
+	}
+	return backfillUnownedPostAuthors(db)
+}
+
+func migrationPayloadID(payload map[string]any, key string) int64 {
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return 0
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(fmt.Sprint(value)), 10, 64)
+	if err != nil || id <= 0 {
+		return 0
+	}
+	return id
+}
+
+func hideNonPublicAdminPosts(db *sql.DB) error {
+	rows, err := db.Query(`
+		SELECT payload
+		FROM admin_content_records
+		WHERE module = 'posts' AND deleted_at IS NULL
+		  AND status NOT IN ('已上架', '正常')
+	`)
+	if err != nil {
+		return err
+	}
+	postIDs := make(map[int64]bool)
+	for rows.Next() {
+		var rawPayload string
+		if err := rows.Scan(&rawPayload); err != nil {
+			rows.Close()
+			return err
+		}
+		payload := map[string]any{}
+		if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
+			rows.Close()
+			return fmt.Errorf("migrate post visibility: %w", err)
+		}
+		if postID := migrationPayloadID(payload, "postId"); postID > 0 {
+			postIDs[postID] = true
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	hiddenAt := sqliteNow()
+	transaction, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback()
+	for postID := range postIDs {
+		if _, err := transaction.Exec(`UPDATE posts SET deleted_at = COALESCE(deleted_at, ?) WHERE id = ?`, hiddenAt, postID); err != nil {
 			return err
 		}
 	}

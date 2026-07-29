@@ -53,6 +53,7 @@ type ForumRepository interface {
 	TogglePostFavorite(ctx context.Context, userID int64, postID int64) (domain.ToggleResult, error)
 	ToggleFollowAuthor(ctx context.Context, followerID int64, authorName string) (bool, error)
 	GetAccountProfile(ctx context.Context, viewerID *int64, name string) (domain.AccountProfile, error)
+	GetAccountProfileByUserID(ctx context.Context, viewerID *int64, userID int64) (domain.AccountProfile, error)
 	UpdateAccountProfile(ctx context.Context, userID int64, input domain.UpdateProfileInput) (domain.AccountProfile, error)
 	ListNotifications(ctx context.Context, userID int64) ([]domain.Notification, error)
 	MarkNotificationRead(ctx context.Context, userID int64, notificationID *int64) error
@@ -323,6 +324,10 @@ func (s *ForumService) ToggleFollowAuthor(ctx context.Context, followerID int64,
 
 func (s *ForumService) GetAccountProfile(ctx context.Context, viewerID *int64, name string) (domain.AccountProfile, error) {
 	return s.repo.GetAccountProfile(ctx, viewerID, strings.TrimSpace(name))
+}
+
+func (s *ForumService) GetAccountProfileByUserID(ctx context.Context, viewerID *int64, userID int64) (domain.AccountProfile, error) {
+	return s.repo.GetAccountProfileByUserID(ctx, viewerID, userID)
 }
 
 func (s *ForumService) UpdateAccountProfile(ctx context.Context, userID int64, input domain.UpdateProfileInput) (domain.AccountProfile, error) {

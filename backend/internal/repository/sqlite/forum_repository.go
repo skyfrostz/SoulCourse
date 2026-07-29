@@ -86,6 +86,10 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 		)`
 		args = append(args, tag)
 	}
+	if filter.UserID != nil {
+		query += " AND p.user_id = ?"
+		args = append(args, *filter.UserID)
+	}
 
 	subjects := make([]domain.Subject, 0, len(filter.Subjects)+1)
 	subjects = append(subjects, filter.Subjects...)
@@ -104,11 +108,6 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 		query += ` AND LOWER(p.title || ' ' || p.content || ' ' || p.author_name || ' ' || p.province || ' ' || p.grade || ' ' || p.tags) LIKE ? ESCAPE '\'`
 		args = append(args, "%"+escapeLike(keyword)+"%")
 	}
-	if authorName := strings.TrimSpace(filter.AuthorName); authorName != "" {
-		query += " AND p.author_name = ?"
-		args = append(args, authorName)
-	}
-
 	switch filter.Sort {
 	case domain.SortLatest:
 		query += " ORDER BY p.created_at DESC, p.id DESC"
@@ -413,6 +412,7 @@ func (r *ForumRepository) GetUserByEmail(ctx context.Context, email string) (dom
 	if err != nil {
 		return domain.User{}, "", err
 	}
+	user.PublicID = formatUserPublicID(user.ID)
 	user.CreatedAt = parseTime(createdAt)
 	return user, passwordHash, nil
 }
@@ -698,12 +698,30 @@ func (r *ForumRepository) ToggleFollowAuthor(ctx context.Context, followerID int
 func (r *ForumRepository) GetAccountProfile(ctx context.Context, viewerID *int64, name string) (domain.AccountProfile, error) {
 	user, err := scanUser(r.db.QueryRowContext(ctx, `
 		SELECT id, email, nickname, role, province, grade, created_at
-		FROM users WHERE nickname = ? AND deleted_at IS NULL LIMIT 1
+		FROM users
+		WHERE nickname = ? AND deleted_at IS NULL
+		ORDER BY EXISTS (
+			SELECT 1 FROM posts p WHERE p.user_id = users.id AND p.deleted_at IS NULL
+		) DESC, is_shadow ASC, id ASC
+		LIMIT 1
 	`, name))
 	if err != nil {
 		return domain.AccountProfile{}, err
 	}
+	return r.getAccountProfile(ctx, viewerID, user)
+}
+
+func (r *ForumRepository) GetAccountProfileByUserID(ctx context.Context, viewerID *int64, userID int64) (domain.AccountProfile, error) {
+	user, err := r.GetUserByID(ctx, userID)
+	if err != nil {
+		return domain.AccountProfile{}, err
+	}
+	return r.getAccountProfile(ctx, viewerID, user)
+}
+
+func (r *ForumRepository) getAccountProfile(ctx context.Context, viewerID *int64, user domain.User) (domain.AccountProfile, error) {
 	profile := domain.AccountProfile{User: user, ChoiceProfile: defaultChoiceProfile()}
+	var err error
 	var profileJSON string
 	if err := r.db.QueryRowContext(ctx, `SELECT bio, choice_profile FROM user_profiles WHERE user_id = ?`, user.ID).Scan(&profile.Bio, &profileJSON); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return domain.AccountProfile{}, err
@@ -730,7 +748,7 @@ func (r *ForumRepository) GetAccountProfile(ctx context.Context, viewerID *int64
 			return domain.AccountProfile{}, err
 		}
 	}
-	profile.Posts, err = r.ListPosts(ctx, viewerID, domain.FeedFilter{AuthorName: user.Nickname, Sort: domain.SortLatest, Limit: 50})
+	profile.Posts, err = r.ListPosts(ctx, viewerID, domain.FeedFilter{UserID: &user.ID, Sort: domain.SortLatest, Limit: 50})
 	if err != nil {
 		return domain.AccountProfile{}, err
 	}
@@ -763,7 +781,7 @@ func (r *ForumRepository) UpdateAccountProfile(ctx context.Context, userID int64
 	if err != nil {
 		return domain.AccountProfile{}, err
 	}
-	return r.GetAccountProfile(ctx, &userID, user.Nickname)
+	return r.GetAccountProfileByUserID(ctx, &userID, user.ID)
 }
 
 func (r *ForumRepository) ListNotifications(ctx context.Context, userID int64) ([]domain.Notification, error) {
@@ -1165,8 +1183,13 @@ func scanUser(scanner userScanner) (domain.User, error) {
 	if err != nil {
 		return domain.User{}, err
 	}
+	user.PublicID = formatUserPublicID(user.ID)
 	user.CreatedAt = parseTime(createdAt)
 	return user, nil
+}
+
+func formatUserPublicID(id int64) string {
+	return fmt.Sprintf("%08d", id)
 }
 
 func parseTime(value string) time.Time {

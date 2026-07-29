@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -465,24 +466,27 @@ func (h *AdminHandler) syncContentRecord(ctx context.Context, record AdminConten
 	payloadMap := decodePayloadMap(record.Payload)
 	postPayload := buildSyncedPostPayload(record, payloadMap)
 	postID := postPayload.PostID
-
-	if postID == 0 {
-		_ = h.db.QueryRowContext(ctx, `
-			SELECT id
-			FROM posts
-			WHERE title = ? AND deleted_at IS NULL
-			ORDER BY created_at DESC
-			LIMIT 1
-		`, record.Title).Scan(&postID)
+	ownerUserID, err := h.resolvePostOwnerID(ctx, postID, payloadMap)
+	if err != nil {
+		return AdminContentRecord{}, err
+	}
+	var ownerUserIDValue any
+	if ownerUserID != nil {
+		ownerUserIDValue = *ownerUserID
+	}
+	var deletedAt any
+	if !isPublishedContentStatus(record.Status) {
+		deletedAt = nowString()
 	}
 
 	now := nowString()
 	if postID > 0 {
 		result, err := h.db.ExecContext(ctx, `
 			UPDATE posts
-			SET author_name = ?, author_role = ?, title = ?, content = ?, image_urls = ?, tags = ?, track = ?, electives = ?, category = ?, grade = ?, province = ?, deleted_at = NULL, updated_at = ?
-			WHERE id = ? AND deleted_at IS NULL
+			SET user_id = COALESCE(user_id, ?), author_name = ?, author_role = ?, title = ?, content = ?, image_urls = ?, tags = ?, track = ?, electives = ?, category = ?, grade = ?, province = ?, deleted_at = ?, updated_at = ?
+			WHERE id = ?
 		`,
+			ownerUserIDValue,
 			record.Owner,
 			inferAuthorRole(record),
 			record.Title,
@@ -494,6 +498,7 @@ func (h *AdminHandler) syncContentRecord(ctx context.Context, record AdminConten
 			postPayload.Category,
 			postPayload.Grade,
 			postPayload.Province,
+			deletedAt,
 			now,
 			postID,
 		)
@@ -508,9 +513,10 @@ func (h *AdminHandler) syncContentRecord(ctx context.Context, record AdminConten
 
 	if postID == 0 {
 		result, err := h.db.ExecContext(ctx, `
-			INSERT INTO posts (author_name, author_role, title, content, image_urls, tags, track, electives, category, grade, province, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO posts (user_id, author_name, author_role, title, content, image_urls, tags, track, electives, category, grade, province, created_at, updated_at, deleted_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
+			ownerUserIDValue,
 			record.Owner,
 			inferAuthorRole(record),
 			record.Title,
@@ -524,6 +530,7 @@ func (h *AdminHandler) syncContentRecord(ctx context.Context, record AdminConten
 			postPayload.Province,
 			now,
 			now,
+			deletedAt,
 		)
 		if err != nil {
 			return AdminContentRecord{}, err
@@ -543,6 +550,9 @@ func (h *AdminHandler) syncContentRecord(ctx context.Context, record AdminConten
 	payloadMap["grade"] = postPayload.Grade
 	payloadMap["province"] = postPayload.Province
 	payloadMap["imageUrls"] = postPayload.ImageURLs
+	if ownerUserID != nil {
+		payloadMap["createdByUserId"] = strconv.FormatInt(*ownerUserID, 10)
+	}
 
 	if _, err := h.db.ExecContext(ctx, `
 		UPDATE admin_content_records
@@ -552,6 +562,35 @@ func (h *AdminHandler) syncContentRecord(ctx context.Context, record AdminConten
 		return AdminContentRecord{}, err
 	}
 	return h.getContentByID(ctx, record.ID)
+}
+
+func (h *AdminHandler) resolvePostOwnerID(ctx context.Context, postID int64, payload map[string]any) (*int64, error) {
+	if postID > 0 {
+		var currentUserID sql.NullInt64
+		err := h.db.QueryRowContext(ctx, `SELECT user_id FROM posts WHERE id = ?`, postID).Scan(&currentUserID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		if currentUserID.Valid {
+			return &currentUserID.Int64, nil
+		}
+	}
+	userID := payloadInt64(payload, "createdByUserId")
+	if userID == 0 {
+		userID = payloadInt64(payload, "userId")
+	}
+	if userID == 0 {
+		return nil, nil
+	}
+	var existingID int64
+	err := h.db.QueryRowContext(ctx, `SELECT id FROM users WHERE id = ?`, userID).Scan(&existingID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &existingID, nil
 }
 
 func (h *AdminHandler) softDeleteSyncedPost(ctx context.Context, payload []byte) error {
@@ -670,10 +709,8 @@ func (h *AdminHandler) listContentRecords(ctx context.Context, publishedOnly boo
 		if record.Module == "users" {
 			continue
 		}
-		if publishedOnly {
-			if record.Status != "已上架" && record.Status != "正常" {
-				continue
-			}
+		if publishedOnly && !isPublishedContentStatus(record.Status) {
+			continue
 		}
 		records = append(records, record)
 	}
@@ -700,6 +737,10 @@ func (h *AdminHandler) listContentRecords(ctx context.Context, publishedOnly boo
 		return records[i].Module < records[j].Module
 	})
 	return records, nil
+}
+
+func isPublishedContentStatus(status string) bool {
+	return status == "已上架" || status == "正常"
 }
 
 func (h *AdminHandler) listUserRecords(ctx context.Context) ([]AdminContentRecord, error) {

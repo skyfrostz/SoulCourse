@@ -65,17 +65,17 @@ type Comment struct {
 }
 
 type FeedFilter struct {
-	Track      SubjectTrack
-	Subject    Subject
-	Subjects   []Subject
-	Tag        string
-	Category   PostCategory
-	Province   string
-	Keyword    string
-	AuthorName string
-	Sort       FeedSort
-	Limit      int
-	Offset     int
+	Track    SubjectTrack
+	Subject  Subject
+	Subjects []Subject
+	Tag      string
+	UserID   *int64
+	Category PostCategory
+	Province string
+	Keyword  string
+	Sort     FeedSort
+	Limit    int
+	Offset   int
 }
 
 type CreatePostInput struct {
@@ -117,6 +117,7 @@ type SubjectInsight struct {
 
 type User struct {
 	ID        int64     `json:"id"`
+	PublicID  string    `json:"publicId"`
 	Email     string    `json:"email"`
 	Nickname  string    `json:"nickname"`
 	Role      string    `json:"role"`

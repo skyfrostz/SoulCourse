@@ -122,8 +122,8 @@ textarea {
 .soft-pop-leave-active {
   transform-origin: top right;
   transition:
-    opacity 340ms var(--ease-out-smooth),
-    transform 340ms var(--ease-out-smooth);
+    opacity 160ms var(--ease-out-smooth),
+    transform 160ms var(--ease-out-smooth);
 }
 
 .soft-pop-enter-from,
@@ -398,6 +398,13 @@ textarea {
 }
 
 .profile-menu-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 40px;
+}
+
+.notification-menu-root {
   position: relative;
   display: flex;
   align-items: center;
@@ -9368,5 +9375,158 @@ textarea {
     padding: 0 12px;
     font-size: 11px;
     white-space: nowrap;
+  }
+}
+
+/* Publishing should feel conversational, not like an admin form. */
+.publish-modal {
+  border-radius: 16px;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.2);
+}
+
+.publish-modal .modal-title-row {
+  padding: 18px 20px 14px;
+  border-bottom-color: rgba(226, 232, 240, 0.72);
+}
+
+.publish-modal .auth-tabs {
+  gap: 4px;
+  margin: 12px 18px 0;
+  padding: 4px;
+  border-radius: 11px;
+  background: #f3f6f8;
+}
+
+.publish-modal .auth-tabs button {
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 720;
+  transition:
+    color 160ms var(--ease-out-smooth),
+    background-color 160ms var(--ease-out-smooth),
+    box-shadow 160ms var(--ease-out-smooth),
+    transform 120ms var(--ease-out-smooth);
+}
+
+.publish-modal .auth-tabs button.active {
+  background: #fff;
+  color: #08765f;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.publish-modal .auth-tabs button:active,
+.publish-modal .tag-chip-row button:active,
+.publish-modal .publish-subjects button:active {
+  transform: scale(0.97);
+}
+
+.publish-modal .publish-form {
+  gap: 14px;
+  padding: 18px 20px 20px;
+}
+
+.publish-modal .tag-editor {
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fbfdff 0%, #f7fbfa 100%);
+}
+
+.publish-modal .tag-editor input {
+  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.publish-modal .tag-editor input:focus {
+  border-color: rgba(15, 159, 122, 0.48);
+  box-shadow: 0 0 0 3px rgba(15, 159, 122, 0.09);
+}
+
+.publish-modal .tag-chip-row {
+  gap: 6px;
+}
+
+.publish-modal .tag-chip-row button {
+  min-height: 26px;
+  gap: 4px;
+  padding: 0 9px;
+  border-color: #dce7f2;
+  background: rgba(255, 255, 255, 0.88);
+  color: #45627f;
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1;
+  transition:
+    color 160ms var(--ease-out-smooth),
+    background-color 160ms var(--ease-out-smooth),
+    border-color 160ms var(--ease-out-smooth),
+    transform 120ms var(--ease-out-smooth);
+}
+
+.publish-modal .tag-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.publish-modal .tag-section-title {
+  color: #334155;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.publish-modal .tag-section-heading span,
+.publish-modal .tag-editor > small {
+  color: #8795a7;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.publish-modal .controlled-tag-row button:hover {
+  border-color: rgba(15, 159, 122, 0.34);
+  color: #08765f;
+}
+
+.publish-modal .controlled-tag-row button.active {
+  border-color: rgba(15, 159, 122, 0.46);
+  background: #e8f8f2;
+  color: #08765f;
+  box-shadow: inset 0 0 0 1px rgba(15, 159, 122, 0.06);
+}
+
+.publish-modal .publish-subjects button {
+  border-radius: 10px;
+  font-size: 13px;
+  transition:
+    color 160ms var(--ease-out-smooth),
+    background-color 160ms var(--ease-out-smooth),
+    border-color 160ms var(--ease-out-smooth),
+    transform 120ms var(--ease-out-smooth);
+}
+
+@media (max-width: 720px) {
+  .publish-modal {
+    border-radius: 14px 14px 0 0;
+  }
+
+  .publish-modal .tag-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .publish-modal .auth-tabs button,
+  .publish-modal .tag-chip-row button,
+  .publish-modal .publish-subjects button {
+    transition-property: color, background-color, border-color;
   }
 }

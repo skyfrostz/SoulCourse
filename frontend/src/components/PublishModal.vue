@@ -182,7 +182,7 @@ function submit() {
             <input
               v-model="tagInput"
               maxlength="20"
-              placeholder="例如：物化生"
+            placeholder="例如：新高考避坑"
               @keydown="handleTagKeydown"
             />
           </label>
@@ -194,10 +194,13 @@ function submit() {
               <Tag :size="13" /> {{ tag }} <X :size="12" />
             </button>
           </div>
-          <strong v-if="taxonomyQuery.data.value" class="tag-section-title">热门标签 · 点击即可选择</strong>
+          <div v-if="taxonomyQuery.data.value" class="tag-section-heading">
+            <strong class="tag-section-title">大家正在讨论</strong>
+            <span>点击即可选择</span>
+          </div>
           <div v-if="taxonomyQuery.data.value" class="tag-chip-row controlled-tag-row">
             <button
-              v-for="tag in [...taxonomyQuery.data.value.topicTags, ...taxonomyQuery.data.value.subjectTags]"
+              v-for="tag in taxonomyQuery.data.value.topicTags"
               :key="tag.value"
               type="button"
               :class="{ active: tags.includes(tag.value) }"
@@ -209,23 +212,13 @@ function submit() {
           </div>
           <small>已选标签会直接使用；未选标签时，AI 才会根据正文自动打标。</small>
         </div>
-        <div class="form-row">
-          <label>
-            方向
-            <select v-model="track">
-              <option value="physics">物理方向</option>
-              <option value="history">历史方向</option>
-            </select>
-          </label>
-          <label>
-            类型
-            <select v-model="category">
-              <option value="question">提问</option>
-              <option value="experience">经验贴</option>
-              <option value="data">数据建议</option>
-            </select>
-          </label>
-        </div>
+        <label>
+          方向
+          <select v-model="track">
+            <option value="physics">物理方向</option>
+            <option value="history">历史方向</option>
+          </select>
+        </label>
         <div class="publish-subjects">
           <button
             v-for="subject in subjects"

@@ -22,6 +22,77 @@ func TestRecommendedFeedPrioritizesSubjectChoiceContent(t *testing.T) {
 	}
 }
 
+func TestFormatUserPublicID(t *testing.T) {
+	for _, testCase := range []struct {
+		id   int64
+		want string
+	}{
+		{id: 1, want: "00000001"},
+		{id: 100000000, want: "100000000"},
+	} {
+		if got := formatUserPublicID(testCase.id); got != testCase.want {
+			t.Fatalf("formatUserPublicID(%d) = %q, want %q", testCase.id, got, testCase.want)
+		}
+	}
+}
+
+func TestUserPublicIDsFollowInternalCreationOrderAndKeepSourceIDsSeparate(t *testing.T) {
+	repository := newVerificationLimitTestRepository(t)
+	ctx := context.Background()
+	first, err := repository.CreateUser(ctx, domain.RegisterInput{
+		Email: "public-id-first@example.com", Nickname: "编号测试一", Role: "student", Province: "广东", Grade: "高一",
+	}, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := repository.CreateUser(ctx, domain.RegisterInput{
+		Email: "public-id-second@example.com", Nickname: "编号测试二", Role: "student", Province: "广东", Grade: "高一",
+	}, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID+1 {
+		t.Fatalf("user IDs must follow creation order: first=%d second=%d", first.ID, second.ID)
+	}
+	if first.PublicID != formatUserPublicID(first.ID) || second.PublicID != formatUserPublicID(second.ID) {
+		t.Fatalf("public IDs must derive from internal IDs: first=%+v second=%+v", first, second)
+	}
+
+	firstByEmail, _, err := repository.GetUserByEmail(ctx, first.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstByEmail.PublicID != first.PublicID {
+		t.Fatalf("email lookup returned inconsistent public ID: got=%q want=%q", firstByEmail.PublicID, first.PublicID)
+	}
+
+	post, err := repository.CreatePost(ctx, first, domain.CreatePostInput{
+		Title: "外部来源编号隔离测试", Content: "公开用户编号不能覆盖或混用外部平台的笔记编号。",
+		Track: domain.TrackPhysics, Electives: []domain.Subject{domain.SubjectChemistry, domain.SubjectBiology}, Category: domain.CategoryData,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sourceNoteID = "xhs_external_note_65f0abc123"
+	if _, err := repository.db.ExecContext(ctx, `
+		INSERT INTO content_sources (post_id, source_platform, source_url, source_note_id, captured_at)
+		VALUES (?, 'xiaohongshu', 'https://www.xiaohongshu.com/explore/65f0abc123', ?, ?)
+	`, post.ID, sourceNoteID, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	userByID, err := repository.GetUserByID(ctx, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var storedSourceNoteID string
+	if err := repository.db.QueryRowContext(ctx, `SELECT source_note_id FROM content_sources WHERE post_id = ?`, post.ID).Scan(&storedSourceNoteID); err != nil {
+		t.Fatal(err)
+	}
+	if storedSourceNoteID != sourceNoteID || userByID.PublicID == sourceNoteID {
+		t.Fatalf("external source ID and internal public ID were mixed: source=%q public=%q", storedSourceNoteID, userByID.PublicID)
+	}
+}
+
 func TestPostTagFilterUsesExactJSONValue(t *testing.T) {
 	repository := newVerificationLimitTestRepository(t)
 	ctx := context.Background()
@@ -85,6 +156,80 @@ func TestTopicsUsePostTagsAfterLegacyMigration(t *testing.T) {
 	for _, post := range detail.Posts {
 		if !slices.Contains(post.Tags, domain.TopicTagPhysicsTrack) {
 			t.Fatalf("topic returned a post without its exact tag: %#v", post.Tags)
+		}
+	}
+}
+
+func TestAccountProfilePostsUseImmutableUserOwnership(t *testing.T) {
+	repository := newVerificationLimitTestRepository(t)
+	ctx := context.Background()
+	first, err := repository.CreateUser(ctx, domain.RegisterInput{
+		Email: "first-owner@example.com", Nickname: "同名用户", Role: "student", Province: "广东", Grade: "高一",
+	}, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := repository.CreateUser(ctx, domain.RegisterInput{
+		Email: "second-owner@example.com", Nickname: "同名用户", Role: "student", Province: "广东", Grade: "高二",
+	}, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPost, err := repository.CreatePost(ctx, first, domain.CreatePostInput{
+		Title: "第一个账号的真实帖子", Content: "这篇帖子必须始终归属于第一个真实账号。",
+		Track: domain.TrackPhysics, Electives: []domain.Subject{domain.SubjectChemistry, domain.SubjectBiology}, Category: domain.CategoryExperience,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondPost, err := repository.CreatePost(ctx, second, domain.CreatePostInput{
+		Title: "第二个账号的真实帖子", Content: "即使昵称相同，也不能出现在第一个账号主页。",
+		Track: domain.TrackHistory, Electives: []domain.Subject{domain.SubjectPolitics, domain.SubjectGeography}, Category: domain.CategoryExperience,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	publicProfile, err := repository.GetAccountProfile(ctx, nil, "同名用户")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertProfileOwnsPosts(t, publicProfile, first.ID, []int64{firstPost.ID})
+	secondProfile, err := repository.GetAccountProfileByUserID(ctx, &second.ID, second.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertProfileOwnsPosts(t, secondProfile, second.ID, []int64{secondPost.ID})
+
+	if _, err := repository.db.ExecContext(ctx, `UPDATE users SET nickname = '改名后的用户' WHERE id = ?`, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	renamedProfile, err := repository.GetAccountProfile(ctx, nil, "改名后的用户")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertProfileOwnsPosts(t, renamedProfile, first.ID, []int64{firstPost.ID})
+
+	if _, err := repository.db.ExecContext(ctx, `UPDATE posts SET deleted_at = ? WHERE id = ?`, nowString(), firstPost.ID); err != nil {
+		t.Fatal(err)
+	}
+	hiddenProfile, err := repository.GetAccountProfileByUserID(ctx, &first.ID, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hiddenProfile.Stats.Posts != 0 || len(hiddenProfile.Posts) != 0 {
+		t.Fatalf("non-public posts must be excluded: stats=%d posts=%#v", hiddenProfile.Stats.Posts, hiddenProfile.Posts)
+	}
+}
+
+func assertProfileOwnsPosts(t *testing.T, profile domain.AccountProfile, userID int64, postIDs []int64) {
+	t.Helper()
+	if profile.User.ID != userID || profile.Stats.Posts != len(postIDs) || len(profile.Posts) != len(postIDs) {
+		t.Fatalf("unexpected profile ownership: user=%d stats=%d posts=%#v", profile.User.ID, profile.Stats.Posts, profile.Posts)
+	}
+	for index, post := range profile.Posts {
+		if post.UserID == nil || *post.UserID != userID || post.ID != postIDs[index] {
+			t.Fatalf("profile contains a post owned by another account: %#v", post)
 		}
 	}
 }

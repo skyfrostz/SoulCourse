@@ -77,6 +77,7 @@ export interface FeedFilter {
 
 export interface User {
   id: number
+  publicId: string
   email: string
   nickname: string
   role: Role

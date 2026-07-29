@@ -8,7 +8,7 @@ const props = defineProps<{
   topics: Topic[]
 }>()
 
-const palette = ['#10b981', '#2563eb', '#38bdf8', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b']
+const palette = ['#10b981', '#2563eb', '#38bdf8', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b', '#ec4899']
 const trendItems = computed(() => props.insights)
 const trendTotal = computed(() => trendItems.value.reduce((sum, insight) => sum + insight.heat, 0) || 1)
 
@@ -35,7 +35,7 @@ const donutStyle = computed(() => {
         <h2>广东招生计划选科观察</h2>
         <span class="insight-section-badge"><TrendingUp :size="14" /> 官方数据</span>
       </div>
-      <p class="caption">2025专科第一次征集志愿 · 计划要求分布</p>
+      <p class="caption">2025本科院校征集志愿 · 计划要求分布</p>
       <div class="trend-chart" aria-label="招生计划选科要求分布图">
         <div class="trend-donut" :style="donutStyle"></div>
         <div class="trend-legend">

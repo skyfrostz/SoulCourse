@@ -120,7 +120,7 @@ func (h *ForumHandler) GetProfile(c *gin.Context) {
 
 func (h *ForumHandler) GetMyProfile(c *gin.Context) {
 	user, _ := middleware.CurrentUser(c)
-	profile, err := h.service.GetAccountProfile(c.Request.Context(), &user.ID, user.Nickname)
+	profile, err := h.service.GetAccountProfileByUserID(c.Request.Context(), &user.ID, user.ID)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "internal_error", "could not load profile")
 		return

@@ -19,7 +19,8 @@ const openPanel = ref<'notifications' | 'profile' | null>(null)
 const searchOpen = ref(false)
 const searchRoot = ref<HTMLElement | null>(null)
 let searchCloseTimer: ReturnType<typeof window.setTimeout> | undefined
-let profileCloseTimer: ReturnType<typeof window.setTimeout> | undefined
+let panelCloseTimer: ReturnType<typeof window.setTimeout> | undefined
+const popoverCloseDelay = 450
 const { posts, topics } = useForumData()
 const favoritePosts = computed(() => forumStore.getFavoritePosts(posts.value).slice(0, 8))
 const notificationItems = computed(() => forumStore.notifications.map((item) => ({ ...item, unread: !item.readAt })))
@@ -39,7 +40,7 @@ function setCategory(category: Category | 'all') {
 
 function togglePanel(panel: 'notifications' | 'profile') {
   if (panel === 'notifications' && !forumStore.requireAuth('/notifications')) return
-  if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
+  keepPanelOpen()
   const willOpen = openPanel.value !== panel
   openPanel.value = willOpen ? panel : null
   if (panel === 'notifications' && willOpen) forumStore.markNotificationsRead()
@@ -54,22 +55,26 @@ function openSearch() {
   searchOpen.value = true
 }
 
+function keepSearchOpen() {
+  if (searchCloseTimer) window.clearTimeout(searchCloseTimer)
+}
+
 function closeSearchSoon() {
   if (searchCloseTimer) window.clearTimeout(searchCloseTimer)
   searchCloseTimer = window.setTimeout(() => {
     searchOpen.value = false
-  }, 340)
+  }, popoverCloseDelay)
 }
 
-function keepProfilePanelOpen() {
-  if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
+function keepPanelOpen() {
+  if (panelCloseTimer) window.clearTimeout(panelCloseTimer)
 }
 
-function closeProfileSoon() {
-  if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
-  profileCloseTimer = window.setTimeout(() => {
-    if (openPanel.value === 'profile') openPanel.value = null
-  }, 340)
+function closePanelSoon(panel: 'notifications' | 'profile') {
+  if (panelCloseTimer) window.clearTimeout(panelCloseTimer)
+  panelCloseTimer = window.setTimeout(() => {
+    if (openPanel.value === panel) openPanel.value = null
+  }, popoverCloseDelay)
 }
 
 function closeSearchWhenOutside(event: PointerEvent) {
@@ -84,7 +89,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (searchCloseTimer) window.clearTimeout(searchCloseTimer)
-  if (profileCloseTimer) window.clearTimeout(profileCloseTimer)
+  if (panelCloseTimer) window.clearTimeout(panelCloseTimer)
   window.removeEventListener('pointerdown', closeSearchWhenOutside)
 })
 </script>
@@ -153,17 +158,17 @@ onBeforeUnmount(() => {
       <RouterLink class="tool-link" to="/knowledge">政策库</RouterLink>
     </div>
 
-    <div ref="searchRoot" class="search-box" @pointerenter="openSearch" @pointerleave="closeSearchSoon" @focusout="closeSearchSoon">
+    <div ref="searchRoot" class="search-box" @pointerenter="keepSearchOpen" @pointerleave="closeSearchSoon" @focusout="closeSearchSoon">
       <input
         :value="forumStore.filter.keyword"
         type="search"
         placeholder="搜索专业、大学、组合或经验"
-        @focus="openSearch"
-        @input="openSearch(); forumStore.setKeyword(($event.target as HTMLInputElement).value)"
+        @click="openSearch"
+        @input="forumStore.setKeyword(($event.target as HTMLInputElement).value)"
       />
       <Search :size="18" />
       <Transition name="soft-pop">
-        <div v-if="searchOpen" class="search-popover" @pointerenter="openSearch" @pointerleave="closeSearchSoon">
+        <div v-if="searchOpen" class="search-popover" @pointerenter="keepSearchOpen">
           <button class="search-popover-close" type="button" @click="searchOpen = false">收起</button>
           <DecisionSearch :posts="posts" :topics="topics" />
         </div>
@@ -174,10 +179,44 @@ onBeforeUnmount(() => {
       <button class="write-button" type="button" @click="forumStore.openPublish('question')">
         <PenLine :size="16" /> 发帖
       </button>
-      <button class="icon-button" aria-label="通知" @click="togglePanel('notifications')">
-        <Bell :size="20" />
-        <span v-if="forumStore.unreadNotificationCount" class="notification-dot" />
-      </button>
+      <div
+        class="notification-menu-root"
+        @pointerenter="keepPanelOpen"
+        @pointerleave="closePanelSoon('notifications')"
+      >
+        <button class="icon-button" aria-label="通知" @click="togglePanel('notifications')">
+          <Bell :size="20" />
+          <span v-if="forumStore.unreadNotificationCount" class="notification-dot" />
+        </button>
+
+        <Transition name="soft-pop">
+          <div
+            v-if="openPanel === 'notifications'"
+            class="nav-popover notification-popover"
+            @pointerenter="keepPanelOpen"
+          >
+            <header>
+              <strong>通知</strong>
+              <RouterLink to="/notifications" @click="openPanel = null">通知中心</RouterLink>
+            </header>
+            <RouterLink
+              v-for="item in notificationItems.slice(0, 4)"
+              :key="item.id"
+              class="notification-preview-card"
+              :to="item.targetUrl"
+              @click="openPanel = null; forumStore.markNotificationsRead([item.id])"
+            >
+              <span :class="{ unread: item.unread }"></span>
+              <small>{{ notificationTypeLabels[item.type] }} · {{ formatNotificationTime(item.createdAt) }}</small>
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.summary }}</p>
+            </RouterLink>
+            <RouterLink class="notification-center-link" to="/notifications" @click="openPanel = null">
+              查看全部通知
+            </RouterLink>
+          </div>
+        </Transition>
+      </div>
       <RouterLink class="icon-button" aria-label="私信" to="/messages">
         <Mail :size="20" />
       </RouterLink>
@@ -192,8 +231,8 @@ onBeforeUnmount(() => {
       <div
         v-else
         class="profile-menu-root"
-        @pointerenter="keepProfilePanelOpen"
-        @pointerleave="closeProfileSoon"
+        @pointerenter="keepPanelOpen"
+        @pointerleave="closePanelSoon('profile')"
       >
         <button class="profile-button" aria-label="个人中心" @click="togglePanel('profile')">
           <span class="avatar">{{ forumStore.currentUser.nickname.slice(0, 1) }}</span>
@@ -205,8 +244,7 @@ onBeforeUnmount(() => {
           <div
             v-if="openPanel === 'profile'"
             class="nav-popover profile-popover"
-            @pointerenter="keepProfilePanelOpen"
-            @pointerleave="closeProfileSoon"
+            @pointerenter="keepPanelOpen"
           >
             <div>
               <span class="avatar">{{ forumStore.currentUser?.nickname.slice(0, 1) }}</span>
@@ -245,29 +283,6 @@ onBeforeUnmount(() => {
         </Transition>
       </div>
 
-      <Transition name="soft-pop">
-        <div v-if="openPanel === 'notifications'" class="nav-popover notification-popover">
-          <header>
-            <strong>通知</strong>
-            <RouterLink to="/notifications" @click="openPanel = null">通知中心</RouterLink>
-          </header>
-          <RouterLink
-            v-for="item in notificationItems.slice(0, 4)"
-            :key="item.id"
-            class="notification-preview-card"
-            :to="item.targetUrl"
-            @click="openPanel = null; forumStore.markNotificationsRead([item.id])"
-          >
-            <span :class="{ unread: item.unread }"></span>
-            <small>{{ notificationTypeLabels[item.type] }} · {{ formatNotificationTime(item.createdAt) }}</small>
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.summary }}</p>
-          </RouterLink>
-          <RouterLink class="notification-center-link" to="/notifications" @click="openPanel = null">
-            查看全部通知
-          </RouterLink>
-        </div>
-      </Transition>
     </div>
   </header>
 </template>

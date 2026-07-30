@@ -8,7 +8,16 @@ export function useForumData() {
   const forumStore = useForumStore()
 
   const postsQuery = useQuery({
-    queryKey: computed(() => ['posts', forumStore.filter, forumStore.page, forumStore.session?.user.id ?? 'guest']),
+    queryKey: computed(() => [
+      'posts',
+      forumStore.filter.track,
+      forumStore.filter.subjects.join(','),
+      forumStore.filter.category,
+      forumStore.filter.keyword,
+      forumStore.filter.sort,
+      forumStore.page,
+      forumStore.session?.user.id ?? 'guest',
+    ]),
     queryFn: () => fetchPosts(forumStore.filter, forumStore.page, forumStore.pageSize),
     enabled: apiDataEnabled,
   })

@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DecisionSearch from './DecisionSearch.vue'
 import { useForumData } from '../composables/useForumData'
+import { useGlobalSearch } from '../composables/useGlobalSearch'
 import { notificationTypeLabels } from '../lib/notifications'
 import { appAssetUrl } from '../lib/runtime'
 import { useForumStore } from '../stores/forum'
@@ -22,6 +23,7 @@ let searchCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 let panelCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 const popoverCloseDelay = 450
 const { posts, topics } = useForumData()
+const { runSearch } = useGlobalSearch()
 const favoritePosts = computed(() => forumStore.getFavoritePosts(posts.value).slice(0, 8))
 const notificationItems = computed(() => forumStore.notifications.map((item) => ({ ...item, unread: !item.readAt })))
 
@@ -77,10 +79,26 @@ function closePanelSoon(panel: 'notifications' | 'profile') {
   }, popoverCloseDelay)
 }
 
+function closeSearchAfterFocus(event: FocusEvent) {
+  const nextTarget = event.relatedTarget as Node | null
+  if (nextTarget && searchRoot.value?.contains(nextTarget)) return
+  closeSearchSoon()
+}
+
 function closeSearchWhenOutside(event: PointerEvent) {
   const target = event.target as Node | null
   if (target && searchRoot.value?.contains(target)) return
   searchOpen.value = false
+}
+
+async function submitSearch() {
+  await runSearch()
+  searchOpen.value = false
+}
+
+function syncClearedSearch(event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  if (!value) void runSearch('')
 }
 
 onMounted(() => {
@@ -105,15 +123,15 @@ onBeforeUnmount(() => {
         <RouterLink to="/requirements">选科查询</RouterLink>
         <RouterLink to="/knowledge">政策库</RouterLink>
       </nav>
-      <button class="mobile-search-button" type="button" :aria-expanded="searchOpen" aria-label="搜索" @click="searchOpen = !searchOpen">
+      <button class="mobile-search-button" type="button" :aria-expanded="searchOpen" aria-label="搜索" @pointerdown.stop @click="searchOpen = !searchOpen">
         <X v-if="searchOpen" :size="24" />
         <Search v-else :size="25" />
       </button>
     </div>
 
     <Transition name="soft-pop">
-      <section v-if="searchOpen" class="mobile-search-drawer">
-        <label>
+      <section v-if="searchOpen" class="mobile-search-drawer" @pointerdown.stop>
+        <form role="search" @submit.prevent="submitSearch">
           <Search :size="18" />
           <input
             :value="forumStore.filter.keyword"
@@ -121,9 +139,13 @@ onBeforeUnmount(() => {
             autocomplete="off"
             placeholder="搜索组合、专业或经验"
             @input="forumStore.setKeyword(($event.target as HTMLInputElement).value)"
+            @search="syncClearedSearch"
           />
-        </label>
-        <DecisionSearch :posts="posts" :topics="topics" />
+          <button type="submit" aria-label="搜索">
+            <Search :size="18" />
+          </button>
+        </form>
+        <DecisionSearch :posts="posts" :topics="topics" @searched="searchOpen = false" />
       </section>
     </Transition>
 
@@ -158,22 +180,25 @@ onBeforeUnmount(() => {
       <RouterLink class="tool-link" to="/knowledge">政策库</RouterLink>
     </div>
 
-    <div ref="searchRoot" class="search-box" @pointerenter="keepSearchOpen" @pointerleave="closeSearchSoon" @focusout="closeSearchSoon">
+    <form ref="searchRoot" class="search-box" role="search" @submit.prevent="submitSearch" @pointerenter="keepSearchOpen" @pointerleave="closeSearchSoon" @focusout="closeSearchAfterFocus">
       <input
         :value="forumStore.filter.keyword"
         type="search"
         placeholder="搜索专业、大学、组合或经验"
         @click="openSearch"
         @input="forumStore.setKeyword(($event.target as HTMLInputElement).value)"
+        @search="syncClearedSearch"
       />
-      <Search :size="18" />
+      <button type="submit" aria-label="搜索">
+        <Search :size="18" />
+      </button>
       <Transition name="soft-pop">
         <div v-if="searchOpen" class="search-popover" @pointerenter="keepSearchOpen">
           <button class="search-popover-close" type="button" @click="searchOpen = false">收起</button>
-          <DecisionSearch :posts="posts" :topics="topics" />
+          <DecisionSearch :posts="posts" :topics="topics" @searched="searchOpen = false" />
         </div>
       </Transition>
-    </div>
+    </form>
 
     <div class="nav-actions">
       <button class="write-button" type="button" @click="forumStore.openPublish('question')">

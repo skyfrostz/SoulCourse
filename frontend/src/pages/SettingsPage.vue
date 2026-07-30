@@ -2,6 +2,7 @@
 import { Check, ChevronLeft, Save, Sparkles } from '@lucide/vue'
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useGlobalSearch } from '../composables/useGlobalSearch'
 import { fetchMyProfile, requestChoiceAdvice, updateMyProfile } from '../lib/api'
 import { subjectLabels, trackLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
@@ -9,6 +10,7 @@ import type { ChoiceAdvice, ChoiceProfile, Subject, Track } from '../types/forum
 
 const router = useRouter()
 const forumStore = useForumStore()
+const { runSearch } = useGlobalSearch()
 const saved = ref(false)
 const saving = ref(false)
 const bio = ref('')
@@ -67,8 +69,7 @@ onMounted(async () => {
 })
 
 function searchSuggestion(keyword: string) {
-  forumStore.setKeyword(keyword)
-  router.push('/')
+  void runSearch(keyword)
 }
 </script>
 

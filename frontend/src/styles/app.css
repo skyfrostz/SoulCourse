@@ -286,6 +286,24 @@ textarea {
   background: transparent;
 }
 
+.search-box > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.search-box > button:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+
 .search-popover {
   position: absolute;
   z-index: 30;
@@ -689,6 +707,27 @@ textarea {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.decision-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.decision-empty button {
+  border: 0;
+  background: transparent;
+  color: #0f766e;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
 .decision-result-grid a {
   display: grid;
   gap: 4px;
@@ -970,6 +1009,37 @@ textarea {
   color: #0f766e;
   font-size: 13px;
   font-weight: 850;
+}
+
+.search-result-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.search-result-banner span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-banner button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #0f766e;
+  font: inherit;
+  cursor: pointer;
 }
 
 .sort-button.active {
@@ -8035,9 +8105,9 @@ textarea {
     box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
   }
 
-  .mobile-search-drawer > label {
+  .mobile-search-drawer > form {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
     height: 42px;
@@ -8053,6 +8123,18 @@ textarea {
     outline: 0;
     background: transparent;
     font: inherit;
+  }
+
+  .mobile-search-drawer form button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
   }
 
   .forum-home-workspace {

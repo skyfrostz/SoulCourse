@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ChevronDown, MapPin, RefreshCw, Users } from '@lucide/vue'
+import { computed } from 'vue'
 import PostCard from './PostCard.vue'
+import { useGlobalSearch } from '../composables/useGlobalSearch'
 import { useForumStore } from '../stores/forum'
 import type { Post } from '../types/forum'
 
@@ -10,6 +12,8 @@ defineProps<{
 }>()
 
 const forumStore = useForumStore()
+const { runSearch } = useGlobalSearch()
+const activeKeyword = computed(() => forumStore.filter.keyword.trim())
 </script>
 
 <template>
@@ -46,6 +50,10 @@ const forumStore = useForumStore()
     </div>
 
     <p v-if="forumStore.refreshHint" class="refresh-hint">{{ forumStore.refreshHint }}</p>
+    <div v-if="activeKeyword" class="search-result-banner">
+      <span>正在搜索“{{ activeKeyword }}”</span>
+      <button type="button" @click="runSearch('')">清除搜索</button>
+    </div>
 
     <div v-if="isLoading" class="feed-grid">
       <div v-for="item in 4" :key="item" class="post-card skeleton"></div>
@@ -56,8 +64,9 @@ const forumStore = useForumStore()
     </div>
 
     <div v-else class="empty-state">
-      <h2>没有找到匹配的讨论</h2>
-      <p>换一个组合或关键词，看看同学和家长们正在聊什么。</p>
+      <h2>{{ activeKeyword ? `没有找到“${activeKeyword}”相关讨论` : '没有找到匹配的讨论' }}</h2>
+      <p>{{ activeKeyword ? '换一个组合、专业或省份关键词试试。' : '换一个组合或关键词，看看同学和家长们正在聊什么。' }}</p>
+      <button v-if="activeKeyword" class="primary-wide compact" type="button" @click="runSearch('')">清除搜索</button>
     </div>
 
     <nav class="pagination-bar" aria-label="帖子分页">

@@ -2,10 +2,12 @@
 import { ChevronDown, CircleCheck, Dna, FlaskConical, Globe2, Landmark, PanelLeftClose, PanelLeftOpen, SlidersHorizontal } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import { categoryLabels, subjectAccent, subjectLabels } from '../lib/labels'
+import { useGlobalSearch } from '../composables/useGlobalSearch'
 import { useForumStore } from '../stores/forum'
 import type { Category, Subject, SubjectInsight, Track } from '../types/forum'
 
 const forumStore = useForumStore()
+const { runSearch } = useGlobalSearch()
 const filterExpanded = ref(false)
 const props = defineProps<{ collapsed: boolean; insights: SubjectInsight[] }>()
 defineEmits<{ toggleCollapse: [] }>()
@@ -38,6 +40,14 @@ const activeFilterCount = computed(() =>
 
 const officialRequirements = computed(() => props.insights.slice(0, 6))
 const requirementColors = ['#0f9f7a', '#2563eb', '#38bdf8', '#ef4444', '#f97316', '#f59e0b']
+
+function resetActiveFilters() {
+  if (forumStore.filter.keyword) {
+    void runSearch('')
+    return
+  }
+  forumStore.resetFilters()
+}
 </script>
 
 <template>
@@ -63,7 +73,7 @@ const requirementColors = ['#0f9f7a', '#2563eb', '#38bdf8', '#ef4444', '#f97316'
           <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span>
           <ChevronDown class="filter-chevron" :size="15" />
         </button>
-        <button v-if="activeFilterCount" class="ghost-link" type="button" @click="forumStore.resetFilters()">重置</button>
+        <button v-if="activeFilterCount" class="ghost-link" type="button" @click="resetActiveFilters">重置</button>
         <button class="rail-collapse-button" type="button" aria-label="收起筛选栏" title="收起筛选栏" @click="$emit('toggleCollapse')">
           <PanelLeftClose :size="17" />
         </button>

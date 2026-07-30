@@ -4,11 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { BookOpenCheck, ChevronLeft, Download, ExternalLink, FileText, Search, ShieldCheck } from '@lucide/vue'
 import { provinceKnowledge } from '../lib/knowledgeBase'
 import { createProvincePolicyDocuments, findProvincePolicyDocument, policyDocumentPath } from '../lib/policyDocuments'
-import { useForumStore } from '../stores/forum'
+import { useGlobalSearch } from '../composables/useGlobalSearch'
 
 const route = useRoute()
 const router = useRouter()
-const forumStore = useForumStore()
+const { runSearch } = useGlobalSearch()
 const provinceName = computed(() => decodeURIComponent(String(route.params.province ?? '')))
 const documentId = computed(() => String(route.params.documentId ?? ''))
 const province = computed(() => provinceKnowledge.find((item) => item.province === provinceName.value))
@@ -20,8 +20,7 @@ function goBack() {
 }
 
 function searchInForum(query: string) {
-  forumStore.setKeyword(query)
-  router.push('/')
+  void runSearch(query)
 }
 </script>
 

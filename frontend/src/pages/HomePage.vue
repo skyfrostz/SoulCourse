@@ -3,10 +3,20 @@ import FeedGrid from '../components/FeedGrid.vue'
 import FilterRail from '../components/FilterRail.vue'
 import InsightPanel from '../components/InsightPanel.vue'
 import { useForumData } from '../composables/useForumData'
-import { ref } from 'vue'
+import { useGlobalSearch } from '../composables/useGlobalSearch'
+import { ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 const { posts, insights, topics, isLoading } = useForumData()
 const railCollapsed = ref(false)
+const route = useRoute()
+const { syncSearchFromRoute } = useGlobalSearch()
+
+watch(
+  () => route.query.q,
+  () => syncSearchFromRoute(),
+  { immediate: true },
+)
 </script>
 
 <template>

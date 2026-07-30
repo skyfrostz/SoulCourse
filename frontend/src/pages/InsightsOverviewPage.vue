@@ -4,13 +4,13 @@ import { computed, ref, watch } from 'vue'
 import { BarChart3, ChevronLeft, Search, ShieldCheck, TrendingUp } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, fetchInsights } from '../lib/api'
+import { useGlobalSearch } from '../composables/useGlobalSearch'
 import { policyTakeaways, requirementData } from '../lib/realData'
-import { useForumStore } from '../stores/forum'
 import type { SubjectInsight } from '../types/forum'
 
 const router = useRouter()
 const route = useRoute()
-const forumStore = useForumStore()
+const { runSearch } = useGlobalSearch()
 const insightsQuery = useQuery({
   queryKey: ['insights-overview'],
   queryFn: fetchInsights,
@@ -59,8 +59,7 @@ function donutStyle(index: number) {
 }
 
 function searchCombination(combination: string) {
-  forumStore.setKeyword(combination)
-  router.push('/')
+  void runSearch(combination)
 }
 </script>
 

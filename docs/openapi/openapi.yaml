@@ -103,7 +103,7 @@ paths:
       tags: [Auth]
       operationId: login
       summary: 登录
-      description: 登录成功后设置 HttpOnly SameSite=Lax 会话 Cookie，并返回过渡期 opaque token。
+      description: 登录成功后设置 HttpOnly、SameSite=Lax 的服务端会话 Cookie；前端不接收或存储 Bearer/JWT token。
       requestBody:
         required: true
         content:
@@ -1193,7 +1193,7 @@ paths:
             enum: [open, actioned, dismissed]
       responses:
         '200':
-          $ref: '#/components/responses/GenericObjectResponse'
+          $ref: '#/components/responses/AdminReportsResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
   /admin/reports/{id}/moderate:
@@ -1213,7 +1213,7 @@ paths:
               $ref: '#/components/schemas/AdminModerationInput'
       responses:
         '200':
-          $ref: '#/components/responses/GenericObjectResponse'
+          $ref: '#/components/responses/AdminReportResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -1649,6 +1649,24 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/GenericObjectEnvelope'
+    AdminReportsResponse:
+      description: Content reports
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminReportsEnvelope'
+    AdminReportResponse:
+      description: Content report
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminReportEnvelope'
     AdminImageUploadResponse:
       description: Admin image upload result
       headers:
@@ -2099,6 +2117,44 @@ components:
         reason:
           type: string
           maxLength: 1200
+    AdminContentReport:
+      type: object
+      required: [id, reporterId, reporterName, targetType, targetId, targetTitle, targetAuthor, targetHidden, reason, detail, status, resolutionNote, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        reporterId:
+          type: integer
+        reporterName:
+          type: string
+        targetType:
+          type: string
+        targetId:
+          type: integer
+        targetTitle:
+          type: string
+        targetAuthor:
+          type: string
+        targetHidden:
+          type: boolean
+        reason:
+          type: string
+        detail:
+          type: string
+        status:
+          type: string
+          enum: [open, actioned, dismissed]
+        resolutionNote:
+          type: string
+        resolvedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     AdminModerationInput:
       type: object
       required: [action]
@@ -2424,6 +2480,28 @@ components:
     GenericObjectEnvelope:
       allOf:
         - $ref: '#/components/schemas/EnvelopeOfGenericObject'
+    AdminReportsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [reports]
+          properties:
+            reports:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminContentReport'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    AdminReportEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminContentReport'
+        meta:
+          $ref: '#/components/schemas/Meta'
     GenericListEnvelope:
       allOf:
         - $ref: '#/components/schemas/EnvelopeOfGenericList'

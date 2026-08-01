@@ -1,7 +1,8 @@
+import axios from 'axios'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { server } from '../test/setup'
-import { fetchNotifications, fetchPublishedRequirements } from './api'
+import { fetchNotifications, fetchPublishedRequirements, uploadImage } from './api'
 
 describe('real data API with MSW', () => {
   it('reads the standard data envelope without page-level fallback data', async () => {
@@ -45,5 +46,29 @@ describe('real data API with MSW', () => {
       nextCursor: 'notification-page-3',
       hasMore: true,
     })
+  })
+
+  it('uploads to a presigned OSS URL without site credentials or CSRF headers', async () => {
+    document.cookie = 'scf_csrf=site-csrf'
+    server.use(
+      http.post('/api/v1/uploads/images/presign', () => HttpResponse.json({
+        data: {
+          id: 'upload-1', assetKey: 'images/upload-1.png', uploadUrl: 'https://oss.example.test/upload-1',
+          method: 'PUT', contentType: 'image/png', maxBytes: 1000, expiresAt: '2026-08-01T00:00:00Z',
+        },
+      })),
+      http.post('/api/v1/uploads/images/upload-1/complete', () => HttpResponse.json({
+        data: { id: 'upload-1', assetKey: 'images/upload-1.png', url: 'https://cdn.example.test/upload-1.png', contentType: 'image/png', sizeBytes: 3, width: 1, height: 1 },
+      })),
+    )
+    const put = vi.spyOn(axios, 'put').mockResolvedValue({ data: {} } as never)
+
+    await uploadImage(new File(['png'], 'upload.png', { type: 'image/png' }), { width: 1, height: 1 })
+
+    expect(put).toHaveBeenCalledWith('https://oss.example.test/upload-1', expect.any(File), expect.objectContaining({
+      withCredentials: false,
+      headers: { 'Content-Type': 'image/png' },
+    }))
+    expect(put.mock.calls[0]?.[2]).not.toEqual(expect.objectContaining({ headers: expect.objectContaining({ 'X-CSRF-Token': 'site-csrf' }) }))
   })
 })

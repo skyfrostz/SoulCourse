@@ -1147,7 +1147,9 @@ func (h *AdminHandler) ListReports(c *gin.Context) {
 	status := strings.TrimSpace(c.Query("status"))
 	query := `
 		SELECT cr.id, cr.reporter_user_id, COALESCE(u.nickname, ''), cr.target_type, cr.target_id,
-		       COALESCE(p.title, ''), COALESCE(p.author_name, ''), cr.reason, cr.detail, cr.status,
+		       COALESCE(p.title, ''), COALESCE(p.author_name, ''),
+		       CASE WHEN p.deleted_at IS NOT NULL THEN 1 ELSE 0 END,
+		       cr.reason, cr.detail, cr.status,
 		       cr.resolution_note, cr.resolved_at, cr.created_at, cr.updated_at
 		FROM content_reports cr
 		LEFT JOIN users u ON u.id = cr.reporter_user_id
@@ -1583,7 +1585,9 @@ type adminContentScanner interface {
 func (h *AdminHandler) getContentReport(ctx context.Context, id int64) (domain.ContentReport, error) {
 	return scanAdminContentReport(h.queryRow(ctx, `
 		SELECT cr.id, cr.reporter_user_id, COALESCE(u.nickname, ''), cr.target_type, cr.target_id,
-		       COALESCE(p.title, ''), COALESCE(p.author_name, ''), cr.reason, cr.detail, cr.status,
+		       COALESCE(p.title, ''), COALESCE(p.author_name, ''),
+		       CASE WHEN p.deleted_at IS NOT NULL THEN 1 ELSE 0 END,
+		       cr.reason, cr.detail, cr.status,
 		       cr.resolution_note, cr.resolved_at, cr.created_at, cr.updated_at
 		FROM content_reports cr
 		LEFT JOIN users u ON u.id = cr.reporter_user_id
@@ -1605,6 +1609,7 @@ func scanAdminContentReport(scanner adminContentScanner) (domain.ContentReport, 
 		&report.TargetID,
 		&report.TargetTitle,
 		&report.TargetAuthor,
+		&report.TargetHidden,
 		&report.Reason,
 		&report.Detail,
 		&report.Status,

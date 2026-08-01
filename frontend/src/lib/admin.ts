@@ -139,6 +139,7 @@ export interface AdminContentReport {
   targetId: number
   targetTitle: string
   targetAuthor: string
+  targetHidden: boolean
   reason: string
   detail: string
   status: 'open' | 'actioned' | 'dismissed'
@@ -581,7 +582,7 @@ function normalizeApiBase(apiBase: string) {
   return (apiBase || defaultApiBase()).replace(/\/$/, '')
 }
 
-async function requestAdmin<T>(apiBase: string, path: string, options?: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; data?: unknown; token?: string; headers?: Record<string, string> }) {
+async function requestAdmin<T>(apiBase: string, path: string, options?: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; data?: unknown; headers?: Record<string, string> }) {
   try {
     const method = options?.method || 'GET'
     const csrfToken = readCookie('scf_admin_csrf')
@@ -639,17 +640,17 @@ export async function adminLogout(apiBase: string) {
   })
 }
 
-export async function fetchAdminEmailConfig(apiBase: string, token: string) {
-  return requestAdmin<AdminEmailConfig>(apiBase, '/admin/email-config', { token })
+export async function fetchAdminEmailConfig(apiBase: string) {
+  return requestAdmin<AdminEmailConfig>(apiBase, '/admin/email-config')
 }
 
-export async function fetchAdminContent(apiBase: string, token: string) {
-  const data = await requestAdmin<{ records: AdminApiRecord[] }>(apiBase, '/admin/content', { token })
+export async function fetchAdminContent(apiBase: string) {
+  const data = await requestAdmin<{ records: AdminApiRecord[] }>(apiBase, '/admin/content')
   return data.records || []
 }
 
-export async function fetchAdminAuditLogs(apiBase: string, token: string) {
-  const data = await requestAdmin<{ logs: AdminAuditLog[] }>(apiBase, '/admin/audit-logs', { token })
+export async function fetchAdminAuditLogs(apiBase: string) {
+  const data = await requestAdmin<{ logs: AdminAuditLog[] }>(apiBase, '/admin/audit-logs')
   return data.logs || []
 }
 
@@ -673,26 +674,23 @@ export async function moderateAdminUser(apiBase: string, userId: number, action:
   })
 }
 
-export async function saveAdminContent(apiBase: string, token: string, moduleId: EditableModuleId, item: AdminRecord) {
+export async function saveAdminContent(apiBase: string, moduleId: EditableModuleId, item: AdminRecord) {
   const method = item.createdRemote ? 'PUT' : 'POST'
   const path = method === 'POST' ? '/admin/content' : `/admin/content/${encodeURIComponent(item.id)}`
   return requestAdmin<AdminApiRecord>(apiBase, path, {
     method,
-    token,
     data: toApiRecord(moduleId, item),
   })
 }
 
 export async function saveAdminWorkflow(
   apiBase: string,
-  token: string,
   item: AdminRecord,
   action: AdminWorkflowAction,
   note: string,
 ) {
   return requestAdmin<AdminApiRecord>(apiBase, `/admin/content/${encodeURIComponent(item.id)}/workflow`, {
     method: 'POST',
-    token,
     data: {
       action: action.id,
       actionLabel: action.label,
@@ -704,32 +702,29 @@ export async function saveAdminWorkflow(
   })
 }
 
-export async function deleteAdminContent(apiBase: string, token: string, id: string) {
+export async function deleteAdminContent(apiBase: string, id: string) {
   return requestAdmin<void>(apiBase, `/admin/content/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    token,
   })
 }
 
-export async function resetAdminUserPassword(apiBase: string, token: string, userId: number, password: string) {
+export async function resetAdminUserPassword(apiBase: string, userId: number, password: string) {
   return requestAdmin<{ updated: boolean; userId: number }>(apiBase, `/admin/users/${userId}/password`, {
     method: 'PUT',
-    token,
     data: { password },
   })
 }
 
-export async function uploadAdminImage(apiBase: string, token: string, file: File) {
+export async function uploadAdminImage(apiBase: string, file: File) {
   const formData = new FormData()
   formData.append('file', file)
   return requestAdmin<{ url: string }>(apiBase, '/admin/uploads/images', {
     method: 'POST',
-    token,
     data: formData,
   })
 }
 
-export async function sendAdminTestEmail(apiBase: string, token: string, email: string) {
+export async function sendAdminTestEmail(apiBase: string, email: string) {
   return requestAdmin<{
     email: string
     retryAfterSeconds: number
@@ -738,7 +733,6 @@ export async function sendAdminTestEmail(apiBase: string, token: string, email: 
     debugCode?: string
   }>(apiBase, '/admin/email-test', {
     method: 'POST',
-    token,
     data: { email },
   })
 }

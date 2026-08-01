@@ -123,6 +123,7 @@ type ContentReport struct {
 	TargetID       int64      `json:"targetId"`
 	TargetTitle    string     `json:"targetTitle"`
 	TargetAuthor   string     `json:"targetAuthor"`
+	TargetHidden   bool       `json:"targetHidden"`
 	Reason         string     `json:"reason"`
 	Detail         string     `json:"detail"`
 	Status         string     `json:"status"`

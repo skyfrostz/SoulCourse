@@ -27,7 +27,7 @@ const track = ref<Track>(forumStore.filter.track === 'all' ? 'physics' : forumSt
 const electives = ref<Subject[]>(forumStore.filter.subjects.length === 2 ? [...forumStore.filter.subjects] : ['chemistry', 'biology'])
 const error = ref('')
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif'])
 const taxonomyQuery = useQuery({ queryKey: ['taxonomy'], queryFn: fetchTaxonomy, staleTime: 10 * 60 * 1000 })
 
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']

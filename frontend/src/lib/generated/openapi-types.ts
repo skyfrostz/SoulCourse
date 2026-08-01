@@ -49,6 +49,24 @@ export interface AdminContentListEnvelope {
   meta?: Meta
 }
 
+export interface AdminContentReport {
+  createdAt: string
+  detail: string
+  id: number
+  reason: string
+  reporterId: number
+  reporterName: string
+  resolutionNote: string
+  resolvedAt?: string
+  status: string
+  targetAuthor: string
+  targetHidden: boolean
+  targetId: number
+  targetTitle: string
+  targetType: string
+  updatedAt: string
+}
+
 export type AdminContentSummary = Record<string, unknown>
 
 export interface AdminContentSummaryEnvelope {
@@ -90,6 +108,16 @@ export interface AdminLoginInput {
 export interface AdminModerationInput {
   action: string
   note?: string
+}
+
+export interface AdminReportEnvelope {
+  data: AdminContentReport
+  meta?: Meta
+}
+
+export interface AdminReportsEnvelope {
+  data: { reports: AdminContentReport[] }
+  meta?: Meta
 }
 
 export interface AdminUserModerationInput {

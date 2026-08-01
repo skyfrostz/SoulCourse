@@ -149,6 +149,8 @@ const selectedWorkflowActions = computed<AdminWorkflowAction[]>(() => {
   const reportId = Number(currentRecord.value.payload.reportId || 0)
   if (reportId) {
     if (!can('moderation.act')) return []
+    const reportStatus = currentRecord.value.payload.reportStatus
+    if (reportStatus && reportStatus !== 'open' && currentRecord.value.status !== '下架') return []
     return currentRecord.value.status === '下架'
       ? [{ id: 'restore-report', label: '恢复帖子', nextStatus: '已上架', description: '恢复帖子公开展示并记录处置依据。', placeholder: '请写明恢复展示的复核依据。', tone: 'positive', requiresNote: true }]
       : [
@@ -229,7 +231,7 @@ onMounted(async () => {
   }
   if (!isLoggedIn.value) return
   try {
-    if (can('system.email.read')) smtpConfig.value = await fetchAdminEmailConfig(settings.value.apiBase, '')
+    if (can('system.email.read')) smtpConfig.value = await fetchAdminEmailConfig(settings.value.apiBase)
   } catch (error) {
     if (isAdminUnauthorizedError(error)) {
       clearExpiredAdminSession()
@@ -303,7 +305,7 @@ async function handleLogin() {
     const login = await adminLogin(apiBase, email, password)
     updateSettings({ apiBase, adminEmail: email })
     adminSession.value = { authenticated: true, mode: 'online', email, role: login.role, permissions: login.permissions, signedAt: new Date().toISOString() }
-    if (can('system.email.read')) smtpConfig.value = await fetchAdminEmailConfig(apiBase, '')
+    if (can('system.email.read')) smtpConfig.value = await fetchAdminEmailConfig(apiBase)
     saveAdminSession(adminSession.value)
     apiConnected.value = true
     lastSyncMessage.value = '登录成功，已连接后端'
@@ -363,9 +365,9 @@ async function loadRemoteContent() {
   }
   try {
     const [records, logs, reports] = await Promise.all([
-      can('content.read') ? fetchAdminContent(settings.value.apiBase, '') : Promise.resolve([]),
-      can('audit.read') ? fetchAdminAuditLogs(settings.value.apiBase, '') : Promise.resolve([]),
-      can('moderation.read') ? fetchAdminReports(settings.value.apiBase) : Promise.resolve([]),
+      can('content.read') ? fetchAdminContent(settings.value.apiBase) : Promise.resolve([]),
+      can('audit.read') ? fetchAdminAuditLogs(settings.value.apiBase) : Promise.resolve([]),
+      can('moderation.read') ? fetchAdminReports(settings.value.apiBase, '') : Promise.resolve([]),
     ])
     for (const moduleId of editableModuleIds) {
       state.records[moduleId] = []
@@ -380,16 +382,18 @@ async function loadRemoteContent() {
         id: `report-${report.id}`,
         title: report.targetTitle || `帖子 #${report.targetId}`,
         type: '内容举报',
-        status: '已上架',
+        status: report.targetHidden ? '下架' : report.status === 'open' ? '已上架' : '已处理',
         scope: '全站',
         owner: report.targetAuthor || '未知作者',
-        tags: ['举报待处理'],
+        tags: [report.status === 'open' ? '举报待处理' : '举报已处置'],
         summary: report.detail || report.reason,
         url: `/posts/${report.targetId}`,
         priority: '高',
         sortOrder: 0,
         payload: {
           reportId: report.id,
+          reportStatus: report.status,
+          targetHidden: report.targetHidden,
           postId: report.targetId,
           reportReason: report.reason,
           reportDetail: report.detail,
@@ -423,7 +427,7 @@ async function createRecordNow() {
   selectedId.value = item.id
   state.audit.push(`新建 ${currentModule.value.label} 条目：${item.title}`)
   try {
-    const saved = await saveAdminContent(settings.value.apiBase, '', activeModule.value, item)
+    const saved = await saveAdminContent(settings.value.apiBase, activeModule.value, item)
     Object.assign(item, fromApiRecord(saved))
     lastSyncMessage.value = '已保存到后端'
     apiConnected.value = true
@@ -444,7 +448,7 @@ async function saveCurrentRecord() {
   Object.assign(currentRecord.value, nextRecord)
   state.audit.push(`保存 ${nextRecord.title}，状态：${nextRecord.status}`)
   try {
-    const saved = await saveAdminContent(settings.value.apiBase, '', activeModule.value, currentRecord.value)
+    const saved = await saveAdminContent(settings.value.apiBase, activeModule.value, currentRecord.value)
     Object.assign(currentRecord.value, fromApiRecord(saved))
     lastSyncMessage.value = '已保存到后端'
     apiConnected.value = true
@@ -466,7 +470,7 @@ async function deleteCurrentRecord() {
     return
   }
   try {
-    await deleteAdminContent(settings.value.apiBase, '', currentRecord.value.id)
+    await deleteAdminContent(settings.value.apiBase, currentRecord.value.id)
     state.records[activeModule.value] = state.records[activeModule.value].filter((row) => row.id !== currentRecord.value?.id)
     state.audit.push(`删除 ${currentRecord.value.title}`)
     lastSyncMessage.value = '已从后端删除'
@@ -537,7 +541,7 @@ async function confirmWorkflowAction() {
       if (!userId) throw new Error('用户记录缺少有效账号 ID，未执行封禁操作')
       await moderateAdminUser(settings.value.apiBase, userId, action.id === 'freeze-user' ? 'ban' : 'restore', workflowNote.value.trim())
     } else {
-      const saved = await saveAdminWorkflow(settings.value.apiBase, '', item, action, workflowNote.value.trim())
+      const saved = await saveAdminWorkflow(settings.value.apiBase, item, action, workflowNote.value.trim())
       Object.assign(item, fromApiRecord(saved))
     }
     const successMessage = `${action.label}已完成`
@@ -579,14 +583,14 @@ async function handleMediaUpload(event: Event) {
   }
   const snapshot = cloneRecord(item)
   try {
-    const uploads = await Promise.all(files.slice(0, Math.max(0, 9 - mediaUrls(item).length)).map((file) => uploadAdminImage(settings.value.apiBase, '', file)))
+    const uploads = await Promise.all(files.slice(0, Math.max(0, 9 - mediaUrls(item).length)).map((file) => uploadAdminImage(settings.value.apiBase, file)))
     const uploadedUrls = uploads.map((entry) => entry.url)
     item.payload = {
       ...item.payload,
       imageUrls: [...mediaUrls(item), ...uploadedUrls].slice(0, 9),
     }
     item.updatedAt = formatDate(new Date().toISOString())
-    const saved = await saveAdminContent(settings.value.apiBase, '', activeModule.value, item)
+    const saved = await saveAdminContent(settings.value.apiBase, activeModule.value, item)
     Object.assign(item, fromApiRecord(saved))
     state.audit.push(`上传 ${uploadedUrls.length} 张图片到「${item.title}」`)
     lastSyncMessage.value = `已上传并保存 ${uploadedUrls.length} 张图片`
@@ -612,7 +616,7 @@ async function removeMediaImageAt(index: number) {
   }
   item.updatedAt = formatDate(new Date().toISOString())
   try {
-    const saved = await saveAdminContent(settings.value.apiBase, '', activeModule.value, item)
+    const saved = await saveAdminContent(settings.value.apiBase, activeModule.value, item)
     Object.assign(item, fromApiRecord(saved))
     state.audit.push(`移除「${item.title}」的一张图片`)
     lastSyncMessage.value = '已移除图片并保存'
@@ -636,7 +640,6 @@ async function resetCurrentUserPassword() {
   try {
     await resetAdminUserPassword(
       settings.value.apiBase,
-      '',
       currentUserAccount.value.userId,
       newUserPassword.value,
     )
@@ -651,7 +654,7 @@ async function resetCurrentUserPassword() {
 async function checkConnection() {
   updateSettings({ apiBase: settings.value.apiBase.replace(/\/$/, '') })
   try {
-    smtpConfig.value = await fetchAdminEmailConfig(settings.value.apiBase, '')
+    smtpConfig.value = await fetchAdminEmailConfig(settings.value.apiBase)
   } catch (error) {
     smtpConfig.value = {
       enabled: false,
@@ -678,7 +681,7 @@ async function checkConnection() {
 async function sendTestMailNow() {
   testEmailResult.value = '正在发送...'
   try {
-    const data = await sendAdminTestEmail(settings.value.apiBase, '', testEmail.value.trim())
+    const data = await sendAdminTestEmail(settings.value.apiBase, testEmail.value.trim())
     const quota = `本邮箱本小时剩余 ${data.hourlyRemaining} / ${data.hourlyLimit} 次`
     testEmailResult.value = data.debugCode
       ? `SMTP 未启用，本地调试验证码：${data.debugCode}（${quota}）`

@@ -362,9 +362,10 @@ export async function uploadImage(file: File, dimensions: { width: number; heigh
     width: dimensions.width,
     height: dimensions.height,
   }))
-  await api.put(upload.uploadUrl, file, {
+  await axios.put(upload.uploadUrl, file, {
     headers: { 'Content-Type': upload.contentType },
     maxBodyLength: upload.maxBytes,
+    withCredentials: false,
     // Mobile uploads commonly need longer than the API's normal request timeout.
     timeout: 45_000,
   })

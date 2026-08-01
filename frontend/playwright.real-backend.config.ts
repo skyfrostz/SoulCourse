@@ -23,7 +23,7 @@ export default defineConfig({
       ].join(' && '),
       url: `${backendOrigin}/readyz`,
       reuseExistingServer: false,
-      timeout: 30_000,
+      timeout: 120_000,
     },
     {
       command: `VITE_API_BASE_URL=${backendOrigin}/api/v1 pnpm dev --host 127.0.0.1 --port ${frontendPort}`,

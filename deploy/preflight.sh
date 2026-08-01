@@ -35,9 +35,15 @@ METRICS_TOKEN_VALUE="${METRICS_TOKEN:-}"
 [[ -n "${SMTP_FROM_EMAIL:-}" ]] || fail "SMTP_FROM_EMAIL is required for registration"
 [[ "${SMTP_USE_TLS:-false}" == "true" || "${SMTP_STARTTLS:-false}" == "true" ]] || fail "SMTP must use TLS or STARTTLS"
 
-[[ "${DATABASE_DRIVER:-}" == "postgres" ]] || fail "DATABASE_DRIVER must be postgres"
-[[ "${DATABASE_URL:-}" == postgres://* || "${DATABASE_URL:-}" == postgresql://* ]] || fail "DATABASE_URL must be a PostgreSQL URL"
-[[ "${DATABASE_URL:-}" == *"sslmode="* ]] || fail "DATABASE_URL must declare sslmode explicitly"
+if [[ "${DATABASE_DRIVER:-}" == "postgres" ]]; then
+  [[ "${DATABASE_URL:-}" == postgres://* || "${DATABASE_URL:-}" == postgresql://* ]] || fail "DATABASE_URL must be a PostgreSQL URL"
+  [[ "${DATABASE_URL:-}" == *"sslmode="* ]] || fail "DATABASE_URL must declare sslmode explicitly"
+elif [[ "${DATABASE_DRIVER:-}" == "sqlite" && "${ALLOW_SQLITE_PRODUCTION:-false}" == "true" ]]; then
+  [[ -n "${SQLITE_PATH:-}" ]] || fail "SQLITE_PATH is required for the explicit SQLite production mode"
+  [[ -f "${SQLITE_PATH}" ]] || fail "SQLITE_PATH does not exist"
+else
+  fail "DATABASE_DRIVER must be postgres, or sqlite with ALLOW_SQLITE_PRODUCTION=true"
+fi
 [[ "${DATABASE_MAX_OPEN_CONNS:-20}" =~ ^[0-9]+$ ]] || fail "DATABASE_MAX_OPEN_CONNS must be an integer"
 (( DATABASE_MAX_OPEN_CONNS > 0 && DATABASE_MAX_OPEN_CONNS <= 20 )) || fail "DATABASE_MAX_OPEN_CONNS must be between 1 and 20"
 

@@ -137,8 +137,33 @@ func TestValidateProductionAcceptsHardenedConfig(t *testing.T) {
 
 func TestValidateProductionRejectsSQLiteDatabase(t *testing.T) {
 	cfg := Config{AppEnv: "production", DatabaseDriver: "sqlite"}
-	if err := cfg.ValidateProduction(); err == nil || err.Error() != "DATABASE_DRIVER must be postgres in production" {
+	if err := cfg.ValidateProduction(); err == nil || err.Error() != "DATABASE_DRIVER must be postgres in production unless ALLOW_SQLITE_PRODUCTION=true" {
 		t.Fatalf("error = %v, want PostgreSQL production requirement", err)
+	}
+}
+
+func TestValidateProductionAllowsExplicitSQLiteMode(t *testing.T) {
+	cfg := Config{
+		AppEnv:                "production",
+		DatabaseDriver:        "sqlite",
+		AllowSQLiteProduction: true,
+		StorageDriver:         "s3",
+		S3Endpoint:            "https://s3.example.com",
+		S3Bucket:              "bucket",
+		S3Region:              "region",
+		S3CDNBaseURL:          "https://cdn.example.com",
+		JWTSecret:             "01234567890123456789012345678901",
+		MetricsToken:          "01234567890123456789012345678901",
+		TrustedProxies:        []string{"127.0.0.1"},
+		CORSAllowedOrigins:    []string{"https://soulcourse.cn"},
+		SMTPHost:              "smtp.example.com",
+		SMTPUsername:          "mailer@example.com",
+		SMTPPassword:          "password",
+		SMTPFromEmail:         "mailer@example.com",
+		SMTPUseTLS:            true,
+	}
+	if err := cfg.ValidateProduction(); err != nil {
+		t.Fatalf("explicit SQLite production mode should pass: %v", err)
 	}
 }
 

@@ -32,6 +32,7 @@ type Config struct {
 	SQLitePath             string
 	DatabaseDriver         string
 	DatabaseURL            string
+	AllowSQLiteProduction  bool
 	DatabaseMaxOpenConns   int
 	DatabaseMaxIdleConns   int
 	DatabaseConnectTimeout time.Duration
@@ -152,6 +153,7 @@ func Load() (Config, error) {
 		SQLitePath:             sqlitePath,
 		DatabaseDriver:         strings.ToLower(getEnv("DATABASE_DRIVER", "sqlite")),
 		DatabaseURL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		AllowSQLiteProduction:  getEnvBool("ALLOW_SQLITE_PRODUCTION", false),
 		DatabaseMaxOpenConns:   databaseMaxOpenConns,
 		DatabaseMaxIdleConns:   databaseMaxIdleConns,
 		DatabaseConnectTimeout: databaseConnectTimeout,
@@ -244,10 +246,10 @@ func (c Config) ValidateProduction() error {
 	if !c.Production() {
 		return nil
 	}
-	if c.DatabaseDriver != "postgres" {
-		return errors.New("DATABASE_DRIVER must be postgres in production")
+	if c.DatabaseDriver != "postgres" && !(c.DatabaseDriver == "sqlite" && c.AllowSQLiteProduction) {
+		return errors.New("DATABASE_DRIVER must be postgres in production unless ALLOW_SQLITE_PRODUCTION=true")
 	}
-	if strings.TrimSpace(c.DatabaseURL) == "" {
+	if c.DatabaseDriver == "postgres" && strings.TrimSpace(c.DatabaseURL) == "" {
 		return errors.New("DATABASE_URL is required in production")
 	}
 	if c.StorageDriver != "s3" {

@@ -224,7 +224,7 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o sou
 GOMEMLIMIT=1536MiB ./soulcourse
 ```
 
-`GOMEMLIMIT` 给系统和反向代理预留内存；生产应用使用托管 PostgreSQL 16（连接池上限 20）和 S3 兼容对象存储，本地开发仍可使用 SQLite 与本地上传目录。
+`GOMEMLIMIT` 给系统和反向代理预留内存；生产应用默认使用托管 PostgreSQL 16（连接池上限 20）和 S3 兼容对象存储。本次预算受限公测可临时使用 SQLite + S3：设置 `DATABASE_DRIVER=sqlite`、`ALLOW_SQLITE_PRODUCTION=true` 和绝对路径 `SQLITE_PATH`。该开关默认关闭，PostgreSQL 迁移与仓储代码保留，后续切换无需重写业务。
 
 建议将 `.env.example` 复制为 `.env` 后，按需修改以下变量：
 
@@ -236,10 +236,10 @@ GOMEMLIMIT=1536MiB ./soulcourse
 - `ADMIN_PASSWORD_HASH`（生产必填）
 - `JWT_SECRET`
 - `METRICS_TOKEN`（生产必填）
-- `DATABASE_DRIVER`、`DATABASE_URL` 与数据库连接池/超时
+- `DATABASE_DRIVER`、`DATABASE_URL` 与数据库连接池/超时；临时 SQLite 公测还需 `ALLOW_SQLITE_PRODUCTION=true` 和 `SQLITE_PATH`
 - `STORAGE_DRIVER`、`S3_ENDPOINT`、`S3_BUCKET`、`S3_REGION`、`S3_CDN_BASE_URL`
 
-公测生产固定使用托管 PostgreSQL 16 和 S3 兼容对象存储；本轮不引入 Redis。部署应用前必须在目标 PostgreSQL 16 实例执行并确认 goose migration：
+正式生产默认使用托管 PostgreSQL 16 和 S3 兼容对象存储；本轮不引入 Redis。预算受限时可使用显式 SQLite 公测模式，仍必须使用 S3。部署 PostgreSQL 模式前必须在目标 PostgreSQL 16 实例执行并确认 goose migration：
 
 ```bash
 export DATABASE_URL='postgres://user:password@host:5432/soulcourse?sslmode=require'
@@ -353,7 +353,7 @@ curl -fsS http://127.0.0.1:1309/healthz
 curl -fsS http://127.0.0.1:1309/readyz
 ```
 
-本地/测试默认使用 SQLite；生产配置强制使用 PostgreSQL。PostgreSQL repository 已通过真实 PostgreSQL 16 的注册、会话、发帖、评论、互动、举报、私信、通知和列表集成测试，两次 SQLite 快照迁移演练也已通过；托管实例最终切换、完整 HTTP/管理后台回归、PITR 和性能验收仍是上线闸门。
+本地/测试默认使用 SQLite；生产配置默认要求 PostgreSQL，只有显式 `ALLOW_SQLITE_PRODUCTION=true` 才允许临时 SQLite 公测模式。PostgreSQL repository 已通过真实 PostgreSQL 16 的注册、会话、发帖、评论、互动、举报、私信、通知和列表集成测试，两次 SQLite 快照迁移演练也已通过；托管实例最终切换、完整 HTTP/管理后台回归、PITR 和性能验收仍是上线闸门。
 
 ## 说明
 

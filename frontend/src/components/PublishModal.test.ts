@@ -105,7 +105,6 @@ describe('PublishModal image uploads', () => {
     setActivePinia(pinia)
     useForumStore().session = {
       user: { id: 7, publicId: 'u_7', email: 'student@example.com', nickname: '广东学生', role: 'student', province: '广东', grade: '高一', createdAt: '2026-07-31T00:00:00Z' },
-      token: 'test-session',
       expiresAt: '2099-01-01T00:00:00Z',
     }
     const { container } = render(PublishModal, {

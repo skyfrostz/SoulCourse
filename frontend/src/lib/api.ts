@@ -163,10 +163,8 @@ export async function resetPassword(payload: { email: string; verificationCode: 
   await requestData(api.post<ApiEnvelope<{ reset: boolean }>>('/auth/reset-password', payload))
 }
 
-export async function logout(token?: string): Promise<void> {
-  await requestData(api.post<ApiEnvelope<{ signedOut: boolean }>>('/auth/logout', undefined, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  }))
+export async function logout(): Promise<void> {
+  await requestData(api.post<ApiEnvelope<{ signedOut: boolean }>>('/auth/logout'))
 }
 
 export async function fetchMe(): Promise<User> {

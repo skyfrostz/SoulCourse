@@ -176,7 +176,6 @@ export interface AppNotification {
 
 export interface AuthSession {
   user: User
-  token?: string
   expiresAt: string
 }
 

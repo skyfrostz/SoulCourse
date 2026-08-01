@@ -18,10 +18,10 @@ import (
 )
 
 func NewSQLiteDB(cfg config.Config) (*sql.DB, error) {
-	if err := os.MkdirAll(filepath.Dir(cfg.SQLitePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cfg.SQLitePath), 0750); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(cfg.MediaUploadDir, 0755); err != nil {
+	if err := os.MkdirAll(cfg.MediaUploadDir, 0750); err != nil {
 		return nil, err
 	}
 
@@ -69,11 +69,25 @@ func initSQLiteSchema(db *sql.DB) error {
 			is_shadow INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
+			banned_at TEXT,
+			banned_reason TEXT NOT NULL DEFAULT '',
 			deleted_at TEXT
 		);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
 			ON users (lower(email))
 			WHERE deleted_at IS NULL AND email IS NOT NULL;`,
+		`CREATE TABLE IF NOT EXISTS auth_sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			token_hash TEXT NOT NULL UNIQUE,
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			revoked_at TEXT,
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_active
+			ON auth_sessions (user_id, expires_at)
+			WHERE revoked_at IS NULL;`,
 		`CREATE TABLE IF NOT EXISTS posts (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER,
@@ -107,6 +121,21 @@ func initSQLiteSchema(db *sql.DB) error {
 			deleted_at TEXT,
 			FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE,
 			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS content_reports (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			reporter_user_id INTEGER NOT NULL,
+			target_type TEXT NOT NULL,
+			target_id INTEGER NOT NULL,
+			reason TEXT NOT NULL,
+			detail TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'open',
+			resolution_note TEXT NOT NULL DEFAULT '',
+			resolved_at TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(reporter_user_id, target_type, target_id),
+			FOREIGN KEY(reporter_user_id) REFERENCES users(id) ON DELETE CASCADE
 		);`,
 		`CREATE TABLE IF NOT EXISTS subject_insights (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -172,6 +201,16 @@ func initSQLiteSchema(db *sql.DB) error {
 			FOREIGN KEY(recipient_user_id) REFERENCES users(id) ON DELETE CASCADE,
 			FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS direct_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			sender_user_id INTEGER NOT NULL,
+			recipient_user_id INTEGER NOT NULL,
+			content TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			read_at TEXT,
+			FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY(recipient_user_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
 		`CREATE TABLE IF NOT EXISTS topics (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			slug TEXT NOT NULL UNIQUE,
@@ -203,6 +242,22 @@ func initSQLiteSchema(db *sql.DB) error {
 			email TEXT NOT NULL,
 			client_ip TEXT NOT NULL,
 			created_at INTEGER NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS upload_assets (
+			id TEXT PRIMARY KEY,
+			user_id INTEGER NOT NULL,
+			asset_key TEXT NOT NULL UNIQUE,
+			file_name TEXT NOT NULL,
+			content_type TEXT NOT NULL,
+			ext TEXT NOT NULL,
+			size_bytes INTEGER NOT NULL,
+			width INTEGER NOT NULL,
+			height INTEGER NOT NULL,
+			status TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			completed_at TEXT,
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 		);`,
 		`CREATE TABLE IF NOT EXISTS admin_content_records (
 			id TEXT PRIMARY KEY,
@@ -260,8 +315,18 @@ func initSQLiteSchema(db *sql.DB) error {
 			ON posts (user_id, deleted_at, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_comments_post
 			ON comments (post_id, deleted_at, created_at ASC);`,
+		`CREATE INDEX IF NOT EXISTS idx_content_reports_status
+			ON content_reports (status, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_notifications_recipient
 			ON notifications (recipient_user_id, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_direct_messages_sender
+			ON direct_messages (sender_user_id, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_direct_messages_recipient
+			ON direct_messages (recipient_user_id, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_direct_messages_pair_sender
+			ON direct_messages (sender_user_id, recipient_user_id, created_at DESC, id DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_direct_messages_pair_recipient
+			ON direct_messages (recipient_user_id, sender_user_id, created_at DESC, id DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_email_verification_lookup
 			ON email_verification_codes (email, used_at, expires_at, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_email_verification_attempts_email
@@ -279,6 +344,12 @@ func initSQLiteSchema(db *sql.DB) error {
 		}
 	}
 	if err := ensureSQLiteColumn(db, "users", "is_shadow", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := ensureSQLiteColumn(db, "users", "banned_at", "TEXT"); err != nil {
+		return err
+	}
+	if err := ensureSQLiteColumn(db, "users", "banned_reason", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_shadow_nickname

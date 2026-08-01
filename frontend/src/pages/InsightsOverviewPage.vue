@@ -3,19 +3,32 @@ import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 import { BarChart3, ChevronLeft, Search, ShieldCheck, TrendingUp } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
-import { apiDataEnabled, fetchInsights } from '../lib/api'
+import { apiDataEnabled, fetchInsights, fetchProvinceCoverage, fetchPublishedPolicies } from '../lib/api'
 import { useGlobalSearch } from '../composables/useGlobalSearch'
-import { policyTakeaways, requirementData } from '../lib/realData'
+import { useOnlineState } from '../composables/useOnlineState'
 import type { SubjectInsight } from '../types/forum'
 
 const router = useRouter()
 const route = useRoute()
 const { runSearch } = useGlobalSearch()
+const { isOffline } = useOnlineState()
 const insightsQuery = useQuery({
   queryKey: ['insights-overview'],
   queryFn: fetchInsights,
   enabled: apiDataEnabled,
 })
+const provincesQuery = useQuery({
+  queryKey: ['real-data', 'provinces'],
+  queryFn: fetchProvinceCoverage,
+  enabled: apiDataEnabled,
+})
+const policiesQuery = useQuery({
+  queryKey: ['real-data', 'policies'],
+  queryFn: fetchPublishedPolicies,
+  enabled: apiDataEnabled,
+})
+const hasDataError = computed(() => insightsQuery.isError.value || provincesQuery.isError.value || policiesQuery.isError.value)
+const isDataLoading = computed(() => insightsQuery.isLoading.value || provincesQuery.isLoading.value || policiesQuery.isLoading.value)
 const mode = ref<'count' | 'share'>(route.query.mode === 'share' ? 'share' : 'count')
 const modes = [
   { value: 'count', label: '计划数排序', shortLabel: '计划数', icon: TrendingUp },
@@ -46,20 +59,14 @@ function setMode(value: 'count' | 'share') {
   router.replace({ path: '/insights', query: value === 'count' ? {} : { mode: value } })
 }
 
-function donutStyle(index: number) {
-  const data = requirementData[index]
-  if (!data?.slices.length) return { background: '#e2e8f0' }
-  let cursor = 0
-  const stops = data.slices.map((slice) => {
-    const start = cursor
-    cursor += slice.value
-    return `${slice.color} ${start}% ${Math.min(cursor, 100)}%`
-  })
-  return { background: `conic-gradient(${stops.join(', ')})` }
-}
-
 function searchCombination(combination: string) {
   void runSearch(combination)
+}
+
+function refetchData() {
+  void insightsQuery.refetch()
+  void provincesQuery.refetch()
+  void policiesQuery.refetch()
 }
 </script>
 
@@ -92,6 +99,17 @@ function searchCombination(combination: string) {
       </div>
     </section>
 
+    <section v-if="hasDataError || isOffline" class="empty-state public-page-state">
+      <h2>{{ isOffline ? '当前网络不可用' : '趋势数据暂时无法加载' }}</h2>
+      <p>{{ isOffline ? '恢复网络后再重试，页面不会生成模拟趋势。' : '趋势、覆盖范围或政策来源没有同步成功，请稍后重试。' }}</p>
+      <button class="primary-wide compact" type="button" @click="refetchData">重试</button>
+    </section>
+
+    <section v-else-if="isDataLoading" class="empty-state public-page-state" aria-live="polite">
+      <p>正在加载已复核趋势数据...</p>
+    </section>
+
+    <template v-else>
     <section id="trend-board" class="insight-feature-grid xhs-trend-grid">
       <article v-for="insight in insightCards" :key="insight.id" class="insight-feature-card">
         <RouterLink :to="`/insights/${insight.id}`">
@@ -117,40 +135,38 @@ function searchCombination(combination: string) {
       <div class="section-heading">
         <span>真实数据看板</span>
         <h2>省级官方来源与公开情况</h2>
-        <p>广东展示已复算的官方招生计划数据；其他省份没有可靠组合级数据时明确标记缺失，只保留官方查询入口。</p>
+        <p>仅展示省份覆盖接口返回的复核状态与方法说明；没有可靠组合级数据时明确标记缺失。</p>
       </div>
       <div class="data-lab-grid">
-        <article v-for="(item, index) in requirementData" :key="item.province" class="data-chart-card">
+        <article v-for="item in provincesQuery.data.value ?? []" :key="item.province" class="data-chart-card">
           <div>
-            <small>{{ item.province }} · {{ item.total ? `${item.total} 个计划数` : '暂无组合级统计' }}</small>
-            <h3>{{ item.note }}</h3>
+            <small>{{ item.province }} · {{ item.coverageStatus === 'verified' ? '已复核数据' : '暂无已复核数据' }}</small>
+            <h3>{{ item.methodology }}</h3>
           </div>
-          <div v-if="item.slices.length" class="source-donut-row">
-            <span class="source-donut" :style="donutStyle(index)"></span>
-            <div class="source-legend">
-              <span v-for="slice in item.slices" :key="slice.label">
-                <i :style="{ background: slice.color }"></i>
-                {{ slice.label }}
-                <strong>{{ slice.value }}%</strong>
-              </span>
-            </div>
+          <div class="empty-state compact-empty">
+            <strong>{{ item.coverageStatus === 'verified' ? '已纳入复核范围' : '暂无官方公开数据' }}</strong>
+            <p>{{ item.coverageStatus === 'verified' ? '具体组合指标以同省份、同年份的已发布洞察为准。' : '不使用专业覆盖率、门户分类或公式生成值代替考生组合热度。' }}</p>
           </div>
-          <div v-else class="empty-state compact-empty">
-            <strong>暂无官方公开数据</strong>
-            <p>不使用专业覆盖率、门户分类或公式生成值代替考生组合热度。</p>
-          </div>
-          <a :href="item.source.url" target="_blank" rel="noreferrer">来源：{{ item.source.publisher }}</a>
-          <p class="source-note"><ShieldCheck :size="15" /> {{ item.capturedAt ? `抓取于 ${item.capturedAt}` : '请从官方入口核对最新公告' }}</p>
+          <p class="source-note"><ShieldCheck :size="15" /> {{ item.capturedAt ? `采集于 ${new Date(item.capturedAt).toLocaleDateString('zh-CN')}` : '请从官方入口核对最新公告' }}</p>
+        </article>
+        <article v-if="!provincesQuery.isLoading.value && !(provincesQuery.data.value?.length)" class="empty-state compact-empty">
+          <strong>暂无已复核数据</strong>
+          <p>省份覆盖接口暂未返回可公开的数据记录。</p>
         </article>
       </div>
     </section>
 
     <section class="takeaway-panel">
-      <article v-for="takeaway in policyTakeaways" :key="takeaway.title">
-        <strong>{{ takeaway.title }}</strong>
-        <p>{{ takeaway.body }}</p>
-        <a :href="takeaway.source.url" target="_blank" rel="noreferrer">{{ takeaway.source.publisher }}</a>
+      <article v-for="policy in policiesQuery.data.value ?? []" :key="policy.id">
+        <strong>{{ policy.title }}</strong>
+        <p>{{ policy.summary || policy.methodology }}</p>
+        <a :href="policy.source.url || policy.url" target="_blank" rel="noreferrer">{{ policy.source.name }}</a>
+      </article>
+      <article v-if="!policiesQuery.isLoading.value && !(policiesQuery.data.value?.length)">
+        <strong>暂无已复核政策结论</strong>
+        <p>政策内容将在完成来源核验后公开展示。</p>
       </article>
     </section>
+    </template>
   </main>
 </template>

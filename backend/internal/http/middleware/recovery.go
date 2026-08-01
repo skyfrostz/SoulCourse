@@ -22,12 +22,7 @@ func RecoveryLogger(logger *logx.Logger) gin.HandlerFunc {
 					logx.F("堆栈", string(debug.Stack())),
 				)
 
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": gin.H{
-						"code":    "internal_server_error",
-						"message": "server encountered an unexpected error",
-					},
-				})
+				AbortWithError(c, http.StatusInternalServerError, "internal_server_error", "server encountered an unexpected error")
 			}
 		}()
 

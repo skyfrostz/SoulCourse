@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const palette = ['#10b981', '#2563eb', '#38bdf8', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b', '#ec4899']
 const trendItems = computed(() => props.insights)
+const primaryInsight = computed(() => trendItems.value[0])
 const trendTotal = computed(() => trendItems.value.reduce((sum, insight) => sum + insight.heat, 0) || 1)
 
 const donutStyle = computed(() => {
@@ -32,17 +33,17 @@ const donutStyle = computed(() => {
   <aside class="insight-panel">
     <section class="insight-box insight-trend-section">
       <div class="panel-title-row">
-        <h2>广东招生计划选科观察</h2>
+        <h2>{{ primaryInsight?.province || '已发布' }}招生计划选科观察</h2>
         <span class="insight-section-badge"><TrendingUp :size="14" /> 官方数据</span>
       </div>
-      <p class="caption">2025本科院校征集志愿 · 计划要求分布</p>
+      <p class="caption">{{ primaryInsight ? `${primaryInsight.dataYear}年 · ${primaryInsight.scope || '计划要求分布'}` : '暂无已发布观察数据' }}</p>
       <div class="trend-chart" aria-label="招生计划选科要求分布图">
         <div class="trend-donut" :style="donutStyle"></div>
         <div class="trend-legend">
           <RouterLink v-for="(insight, index) in trendItems" :key="insight.id" :to="`/insights/${insight.id}`">
             <i :style="{ background: palette[index % palette.length] }"></i>
             <span>{{ insight.combination }}</span>
-            <strong>{{ insight.heat }} 个</strong>
+            <strong>{{ insight.heat }} {{ insight.unit || '条' }}</strong>
           </RouterLink>
         </div>
       </div>
@@ -57,7 +58,7 @@ const donutStyle = computed(() => {
         <h2>热门话题</h2>
         <span class="insight-section-index">02</span>
       </div>
-      <p class="caption">广东学生和家长正在讨论</p>
+      <p class="caption">站内用户正在讨论</p>
       <div class="topic-list">
         <RouterLink v-for="topic in topics" :key="topic.slug" :to="`/topics/${topic.slug}`">
           <span># {{ topic.title }}</span>

@@ -1,2 +1,6 @@
 allowBuilds:
+  msw: true
   vue-demi: true
+overrides:
+  postcss: ^8.5.18
+  brace-expansion: ^5.0.8

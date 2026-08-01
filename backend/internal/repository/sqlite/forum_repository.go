@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,38 +22,50 @@ func NewForumRepository(db *sql.DB) *ForumRepository {
 	return &ForumRepository{db: db}
 }
 
-func (r *ForumRepository) ListPosts(ctx context.Context, viewerID *int64, filter domain.FeedFilter) ([]domain.Post, error) {
+func (r *ForumRepository) ListPosts(ctx context.Context, viewerID *int64, filter domain.FeedFilter) (domain.PostPage, error) {
+	if filter.Cursor != "" && filter.Sort == domain.SortLatest {
+		if _, _, err := parsePostCursor(filter.Cursor); err != nil {
+			return domain.PostPage{}, fmt.Errorf("invalid post cursor: %w", err)
+		}
+	}
 	query, args := buildPostListQuery(filter)
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return domain.PostPage{}, err
 	}
 	defer rows.Close()
 
-	posts := make([]domain.Post, 0, filter.Limit)
+	posts := make([]domain.Post, 0, filter.Limit+1)
 	for rows.Next() {
 		post, err := scanPost(rows)
 		if err != nil {
-			return nil, err
+			return domain.PostPage{}, err
 		}
 		posts = append(posts, post)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return domain.PostPage{}, err
 	}
 
 	liked, favorited, followed, err := r.viewerState(ctx, viewerID)
 	if err != nil {
-		return nil, err
+		return domain.PostPage{}, err
 	}
 
-	for i := range posts {
-		post := &posts[i]
+	page := domain.PostPage{Items: posts}
+	if filter.Limit > 0 && filter.Sort == domain.SortLatest && len(posts) > filter.Limit {
+		page.HasMore = true
+		page.Items = posts[:filter.Limit]
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = postCursor(last.CreatedAt, last.ID)
+	}
+	for i := range page.Items {
+		post := &page.Items[i]
 		post.ViewerLiked = liked[post.ID]
 		post.ViewerFavorited = favorited[post.ID]
 		post.ViewerFollowing = post.SourcePlatform == "" && followed[post.AuthorName]
 	}
-	return posts, nil
+	return page, nil
 }
 
 func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
@@ -90,6 +103,12 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 		query += " AND p.user_id = ?"
 		args = append(args, *filter.UserID)
 	}
+	if filter.Cursor != "" && filter.Sort == domain.SortLatest {
+		if cursorTime, cursorID, err := parsePostCursor(filter.Cursor); err == nil {
+			query += " AND (p.created_at < ? OR (p.created_at = ? AND p.id < ?))"
+			args = append(args, cursorTime, cursorTime, cursorID)
+		}
+	}
 
 	subjects := make([]domain.Subject, 0, len(filter.Subjects)+1)
 	subjects = append(subjects, filter.Subjects...)
@@ -123,8 +142,12 @@ func buildPostListQuery(filter domain.FeedFilter) (string, []any) {
 	}
 
 	if filter.Limit > 0 {
-		query += " LIMIT ? OFFSET ?"
-		args = append(args, filter.Limit, filter.Offset)
+		query += " LIMIT ?"
+		args = append(args, filter.Limit+1)
+		if filter.Cursor == "" {
+			query += " OFFSET ?"
+			args = append(args, filter.Offset)
+		}
 	}
 	return query, args
 }
@@ -234,6 +257,114 @@ func (r *ForumRepository) CreatePost(ctx context.Context, user domain.User, inpu
 	return r.fetchPostByID(ctx, postID)
 }
 
+func (r *ForumRepository) UpdatePost(ctx context.Context, userID int64, postID int64, input domain.UpdatePostInput) (domain.Post, error) {
+	now := nowString()
+	transaction, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	defer transaction.Rollback()
+
+	result, err := transaction.ExecContext(ctx, `
+		UPDATE posts
+		SET title = ?, content = ?, tags = ?, track = ?, electives = ?, category = ?, updated_at = ?
+		WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+	`,
+		input.Title,
+		input.Content,
+		mustJSON(input.Tags),
+		string(input.Track),
+		mustJSON(subjectStrings(input.Electives)),
+		string(input.Category),
+		now,
+		postID,
+		userID,
+	)
+	if err != nil {
+		return domain.Post{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return domain.Post{}, err
+	}
+	if affected == 0 {
+		return domain.Post{}, sql.ErrNoRows
+	}
+
+	var grade string
+	var province string
+	var imageURLsRaw string
+	if err := transaction.QueryRowContext(ctx, `
+		SELECT grade, province, image_urls FROM posts WHERE id = ?
+	`, postID).Scan(&grade, &province, &imageURLsRaw); err != nil {
+		return domain.Post{}, err
+	}
+	payload := map[string]any{
+		"postId":          fmt.Sprintf("%d", postID),
+		"content":         input.Content,
+		"track":           input.Track,
+		"electives":       input.Electives,
+		"category":        input.Category,
+		"grade":           grade,
+		"province":        province,
+		"imageUrls":       parseStringSlice(imageURLsRaw),
+		"createdByUserId": fmt.Sprintf("%d", userID),
+		"editedByUserId":  fmt.Sprintf("%d", userID),
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		UPDATE admin_content_records
+		SET title = ?, content_type = ?, tags = ?, summary = ?, payload = ?, updated_at = ?
+		WHERE id = ? AND module = 'posts' AND deleted_at IS NULL
+	`,
+		input.Title,
+		postContentType(input.Category),
+		mustJSON(input.Tags),
+		input.Content,
+		mustJSON(payload),
+		now,
+		fmt.Sprintf("post-user-%d", postID),
+	); err != nil {
+		return domain.Post{}, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return domain.Post{}, err
+	}
+	return r.fetchPostByID(ctx, postID)
+}
+
+func (r *ForumRepository) DeletePost(ctx context.Context, userID int64, postID int64) error {
+	now := nowString()
+	transaction, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback()
+
+	result, err := transaction.ExecContext(ctx, `
+		UPDATE posts
+		SET deleted_at = COALESCE(deleted_at, ?), updated_at = ?
+		WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+	`, now, now, postID, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		UPDATE admin_content_records
+		SET deleted_at = COALESCE(deleted_at, ?), status = '用户已删除', updated_at = ?
+		WHERE id = ? AND module = 'posts'
+	`, now, now, fmt.Sprintf("post-user-%d", postID)); err != nil {
+		return err
+	}
+	return transaction.Commit()
+}
+
 func (r *ForumRepository) CreateComment(ctx context.Context, user domain.User, postID int64, input domain.CreateCommentInput) (domain.Comment, error) {
 	post, err := r.fetchPostByID(ctx, postID)
 	if err != nil {
@@ -262,6 +393,36 @@ func (r *ForumRepository) CreateComment(ctx context.Context, user domain.User, p
 		FROM comments
 		WHERE id = ?
 	`, commentID))
+}
+
+func (r *ForumRepository) ReportPost(ctx context.Context, user domain.User, postID int64, input domain.ReportPostInput) (domain.ContentReport, error) {
+	if _, err := r.fetchPostByID(ctx, postID); err != nil {
+		return domain.ContentReport{}, err
+	}
+	now := nowString()
+	result, err := r.db.ExecContext(ctx, `
+		INSERT INTO content_reports (reporter_user_id, target_type, target_id, reason, detail, created_at, updated_at)
+		VALUES (?, 'post', ?, ?, ?, ?, ?)
+		ON CONFLICT(reporter_user_id, target_type, target_id) DO UPDATE SET
+			reason = excluded.reason,
+			detail = excluded.detail,
+			status = 'open',
+			resolution_note = '',
+			resolved_at = NULL,
+			updated_at = excluded.updated_at
+	`, user.ID, postID, input.Reason, input.Detail, now, now)
+	if err != nil {
+		return domain.ContentReport{}, err
+	}
+	reportID, err := result.LastInsertId()
+	if err != nil || reportID == 0 {
+		if err := r.db.QueryRowContext(ctx, `
+			SELECT id FROM content_reports WHERE reporter_user_id = ? AND target_type = 'post' AND target_id = ?
+		`, user.ID, postID).Scan(&reportID); err != nil {
+			return domain.ContentReport{}, err
+		}
+	}
+	return r.scanContentReportByID(ctx, reportID)
 }
 
 func (r *ForumRepository) ListInsights(ctx context.Context) ([]domain.SubjectInsight, error) {
@@ -359,13 +520,14 @@ func (r *ForumRepository) GetTopic(ctx context.Context, viewerID *int64, slug st
 	}
 	posts := make([]domain.Post, 0)
 	if topic.TopicTag != "" {
-		posts, err = r.ListPosts(ctx, viewerID, domain.FeedFilter{
+		postPage, pageErr := r.ListPosts(ctx, viewerID, domain.FeedFilter{
 			Tag:  topic.TopicTag,
 			Sort: domain.SortLatest,
 		})
-		if err != nil {
-			return domain.TopicDetail{}, err
+		if pageErr != nil {
+			return domain.TopicDetail{}, pageErr
 		}
+		posts = postPage.Items
 	}
 	return domain.TopicDetail{Topic: topic, Posts: posts}, nil
 }
@@ -407,7 +569,7 @@ func (r *ForumRepository) GetUserByEmail(ctx context.Context, email string) (dom
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, email, nickname, role, province, grade, created_at, password_hash
 		FROM users
-		WHERE lower(email) = lower(?) AND deleted_at IS NULL
+		WHERE lower(email) = lower(?) AND deleted_at IS NULL AND banned_at IS NULL
 	`, email).Scan(&user.ID, &user.Email, &user.Nickname, &user.Role, &user.Province, &user.Grade, &createdAt, &passwordHash)
 	if err != nil {
 		return domain.User{}, "", err
@@ -423,6 +585,269 @@ func (r *ForumRepository) GetUserByID(ctx context.Context, id int64) (domain.Use
 		FROM users
 		WHERE id = ? AND deleted_at IS NULL
 	`, id))
+}
+
+func (r *ForumRepository) GetUserPasswordHashByID(ctx context.Context, id int64) (string, error) {
+	var passwordHash string
+	err := r.db.QueryRowContext(ctx, `
+		SELECT password_hash
+		FROM users
+		WHERE id = ? AND deleted_at IS NULL AND is_shadow = 0
+	`, id).Scan(&passwordHash)
+	return passwordHash, err
+}
+
+func (r *ForumRepository) UpdateUserPasswordByEmail(ctx context.Context, email string, passwordHash string, now time.Time) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE users
+		SET password_hash = ?, updated_at = ?
+		WHERE lower(email) = lower(?) AND deleted_at IS NULL AND is_shadow = 0
+	`, passwordHash, now.UTC().Format(time.RFC3339Nano), email)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if affected == 0 {
+		return 0, sql.ErrNoRows
+	}
+	var userID int64
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT id FROM users
+		WHERE lower(email) = lower(?) AND deleted_at IS NULL AND is_shadow = 0
+	`, email).Scan(&userID); err != nil {
+		return 0, err
+	}
+	return userID, nil
+}
+
+func (r *ForumRepository) DeleteUserAccount(ctx context.Context, userID int64, now time.Time) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	timestamp := now.UTC().Format(time.RFC3339Nano)
+	result, err := tx.ExecContext(ctx, `
+		UPDATE users
+		SET email = NULL,
+		    password_hash = NULL,
+		    nickname = ?,
+		    deleted_at = ?,
+		    updated_at = ?
+		WHERE id = ? AND deleted_at IS NULL AND is_shadow = 0
+	`, fmt.Sprintf("已注销用户-%d", userID), timestamp, timestamp, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE auth_sessions
+		SET revoked_at = ?
+		WHERE user_id = ? AND revoked_at IS NULL
+	`, timestamp, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *ForumRepository) CreateImageUpload(ctx context.Context, record domain.ImageUploadRecord) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO upload_assets (id, user_id, asset_key, file_name, content_type, ext, size_bytes, width, height, status, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, record.ID, record.UserID, record.AssetKey, record.FileName, record.ContentType, record.Ext, record.SizeBytes, record.Width, record.Height, record.Status, record.CreatedAt.UTC().Format(time.RFC3339Nano), record.ExpiresAt.UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func (r *ForumRepository) GetImageUpload(ctx context.Context, userID int64, id string) (domain.ImageUploadRecord, error) {
+	return scanImageUpload(r.db.QueryRowContext(ctx, `
+		SELECT id, user_id, asset_key, file_name, content_type, ext, size_bytes, width, height, status, created_at, expires_at, completed_at
+		FROM upload_assets
+		WHERE id = ? AND user_id = ?
+	`, id, userID))
+}
+
+func (r *ForumRepository) ListExpiredPendingImageUploads(ctx context.Context, now time.Time, limit int) ([]domain.ImageUploadRecord, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, user_id, asset_key, file_name, content_type, ext, size_bytes, width, height, status, created_at, expires_at, completed_at
+		FROM upload_assets
+		WHERE status = 'pending' AND expires_at < ?
+		ORDER BY expires_at ASC
+		LIMIT ?
+	`, now.UTC().Format(time.RFC3339Nano), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	records := make([]domain.ImageUploadRecord, 0)
+	for rows.Next() {
+		record, err := scanImageUpload(rows)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func (r *ForumRepository) MarkImageUploadsExpired(ctx context.Context, ids []string, now time.Time) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, 0, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, now.UTC().Format(time.RFC3339Nano))
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		placeholders = append(placeholders, "?")
+		args = append(args, trimmed)
+	}
+	if len(placeholders) == 0 {
+		return 0, nil
+	}
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE upload_assets
+		SET status = 'expired', completed_at = ?
+		WHERE status = 'pending' AND id IN (`+strings.Join(placeholders, ",")+`)
+	`, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (r *ForumRepository) CompleteImageUpload(ctx context.Context, userID int64, id string, sizeBytes int64, contentType string, width int, height int, now time.Time) (domain.ImageUploadRecord, error) {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE upload_assets
+		SET size_bytes = ?, content_type = ?, width = ?, height = ?, status = 'completed', completed_at = ?
+		WHERE id = ? AND user_id = ? AND status = 'pending'
+	`, sizeBytes, contentType, width, height, now.UTC().Format(time.RFC3339Nano), id, userID)
+	if err != nil {
+		return domain.ImageUploadRecord{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return domain.ImageUploadRecord{}, err
+	}
+	if affected == 0 {
+		record, getErr := r.GetImageUpload(ctx, userID, id)
+		if getErr != nil {
+			return domain.ImageUploadRecord{}, getErr
+		}
+		if record.Status == "completed" && record.SizeBytes == sizeBytes && record.ContentType == contentType && record.Width == width && record.Height == height {
+			return record, nil
+		}
+		return domain.ImageUploadRecord{}, sql.ErrNoRows
+	}
+	return r.GetImageUpload(ctx, userID, id)
+}
+
+func (r *ForumRepository) CreateAuthSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error {
+	now := nowString()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO auth_sessions (user_id, token_hash, created_at, expires_at)
+		VALUES (?, ?, ?, ?)
+	`, userID, tokenHash, now, expiresAt.UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func (r *ForumRepository) GetUserBySessionTokenHash(ctx context.Context, tokenHash string, now time.Time) (domain.User, error) {
+	return scanUser(r.db.QueryRowContext(ctx, `
+		SELECT u.id, u.email, u.nickname, u.role, u.province, u.grade, u.created_at
+		FROM auth_sessions s
+		JOIN users u ON u.id = s.user_id
+		WHERE s.token_hash = ?
+		  AND s.revoked_at IS NULL
+		  AND s.expires_at > ?
+		  AND u.deleted_at IS NULL
+		  AND u.banned_at IS NULL
+	`, tokenHash, now.UTC().Format(time.RFC3339Nano)))
+}
+
+func (r *ForumRepository) RevokeAuthSession(ctx context.Context, tokenHash string, now time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE auth_sessions
+		SET revoked_at = ?
+		WHERE token_hash = ? AND revoked_at IS NULL
+	`, now.UTC().Format(time.RFC3339Nano), tokenHash)
+	return err
+}
+
+func (r *ForumRepository) RevokeAuthSessionsForUser(ctx context.Context, userID int64, now time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE auth_sessions
+		SET revoked_at = ?
+		WHERE user_id = ? AND revoked_at IS NULL
+	`, now.UTC().Format(time.RFC3339Nano), userID)
+	return err
+}
+
+func (r *ForumRepository) ListAuthSessions(ctx context.Context, userID int64, currentTokenHash string, now time.Time) ([]domain.AccountSession, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, token_hash, created_at, expires_at, revoked_at
+		FROM auth_sessions
+		WHERE user_id = ?
+		ORDER BY COALESCE(revoked_at, expires_at) DESC, id DESC
+		LIMIT 50
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]domain.AccountSession, 0)
+	for rows.Next() {
+		var item domain.AccountSession
+		var tokenHash string
+		var createdAt, expiresAt string
+		var revokedAt sql.NullString
+		if err := rows.Scan(&item.ID, &tokenHash, &createdAt, &expiresAt, &revokedAt); err != nil {
+			return nil, err
+		}
+		item.CreatedAt = parseTime(createdAt)
+		item.ExpiresAt = parseTime(expiresAt)
+		if revokedAt.Valid {
+			value := parseTime(revokedAt.String)
+			item.RevokedAt = &value
+		}
+		item.Current = tokenHash == currentTokenHash && item.RevokedAt == nil && item.ExpiresAt.After(now)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *ForumRepository) RevokeAuthSessionByID(ctx context.Context, userID int64, sessionID int64, now time.Time) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE auth_sessions
+		SET revoked_at = ?
+		WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+	`, now.UTC().Format(time.RFC3339Nano), sessionID, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func (r *ForumRepository) CreateEmailVerificationCode(ctx context.Context, email string, codeHash string, expiresAt time.Time) error {
@@ -654,6 +1079,13 @@ func (r *ForumRepository) TogglePostFavorite(ctx context.Context, userID int64, 
 }
 
 func (r *ForumRepository) ToggleFollowAuthor(ctx context.Context, followerID int64, authorName string) (bool, error) {
+	var followerName string
+	if err := r.db.QueryRowContext(ctx, `SELECT nickname FROM users WHERE id = ? AND deleted_at IS NULL`, followerID).Scan(&followerName); err != nil {
+		return false, err
+	}
+	if followerName == authorName {
+		return false, errors.New("cannot follow yourself")
+	}
 	var exists int
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT 1
@@ -748,16 +1180,33 @@ func (r *ForumRepository) getAccountProfile(ctx context.Context, viewerID *int64
 			return domain.AccountProfile{}, err
 		}
 	}
-	profile.Posts, err = r.ListPosts(ctx, viewerID, domain.FeedFilter{UserID: &user.ID, Sort: domain.SortLatest, Limit: 50})
+	postPage, err := r.ListPosts(ctx, viewerID, domain.FeedFilter{UserID: &user.ID, Sort: domain.SortLatest, Limit: 50})
 	if err != nil {
 		return domain.AccountProfile{}, err
 	}
+	profile.Posts = postPage.Items
 	profile.Comments, err = r.listProfileComments(ctx, user.ID)
 	if err != nil {
 		return domain.AccountProfile{}, err
 	}
+	if viewerID != nil {
+		var followed int
+		err = r.db.QueryRowContext(ctx, `SELECT 1 FROM follows WHERE follower_id = ? AND author_name = ?`, *viewerID, user.Nickname).Scan(&followed)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return domain.AccountProfile{}, err
+		}
+		profile.ViewerFollowing = err == nil
+	}
 	if isOwner {
 		profile.Favorites, err = r.listFavoritePosts(ctx, user.ID)
+		if err != nil {
+			return domain.AccountProfile{}, err
+		}
+		profile.Following, err = r.listFollowing(ctx, user.ID)
+		if err != nil {
+			return domain.AccountProfile{}, err
+		}
+		profile.Followers, err = r.listFollowers(ctx, user.Nickname)
 		if err != nil {
 			return domain.AccountProfile{}, err
 		}
@@ -765,6 +1214,279 @@ func (r *ForumRepository) getAccountProfile(ctx context.Context, viewerID *int64
 		profile.User.Email = ""
 	}
 	return profile, nil
+}
+
+func (r *ForumRepository) listFollowing(ctx context.Context, userID int64) ([]domain.FollowProfile, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT f.author_name,
+		       COALESCE(u.role, p.author_role, 'student'),
+		       COALESCE(u.province, p.province, '未公开'),
+		       COALESCE(u.grade, p.grade, '选科用户'),
+		       f.created_at
+		FROM follows f
+		LEFT JOIN users u ON u.nickname = f.author_name AND u.deleted_at IS NULL
+		LEFT JOIN posts p ON p.id = (
+			SELECT id FROM posts
+			WHERE author_name = f.author_name AND deleted_at IS NULL
+			ORDER BY created_at DESC LIMIT 1
+		)
+		WHERE f.follower_id = ?
+		ORDER BY f.created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanFollowProfiles(rows)
+}
+
+func (r *ForumRepository) listFollowers(ctx context.Context, authorName string) ([]domain.FollowProfile, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT u.nickname, u.role, u.province, u.grade, f.created_at
+		FROM follows f
+		JOIN users u ON u.id = f.follower_id AND u.deleted_at IS NULL
+		WHERE f.author_name = ?
+		ORDER BY f.created_at DESC
+	`, authorName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanFollowProfiles(rows)
+}
+
+func scanFollowProfiles(rows *sql.Rows) ([]domain.FollowProfile, error) {
+	items := make([]domain.FollowProfile, 0)
+	for rows.Next() {
+		var item domain.FollowProfile
+		var followedAt string
+		if err := rows.Scan(&item.Name, &item.Role, &item.Province, &item.Grade, &followedAt); err != nil {
+			return nil, err
+		}
+		item.FollowedAt = parseTime(followedAt)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *ForumRepository) ListConversations(ctx context.Context, userID int64, limit int, cursor string) (domain.ConversationPage, error) {
+	cursorTime, cursorID, err := parseConversationCursor(cursor)
+	if err != nil {
+		return domain.ConversationPage{}, err
+	}
+	query := `
+		WITH ranked_messages AS (
+			SELECT m.*,
+			       CASE WHEN m.sender_user_id = ? THEN m.recipient_user_id ELSE m.sender_user_id END AS peer_id,
+			       ROW_NUMBER() OVER (
+				PARTITION BY CASE WHEN m.sender_user_id = ? THEN m.recipient_user_id ELSE m.sender_user_id END
+				ORDER BY m.created_at DESC, m.id DESC
+			       ) AS row_number
+			FROM direct_messages m
+			WHERE m.sender_user_id = ? OR m.recipient_user_id = ?
+		)
+		SELECT u.id, u.nickname, u.role, u.province, u.grade,
+		       latest.content, latest.created_at, latest.id,
+		       (SELECT COUNT(*)
+		          FROM direct_messages unread
+		         WHERE unread.sender_user_id = u.id
+		           AND unread.recipient_user_id = ?
+		           AND unread.read_at IS NULL) AS unread_count
+		FROM users u
+		JOIN ranked_messages latest ON latest.peer_id = u.id AND latest.row_number = 1
+		WHERE u.deleted_at IS NULL`
+	args := []any{userID, userID, userID, userID, userID}
+	if cursor != "" {
+		query += ` AND (latest.created_at < ? OR (latest.created_at = ? AND latest.id < ?))`
+		args = append(args, cursorTime, cursorTime, cursorID)
+	}
+	query += ` ORDER BY latest.created_at DESC, latest.id DESC LIMIT ?`
+	args = append(args, limit+1)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return domain.ConversationPage{}, err
+	}
+	defer rows.Close()
+	items := make([]domain.Conversation, 0)
+	messageIDs := make([]int64, 0)
+	for rows.Next() {
+		var user domain.User
+		var content, createdAt string
+		var messageID int64
+		var unreadCount int
+		if err := rows.Scan(&user.ID, &user.Nickname, &user.Role, &user.Province, &user.Grade, &content, &createdAt, &messageID, &unreadCount); err != nil {
+			return domain.ConversationPage{}, err
+		}
+		user.PublicID = formatUserPublicID(user.ID)
+		user.Email = ""
+		user.CreatedAt = time.Time{}
+		items = append(items, domain.Conversation{User: user, LastMessage: content, LastMessageAt: parseTime(createdAt), UnreadCount: unreadCount})
+		messageIDs = append(messageIDs, messageID)
+	}
+	if err := rows.Err(); err != nil {
+		return domain.ConversationPage{}, err
+	}
+	page := domain.ConversationPage{Items: items}
+	if len(items) > limit {
+		page.HasMore = true
+		page.Items = items[:limit]
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = conversationCursor(last.LastMessageAt, messageIDs[limit-1])
+	}
+	return page, nil
+}
+
+func (r *ForumRepository) ListDirectMessages(ctx context.Context, userID int64, peerName string, limit int, cursor string) (domain.DirectMessagePage, error) {
+	peer, err := r.getUserByNickname(ctx, peerName)
+	if err != nil {
+		return domain.DirectMessagePage{}, err
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE direct_messages SET read_at = COALESCE(read_at, ?)
+		WHERE sender_user_id = ? AND recipient_user_id = ?
+	`, nowString(), peer.ID, userID); err != nil {
+		return domain.DirectMessagePage{}, err
+	}
+	cursorTime, cursorID, err := parseDirectMessageCursor(cursor)
+	if err != nil {
+		return domain.DirectMessagePage{}, err
+	}
+	query := `
+		SELECT m.id, m.sender_user_id, sender.nickname, m.recipient_user_id, recipient.nickname,
+		       m.content, m.created_at, m.read_at
+		FROM direct_messages m
+		JOIN users sender ON sender.id = m.sender_user_id
+		JOIN users recipient ON recipient.id = m.recipient_user_id
+		WHERE ((m.sender_user_id = ? AND m.recipient_user_id = ?)
+		   OR (m.sender_user_id = ? AND m.recipient_user_id = ?))`
+	args := []any{userID, peer.ID, peer.ID, userID}
+	if cursor != "" {
+		query += ` AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))`
+		args = append(args, cursorTime, cursorTime, cursorID)
+	}
+	query += ` ORDER BY m.created_at DESC, m.id DESC LIMIT ?`
+	args = append(args, limit+1)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return domain.DirectMessagePage{}, err
+	}
+	defer rows.Close()
+	items := make([]domain.DirectMessage, 0)
+	for rows.Next() {
+		item, err := scanDirectMessage(rows)
+		if err != nil {
+			return domain.DirectMessagePage{}, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return domain.DirectMessagePage{}, err
+	}
+	page := domain.DirectMessagePage{Items: items}
+	if len(items) > limit {
+		page.HasMore = true
+		page.Items = items[:limit]
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = directMessageCursor(last.CreatedAt, last.ID)
+	}
+	sort.Slice(page.Items, func(i, j int) bool {
+		left := page.Items[i]
+		right := page.Items[j]
+		if left.CreatedAt.Equal(right.CreatedAt) {
+			return left.ID < right.ID
+		}
+		return left.CreatedAt.Before(right.CreatedAt)
+	})
+	return page, nil
+}
+
+func (r *ForumRepository) SendDirectMessage(ctx context.Context, senderID int64, recipientName string, content string) (domain.DirectMessage, error) {
+	recipient, err := r.getUserByNickname(ctx, recipientName)
+	if err != nil {
+		return domain.DirectMessage{}, err
+	}
+	if recipient.ID == senderID {
+		return domain.DirectMessage{}, errors.New("cannot message yourself")
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.DirectMessage{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var senderName string
+	if err := tx.QueryRowContext(ctx, `SELECT nickname FROM users WHERE id = ? AND deleted_at IS NULL`, senderID).Scan(&senderName); err != nil {
+		return domain.DirectMessage{}, err
+	}
+	now := nowString()
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO direct_messages (sender_user_id, recipient_user_id, content, created_at)
+		VALUES (?, ?, ?, ?)
+	`, senderID, recipient.ID, content, now)
+	if err != nil {
+		return domain.DirectMessage{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return domain.DirectMessage{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO notifications (recipient_user_id, actor_user_id, type, title, summary, target_url, created_at)
+		VALUES (?, ?, 'message', ?, ?, '/messages', ?)
+	`, recipient.ID, senderID, senderName+" 给你发来私信", content, now); err != nil {
+		return domain.DirectMessage{}, err
+	}
+	message, err := scanDirectMessage(tx.QueryRowContext(ctx, `
+		SELECT m.id, m.sender_user_id, sender.nickname, m.recipient_user_id, recipient.nickname,
+		       m.content, m.created_at, m.read_at
+		FROM direct_messages m
+		JOIN users sender ON sender.id = m.sender_user_id
+		JOIN users recipient ON recipient.id = m.recipient_user_id
+		WHERE m.id = ?
+	`, id))
+	if err != nil {
+		return domain.DirectMessage{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.DirectMessage{}, err
+	}
+	return message, nil
+}
+
+func (r *ForumRepository) getUserByNickname(ctx context.Context, name string) (domain.User, error) {
+	return scanUser(r.db.QueryRowContext(ctx, `
+		SELECT id, email, nickname, role, province, grade, created_at
+		FROM users WHERE nickname = ? AND deleted_at IS NULL LIMIT 1
+	`, name))
+}
+
+func (r *ForumRepository) getDirectMessage(ctx context.Context, id int64) (domain.DirectMessage, error) {
+	return scanDirectMessage(r.db.QueryRowContext(ctx, `
+		SELECT m.id, m.sender_user_id, sender.nickname, m.recipient_user_id, recipient.nickname,
+		       m.content, m.created_at, m.read_at
+		FROM direct_messages m
+		JOIN users sender ON sender.id = m.sender_user_id
+		JOIN users recipient ON recipient.id = m.recipient_user_id
+		WHERE m.id = ?
+	`, id))
+}
+
+type directMessageScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanDirectMessage(scanner directMessageScanner) (domain.DirectMessage, error) {
+	var item domain.DirectMessage
+	var createdAt string
+	var readAt sql.NullString
+	if err := scanner.Scan(&item.ID, &item.SenderID, &item.SenderName, &item.RecipientID, &item.RecipientName, &item.Content, &createdAt, &readAt); err != nil {
+		return domain.DirectMessage{}, err
+	}
+	item.CreatedAt = parseTime(createdAt)
+	if readAt.Valid {
+		value := parseTime(readAt.String)
+		item.ReadAt = &value
+	}
+	return item, nil
 }
 
 func (r *ForumRepository) UpdateAccountProfile(ctx context.Context, userID int64, input domain.UpdateProfileInput) (domain.AccountProfile, error) {
@@ -784,17 +1506,26 @@ func (r *ForumRepository) UpdateAccountProfile(ctx context.Context, userID int64
 	return r.GetAccountProfileByUserID(ctx, &userID, user.ID)
 }
 
-func (r *ForumRepository) ListNotifications(ctx context.Context, userID int64) ([]domain.Notification, error) {
-	rows, err := r.db.QueryContext(ctx, `
+func (r *ForumRepository) ListNotifications(ctx context.Context, userID int64, limit int, cursor string) (domain.NotificationPage, error) {
+	cursorTime, cursorID, err := parseNotificationCursor(cursor)
+	if err != nil {
+		return domain.NotificationPage{}, err
+	}
+	query := `
 		SELECT n.id, n.type, n.title, n.summary, n.target_url, COALESCE(u.nickname, ''), n.created_at, n.read_at
 		FROM notifications n
 		LEFT JOIN users u ON u.id = n.actor_user_id
-		WHERE n.recipient_user_id = ?
-		ORDER BY n.created_at DESC, n.id DESC
-		LIMIT 100
-	`, userID)
+		WHERE n.recipient_user_id = ?`
+	args := []any{userID}
+	if cursor != "" {
+		query += ` AND (n.created_at < ? OR (n.created_at = ? AND n.id < ?))`
+		args = append(args, cursorTime, cursorTime, cursorID)
+	}
+	query += ` ORDER BY n.created_at DESC, n.id DESC LIMIT ?`
+	args = append(args, limit+1)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return domain.NotificationPage{}, err
 	}
 	defer rows.Close()
 	items := make([]domain.Notification, 0)
@@ -803,7 +1534,7 @@ func (r *ForumRepository) ListNotifications(ctx context.Context, userID int64) (
 		var createdAt string
 		var readAt sql.NullString
 		if err := rows.Scan(&item.ID, &item.Type, &item.Title, &item.Summary, &item.TargetURL, &item.ActorName, &createdAt, &readAt); err != nil {
-			return nil, err
+			return domain.NotificationPage{}, err
 		}
 		item.CreatedAt = parseTime(createdAt)
 		if readAt.Valid {
@@ -812,7 +1543,64 @@ func (r *ForumRepository) ListNotifications(ctx context.Context, userID int64) (
 		}
 		items = append(items, item)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return domain.NotificationPage{}, err
+	}
+	page := domain.NotificationPage{Items: items}
+	if len(items) > limit {
+		page.HasMore = true
+		page.Items = items[:limit]
+		last := page.Items[len(page.Items)-1]
+		page.NextCursor = notificationCursor(last.CreatedAt, last.ID)
+	}
+	return page, nil
+}
+
+func notificationCursor(createdAt time.Time, id int64) string {
+	return createdAt.UTC().Format(time.RFC3339Nano) + "_" + fmt.Sprintf("%d", id)
+}
+
+func parseNotificationCursor(cursor string) (string, int64, error) {
+	if cursor == "" {
+		return "", 0, nil
+	}
+	index := strings.LastIndex(cursor, "_")
+	if index <= 0 || index == len(cursor)-1 {
+		return "", 0, fmt.Errorf("invalid notification cursor")
+	}
+	id, err := strconv.ParseInt(cursor[index+1:], 10, 64)
+	if err != nil || id <= 0 {
+		return "", 0, fmt.Errorf("invalid notification cursor")
+	}
+	return cursor[:index], id, nil
+}
+
+func postCursor(createdAt time.Time, id int64) string {
+	return createdAt.UTC().Format(time.RFC3339Nano) + "_" + fmt.Sprintf("%d", id)
+}
+
+func parsePostCursor(cursor string) (string, int64, error) {
+	return parseNotificationCursor(cursor)
+}
+
+func directMessageCursor(createdAt time.Time, id int64) string {
+	return postCursor(createdAt, id)
+}
+
+func parseDirectMessageCursor(cursor string) (string, int64, error) {
+	return parseNotificationCursor(cursor)
+}
+
+func conversationCursor(createdAt time.Time, id int64) string {
+	return postCursor(createdAt, id)
+}
+
+func parseConversationCursor(cursor string) (string, int64, error) {
+	createdAt, id, err := parseNotificationCursor(cursor)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid conversation cursor")
+	}
+	return createdAt, id, nil
 }
 
 func (r *ForumRepository) MarkNotificationRead(ctx context.Context, userID int64, notificationID *int64) error {
@@ -1047,6 +1835,52 @@ type userScanner interface {
 	Scan(dest ...any) error
 }
 
+func (r *ForumRepository) scanContentReportByID(ctx context.Context, id int64) (domain.ContentReport, error) {
+	return scanContentReport(r.db.QueryRowContext(ctx, `
+		SELECT cr.id, cr.reporter_user_id, COALESCE(u.nickname, ''), cr.target_type, cr.target_id,
+		       COALESCE(p.title, ''), COALESCE(p.author_name, ''), cr.reason, cr.detail, cr.status,
+		       cr.resolution_note, cr.resolved_at, cr.created_at, cr.updated_at
+		FROM content_reports cr
+		LEFT JOIN users u ON u.id = cr.reporter_user_id
+		LEFT JOIN posts p ON cr.target_type = 'post' AND p.id = cr.target_id
+		WHERE cr.id = ?
+	`, id))
+}
+
+func scanContentReport(scanner interface {
+	Scan(dest ...any) error
+}) (domain.ContentReport, error) {
+	var report domain.ContentReport
+	var resolvedAt sql.NullString
+	var createdAt, updatedAt string
+	err := scanner.Scan(
+		&report.ID,
+		&report.ReporterID,
+		&report.ReporterName,
+		&report.TargetType,
+		&report.TargetID,
+		&report.TargetTitle,
+		&report.TargetAuthor,
+		&report.Reason,
+		&report.Detail,
+		&report.Status,
+		&report.ResolutionNote,
+		&resolvedAt,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		return domain.ContentReport{}, err
+	}
+	if resolvedAt.Valid {
+		parsed := parseTime(resolvedAt.String)
+		report.ResolvedAt = &parsed
+	}
+	report.CreatedAt = parseTime(createdAt)
+	report.UpdatedAt = parseTime(updatedAt)
+	return report, nil
+}
+
 func scanPost(scanner postScanner) (domain.Post, error) {
 	var post domain.Post
 	var userID sql.NullInt64
@@ -1188,6 +2022,39 @@ func scanUser(scanner userScanner) (domain.User, error) {
 	user.PublicID = formatUserPublicID(user.ID)
 	user.CreatedAt = parseTime(createdAt)
 	return user, nil
+}
+
+func scanImageUpload(scanner interface {
+	Scan(dest ...any) error
+}) (domain.ImageUploadRecord, error) {
+	var record domain.ImageUploadRecord
+	var createdAt, expiresAt string
+	var completedAt sql.NullString
+	err := scanner.Scan(
+		&record.ID,
+		&record.UserID,
+		&record.AssetKey,
+		&record.FileName,
+		&record.ContentType,
+		&record.Ext,
+		&record.SizeBytes,
+		&record.Width,
+		&record.Height,
+		&record.Status,
+		&createdAt,
+		&expiresAt,
+		&completedAt,
+	)
+	if err != nil {
+		return domain.ImageUploadRecord{}, err
+	}
+	record.CreatedAt = parseTime(createdAt)
+	record.ExpiresAt = parseTime(expiresAt)
+	if completedAt.Valid {
+		parsed := parseTime(completedAt.String)
+		record.CompletedAt = &parsed
+	}
+	return record, nil
 }
 
 func formatUserPublicID(id int64) string {

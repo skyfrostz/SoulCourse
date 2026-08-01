@@ -20,12 +20,14 @@ import type {
   AdminRecord,
   AdminSession,
   AdminSettings,
+  AdminWorkflowAction,
   EditableModuleId,
   ModuleId,
 } from '../lib/admin'
 import { appAssetUrl } from '../lib/runtime'
 import {
   adminLogin,
+  adminLogout,
   clearAdminSession,
   createInitialAdminState,
   createNewRecord,
@@ -35,11 +37,15 @@ import {
   fetchAdminAuditLogs,
   fetchAdminContent,
   fetchAdminEmailConfig,
+  fetchAdminReports,
   formatDate,
   fromApiRecord,
+  isAdminUnauthorizedError,
   loadAdminSession,
   loadAdminSettings,
   mediaUrls,
+  moderateAdminReport,
+  moderateAdminUser,
   moduleDefinitions,
   nextPriority,
   optionsFor,
@@ -67,6 +73,7 @@ const smtpConfig = ref<AdminEmailConfig | null>(null)
 const apiConnected = ref(false)
 const lastSyncMessage = ref('请登录并同步后端内容库')
 const loginError = ref('')
+const loginPending = ref(false)
 const testEmail = ref('')
 const testEmailResult = ref('')
 const draftRecord = ref<AdminRecord | null>(null)
@@ -82,10 +89,13 @@ const loginForm = ref({
 const pendingWorkflowActionId = ref('')
 const workflowNote = ref('')
 const workflowError = ref('')
+const workflowSaving = ref(false)
+const workflowSuccess = ref('')
 const newUserPassword = ref('')
 const userPasswordResult = ref('')
 
-const isLoggedIn = computed(() => adminSession.value.authenticated && Boolean(settings.value.adminToken))
+const isLoggedIn = computed(() => adminSession.value.authenticated && Boolean(adminSession.value.permissions?.length))
+const can = (permission: string) => adminSession.value.permissions?.includes(permission) ?? false
 const currentModule = computed(() => moduleDefinitions.find((item) => item.id === activeModule.value) || moduleDefinitions[0])
 const activeRecords = computed(() => state.records[activeModule.value])
 const currentRecord = computed(() => {
@@ -134,14 +144,42 @@ const filteredRows = computed(() =>
   }),
 )
 const statusOptionsForActiveModule = computed(() => ['全部', ...new Set(activeRecords.value.map((item) => item.status))])
-const selectedWorkflowActions = computed(() =>
-  currentRecord.value && isEditableModule(activeModule.value) ? workflowActionsFor(currentRecord.value, activeModule.value) : [],
-)
+const selectedWorkflowActions = computed<AdminWorkflowAction[]>(() => {
+  if (!currentRecord.value || !isEditableModule(activeModule.value)) return []
+  const reportId = Number(currentRecord.value.payload.reportId || 0)
+  if (reportId) {
+    if (!can('moderation.act')) return []
+    return currentRecord.value.status === '下架'
+      ? [{ id: 'restore-report', label: '恢复帖子', nextStatus: '已上架', description: '恢复帖子公开展示并记录处置依据。', placeholder: '请写明恢复展示的复核依据。', tone: 'positive', requiresNote: true }]
+      : [
+          { id: 'hide-report', label: '隐藏内容', nextStatus: '下架', description: '确认举报并立即隐藏帖子。', placeholder: '请写明举报核验结果和隐藏原因。', tone: 'danger', requiresNote: true },
+          { id: 'dismiss-report', label: '驳回举报', nextStatus: '已上架', description: '认定举报不成立，帖子保持公开展示。', placeholder: '请写明举报不成立的核验依据。', tone: 'warning', requiresNote: true },
+        ]
+  }
+  if (activeModule.value === 'users') return can('users.ban') ? workflowActionsFor(currentRecord.value, activeModule.value) : []
+  return can('content.publish') ? workflowActionsFor(currentRecord.value, activeModule.value) : []
+})
 const selectedWorkflowAction = computed(() => selectedWorkflowActions.value.find((item) => item.id === pendingWorkflowActionId.value) || null)
 const selectedWorkflowSteps = computed(() =>
   currentRecord.value && isEditableModule(activeModule.value) ? workflowStepsFor(activeModule.value, currentRecord.value.status) : [],
 )
 const recentWorkflowTrail = computed(() => (currentRecord.value ? workflowTrail(currentRecord.value).slice(-4).reverse() : []))
+const currentReport = computed(() => {
+  const payload = currentRecord.value?.payload || {}
+  const reason = typeof payload.reportReason === 'string' ? payload.reportReason : ''
+  const detail = typeof payload.reportDetail === 'string' ? payload.reportDetail : ''
+  const reporterName = typeof payload.reporterName === 'string' ? payload.reporterName : ''
+  const reportCount = Number(payload.reportCount || 0)
+  const reportedAt = typeof payload.reportedAt === 'string' ? payload.reportedAt : ''
+  if (!reason && !detail && !reportCount) return null
+  return {
+    reason: reason || '未填写原因',
+    detail,
+    reporterName: reporterName || '匿名用户',
+    reportCount: reportCount || 1,
+    reportedAt: reportedAt ? formatDate(reportedAt) : '未知时间',
+  }
+})
 const typeOptionsForDraft = computed(() =>
   draftRecord.value && isEditableModule(activeModule.value) ? optionsFor('type', activeModule.value, draftRecord.value.type) : [],
 )
@@ -166,9 +204,9 @@ const currentUserAccount = computed(() => ({
   passwordConfigured: Boolean(currentRecord.value?.payload.passwordConfigured),
 }))
 const navigationGroups = computed(() => [
-  { label: '工作台', modules: state.modules.filter((item) => item.id === 'dashboard') },
-  { label: '内容运营', modules: state.modules.filter((item) => !['dashboard', 'users', 'system'].includes(item.id)) },
-  { label: '账号与系统', modules: state.modules.filter((item) => ['users', 'system'].includes(item.id)) },
+  { label: '工作台', modules: state.modules.filter((item) => item.id === 'dashboard' && can('dashboard.read')) },
+  { label: '内容运营', modules: state.modules.filter((item) => !['dashboard', 'users', 'system'].includes(item.id) && can('content.read')) },
+  { label: '账号与系统', modules: state.modules.filter((item) => (item.id === 'users' && can('users.read')) || (item.id === 'system' && can('system.email.read'))) },
 ])
 const moduleIcons = {
   dashboard: LayoutDashboard,
@@ -185,10 +223,18 @@ const moduleIcons = {
 watch([activeModule, selectedId], syncDraftFromSelected, { immediate: true })
 
 onMounted(async () => {
+  if (adminSession.value.authenticated && !adminSession.value.permissions?.length) {
+    clearExpiredAdminSession()
+    return
+  }
   if (!isLoggedIn.value) return
   try {
-    smtpConfig.value = await fetchAdminEmailConfig(settings.value.apiBase, settings.value.adminToken)
-  } catch {
+    if (can('system.email.read')) smtpConfig.value = await fetchAdminEmailConfig(settings.value.apiBase, '')
+  } catch (error) {
+    if (isAdminUnauthorizedError(error)) {
+      clearExpiredAdminSession()
+      return
+    }
     smtpConfig.value = null
   }
   await loadRemoteContent()
@@ -229,6 +275,7 @@ function openModule(moduleId: ModuleId, recordId = '') {
 
 function openDrawer(recordId: string) {
   selectedId.value = recordId
+  workflowSuccess.value = ''
 }
 
 function closeDrawer() {
@@ -237,6 +284,7 @@ function closeDrawer() {
 }
 
 async function handleLogin() {
+  if (loginPending.value) return
   const apiBase = loginForm.value.apiBase.replace(/\/$/, '')
   const email = loginForm.value.email.trim().toLowerCase()
   const password = loginForm.value.password
@@ -248,13 +296,14 @@ async function handleLogin() {
     loginError.value = '请输入后台登录密码。'
     return
   }
-  updateSettings({ apiBase, adminEmail: email, adminToken: '' })
+  updateSettings({ apiBase, adminEmail: email })
   loginError.value = ''
+  loginPending.value = true
   try {
-    const loginData = await adminLogin(apiBase, email, password)
-    updateSettings({ apiBase, adminEmail: email, adminToken: loginData.token })
-    smtpConfig.value = await fetchAdminEmailConfig(apiBase, loginData.token)
-    adminSession.value = { authenticated: true, mode: 'online', email, signedAt: new Date().toISOString() }
+    const login = await adminLogin(apiBase, email, password)
+    updateSettings({ apiBase, adminEmail: email })
+    adminSession.value = { authenticated: true, mode: 'online', email, role: login.role, permissions: login.permissions, signedAt: new Date().toISOString() }
+    if (can('system.email.read')) smtpConfig.value = await fetchAdminEmailConfig(apiBase, '')
     saveAdminSession(adminSession.value)
     apiConnected.value = true
     lastSyncMessage.value = '登录成功，已连接后端'
@@ -264,12 +313,18 @@ async function handleLogin() {
     loginError.value = `登录失败：${toErrorMessage(error)}`
     adminSession.value = { authenticated: false }
     clearAdminSession()
+  } finally {
+    loginPending.value = false
   }
 }
 
-function logoutAdmin() {
+async function logoutAdmin() {
+  try {
+    await adminLogout(loginForm.value.apiBase)
+  } catch {
+    // Local logout should still remove the admin shell if the server session is already gone.
+  }
   clearAdminSession()
-  updateSettings({ adminToken: '' })
   adminSession.value = { authenticated: false }
   Object.assign(state, createInitialAdminState())
   apiConnected.value = false
@@ -280,16 +335,37 @@ function logoutAdmin() {
   closeDrawer()
 }
 
+function clearExpiredAdminSession() {
+  clearAdminSession()
+  adminSession.value = { authenticated: false }
+  Object.assign(state, createInitialAdminState())
+  apiConnected.value = false
+  lastSyncMessage.value = '后台会话已失效，请重新登录'
+  pendingWorkflowActionId.value = ''
+  workflowNote.value = ''
+  workflowError.value = ''
+  closeDrawer()
+}
+
+function handleAdminMutationError(error: unknown, fallbackPrefix: string) {
+  if (isAdminUnauthorizedError(error)) {
+    clearExpiredAdminSession()
+    return '后台会话已失效，请重新登录'
+  }
+  return `${fallbackPrefix}：${toErrorMessage(error)}`
+}
+
 async function loadRemoteContent() {
-  if (!settings.value.adminToken) {
+  if (!adminSession.value.authenticated) {
     apiConnected.value = false
     lastSyncMessage.value = '未登录后台，无法同步内容库'
     return
   }
   try {
-    const [records, logs] = await Promise.all([
-      fetchAdminContent(settings.value.apiBase, settings.value.adminToken),
-      fetchAdminAuditLogs(settings.value.apiBase, settings.value.adminToken),
+    const [records, logs, reports] = await Promise.all([
+      can('content.read') ? fetchAdminContent(settings.value.apiBase, '') : Promise.resolve([]),
+      can('audit.read') ? fetchAdminAuditLogs(settings.value.apiBase, '') : Promise.resolve([]),
+      can('moderation.read') ? fetchAdminReports(settings.value.apiBase) : Promise.resolve([]),
     ])
     for (const moduleId of editableModuleIds) {
       state.records[moduleId] = []
@@ -298,11 +374,43 @@ async function loadRemoteContent() {
       if (!isEditableModule(record.module)) continue
       state.records[record.module].push(fromApiRecord(record))
     }
+    for (const report of reports) {
+      if (report.targetType !== 'post') continue
+      state.records.posts.unshift({
+        id: `report-${report.id}`,
+        title: report.targetTitle || `帖子 #${report.targetId}`,
+        type: '内容举报',
+        status: '已上架',
+        scope: '全站',
+        owner: report.targetAuthor || '未知作者',
+        tags: ['举报待处理'],
+        summary: report.detail || report.reason,
+        url: `/posts/${report.targetId}`,
+        priority: '高',
+        sortOrder: 0,
+        payload: {
+          reportId: report.id,
+          postId: report.targetId,
+          reportReason: report.reason,
+          reportDetail: report.detail,
+          reporterName: report.reporterName,
+          reportCount: 1,
+          reportedAt: report.createdAt,
+          workflow: [],
+        },
+        updatedAt: formatDate(report.updatedAt),
+        createdRemote: true,
+      })
+    }
     state.audit = logs.length ? logs.map((item) => `${formatDate(item.createdAt)} · ${item.detail}`) : []
     apiConnected.value = true
     lastSyncMessage.value = '已连接后端内容库'
     syncDraftFromSelected()
   } catch (error) {
+    if (isAdminUnauthorizedError(error)) {
+      clearExpiredAdminSession()
+      return
+    }
     apiConnected.value = false
     lastSyncMessage.value = `后端连接失败：${toErrorMessage(error)}`
   }
@@ -315,7 +423,7 @@ async function createRecordNow() {
   selectedId.value = item.id
   state.audit.push(`新建 ${currentModule.value.label} 条目：${item.title}`)
   try {
-    const saved = await saveAdminContent(settings.value.apiBase, settings.value.adminToken, activeModule.value, item)
+    const saved = await saveAdminContent(settings.value.apiBase, '', activeModule.value, item)
     Object.assign(item, fromApiRecord(saved))
     lastSyncMessage.value = '已保存到后端'
     apiConnected.value = true
@@ -324,7 +432,7 @@ async function createRecordNow() {
     state.records[activeModule.value] = state.records[activeModule.value].filter((row) => row.id !== item.id)
     selectedId.value = ''
     apiConnected.value = false
-    lastSyncMessage.value = `后端保存失败：${toErrorMessage(error)}`
+    lastSyncMessage.value = handleAdminMutationError(error, '后端保存失败')
   }
 }
 
@@ -336,7 +444,7 @@ async function saveCurrentRecord() {
   Object.assign(currentRecord.value, nextRecord)
   state.audit.push(`保存 ${nextRecord.title}，状态：${nextRecord.status}`)
   try {
-    const saved = await saveAdminContent(settings.value.apiBase, settings.value.adminToken, activeModule.value, currentRecord.value)
+    const saved = await saveAdminContent(settings.value.apiBase, '', activeModule.value, currentRecord.value)
     Object.assign(currentRecord.value, fromApiRecord(saved))
     lastSyncMessage.value = '已保存到后端'
     apiConnected.value = true
@@ -344,7 +452,7 @@ async function saveCurrentRecord() {
   } catch (error) {
     Object.assign(currentRecord.value, snapshot)
     apiConnected.value = false
-    lastSyncMessage.value = `后端保存失败：${toErrorMessage(error)}`
+    lastSyncMessage.value = handleAdminMutationError(error, '后端保存失败')
     syncDraftFromSelected()
   }
 }
@@ -352,13 +460,13 @@ async function saveCurrentRecord() {
 async function deleteCurrentRecord() {
   if (!currentRecord.value || !isEditableModule(activeModule.value)) return
   if (!window.confirm(`确认删除「${currentRecord.value.title}」？`)) return
-  if (!settings.value.adminToken || !currentRecord.value.createdRemote) {
+  if (!adminSession.value.authenticated || !currentRecord.value.createdRemote) {
     apiConnected.value = false
     lastSyncMessage.value = '未连接后端，不能删除内容'
     return
   }
   try {
-    await deleteAdminContent(settings.value.apiBase, settings.value.adminToken, currentRecord.value.id)
+    await deleteAdminContent(settings.value.apiBase, '', currentRecord.value.id)
     state.records[activeModule.value] = state.records[activeModule.value].filter((row) => row.id !== currentRecord.value?.id)
     state.audit.push(`删除 ${currentRecord.value.title}`)
     lastSyncMessage.value = '已从后端删除'
@@ -366,17 +474,20 @@ async function deleteCurrentRecord() {
     closeDrawer()
   } catch (error) {
     apiConnected.value = false
-    lastSyncMessage.value = `后端删除失败：${toErrorMessage(error)}`
+    lastSyncMessage.value = handleAdminMutationError(error, '后端删除失败')
   }
 }
 
 function openWorkflowConfirm(actionId: string) {
+  if (workflowSaving.value) return
   pendingWorkflowActionId.value = actionId
   workflowNote.value = ''
   workflowError.value = ''
+  workflowSuccess.value = ''
 }
 
 function closeWorkflowConfirm() {
+  if (workflowSaving.value) return
   pendingWorkflowActionId.value = ''
   workflowNote.value = ''
   workflowError.value = ''
@@ -386,10 +497,16 @@ async function confirmWorkflowAction() {
   const item = currentRecord.value
   const action = selectedWorkflowAction.value
   if (!item || !action) return
+  if (workflowSaving.value) return
   if (action.requiresNote && !workflowNote.value.trim()) {
     workflowError.value = '该动作必须填写处理意见，方便后续复盘和追责。'
     return
   }
+  const startedAt = Date.now()
+  workflowSaving.value = true
+  workflowError.value = ''
+  workflowSuccess.value = ''
+  await new Promise((resolve) => window.requestAnimationFrame(resolve))
   const snapshot = cloneRecord(item)
   const previousStatus = item.status
   item.status = action.nextStatus
@@ -411,17 +528,40 @@ async function confirmWorkflowAction() {
   }
   state.audit.push(`${action.label}「${item.title}」：${workflowNote.value.trim() || action.description}`)
   try {
-    const saved = await saveAdminWorkflow(settings.value.apiBase, settings.value.adminToken, item, action, workflowNote.value.trim())
-    Object.assign(item, fromApiRecord(saved))
-    lastSyncMessage.value = '审核流程已写入后端'
+    const reportId = Number(item.payload.reportId || 0)
+    const userId = Number(item.payload.userId || 0)
+    if (reportId) {
+      const moderationAction = action.id === 'hide-report' ? 'hide' : action.id === 'restore-report' ? 'restore' : 'dismiss'
+      await moderateAdminReport(settings.value.apiBase, reportId, moderationAction, workflowNote.value.trim())
+    } else if (activeModule.value === 'users' && ['freeze-user', 'restore-user'].includes(action.id)) {
+      if (!userId) throw new Error('用户记录缺少有效账号 ID，未执行封禁操作')
+      await moderateAdminUser(settings.value.apiBase, userId, action.id === 'freeze-user' ? 'ban' : 'restore', workflowNote.value.trim())
+    } else {
+      const saved = await saveAdminWorkflow(settings.value.apiBase, '', item, action, workflowNote.value.trim())
+      Object.assign(item, fromApiRecord(saved))
+    }
+    const successMessage = `${action.label}已完成`
+    lastSyncMessage.value = successMessage
+    workflowSuccess.value = successMessage
     apiConnected.value = true
+    if (action.id === 'dismiss-report') {
+      state.records.posts = state.records.posts.filter((record) => record.id !== item.id)
+      closeDrawer()
+    }
     closeWorkflowConfirm()
     syncDraftFromSelected()
   } catch (error) {
     Object.assign(item, snapshot)
     apiConnected.value = false
-    lastSyncMessage.value = `流程保存失败：${toErrorMessage(error)}`
+    workflowError.value = handleAdminMutationError(error, '流程保存失败')
+    lastSyncMessage.value = workflowError.value
     syncDraftFromSelected()
+  } finally {
+    const remainingLoadingMs = 250 - (Date.now() - startedAt)
+    if (remainingLoadingMs > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, remainingLoadingMs))
+    }
+    workflowSaving.value = false
   }
 }
 
@@ -431,7 +571,7 @@ async function handleMediaUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files || [])
   if (!files.length) return
-  if (!settings.value.adminToken) {
+  if (!adminSession.value.authenticated) {
     apiConnected.value = false
     lastSyncMessage.value = '未登录后台，图片上传失败'
     input.value = ''
@@ -439,14 +579,14 @@ async function handleMediaUpload(event: Event) {
   }
   const snapshot = cloneRecord(item)
   try {
-    const uploads = await Promise.all(files.slice(0, Math.max(0, 9 - mediaUrls(item).length)).map((file) => uploadAdminImage(settings.value.apiBase, settings.value.adminToken, file)))
+    const uploads = await Promise.all(files.slice(0, Math.max(0, 9 - mediaUrls(item).length)).map((file) => uploadAdminImage(settings.value.apiBase, '', file)))
     const uploadedUrls = uploads.map((entry) => entry.url)
     item.payload = {
       ...item.payload,
       imageUrls: [...mediaUrls(item), ...uploadedUrls].slice(0, 9),
     }
     item.updatedAt = formatDate(new Date().toISOString())
-    const saved = await saveAdminContent(settings.value.apiBase, settings.value.adminToken, activeModule.value, item)
+    const saved = await saveAdminContent(settings.value.apiBase, '', activeModule.value, item)
     Object.assign(item, fromApiRecord(saved))
     state.audit.push(`上传 ${uploadedUrls.length} 张图片到「${item.title}」`)
     lastSyncMessage.value = `已上传并保存 ${uploadedUrls.length} 张图片`
@@ -455,7 +595,7 @@ async function handleMediaUpload(event: Event) {
   } catch (error) {
     Object.assign(item, snapshot)
     apiConnected.value = false
-    lastSyncMessage.value = `图片上传失败：${toErrorMessage(error)}`
+    lastSyncMessage.value = handleAdminMutationError(error, '图片上传失败')
     syncDraftFromSelected()
   } finally {
     input.value = ''
@@ -472,7 +612,7 @@ async function removeMediaImageAt(index: number) {
   }
   item.updatedAt = formatDate(new Date().toISOString())
   try {
-    const saved = await saveAdminContent(settings.value.apiBase, settings.value.adminToken, activeModule.value, item)
+    const saved = await saveAdminContent(settings.value.apiBase, '', activeModule.value, item)
     Object.assign(item, fromApiRecord(saved))
     state.audit.push(`移除「${item.title}」的一张图片`)
     lastSyncMessage.value = '已移除图片并保存'
@@ -496,7 +636,7 @@ async function resetCurrentUserPassword() {
   try {
     await resetAdminUserPassword(
       settings.value.apiBase,
-      settings.value.adminToken,
+      '',
       currentUserAccount.value.userId,
       newUserPassword.value,
     )
@@ -511,7 +651,7 @@ async function resetCurrentUserPassword() {
 async function checkConnection() {
   updateSettings({ apiBase: settings.value.apiBase.replace(/\/$/, '') })
   try {
-    smtpConfig.value = await fetchAdminEmailConfig(settings.value.apiBase, settings.value.adminToken)
+    smtpConfig.value = await fetchAdminEmailConfig(settings.value.apiBase, '')
   } catch (error) {
     smtpConfig.value = {
       enabled: false,
@@ -538,7 +678,7 @@ async function checkConnection() {
 async function sendTestMailNow() {
   testEmailResult.value = '正在发送...'
   try {
-    const data = await sendAdminTestEmail(settings.value.apiBase, settings.value.adminToken, testEmail.value.trim())
+    const data = await sendAdminTestEmail(settings.value.apiBase, '', testEmail.value.trim())
     const quota = `本邮箱本小时剩余 ${data.hourlyRemaining} / ${data.hourlyLimit} 次`
     testEmailResult.value = data.debugCode
       ? `SMTP 未启用，本地调试验证码：${data.debugCode}（${quota}）`
@@ -594,25 +734,30 @@ function toErrorMessage(error: unknown) {
         </div>
       </div>
 
-      <label>
-        账号邮箱
-        <input v-model="loginForm.email" type="email" autocomplete="username" placeholder="admin@example.com" />
-      </label>
-      <label>
-        登录密码
-        <input v-model="loginForm.password" type="password" autocomplete="current-password" placeholder="请输入后台登录密码" @keydown.enter="handleLogin" />
-      </label>
-      <details class="login-advanced">
-        <summary>连接设置</summary>
+      <form @submit.prevent="handleLogin">
         <label>
-          API 地址
-          <input v-model="loginForm.apiBase" />
+          账号邮箱
+          <input v-model="loginForm.email" type="email" autocomplete="username" placeholder="admin@example.com" />
         </label>
-      </details>
-      <p v-if="loginError" class="login-error">{{ loginError }}</p>
-      <div class="login-actions">
-        <button class="primary" type="button" @click="handleLogin">登录后台</button>
-      </div>
+        <label>
+          登录密码
+          <input v-model="loginForm.password" type="password" autocomplete="current-password" placeholder="请输入后台登录密码" />
+        </label>
+        <details class="login-advanced">
+          <summary>连接设置</summary>
+          <label>
+            API 地址
+            <input v-model="loginForm.apiBase" />
+          </label>
+        </details>
+        <p v-if="lastSyncMessage && lastSyncMessage !== '请登录并同步后端内容库'" class="login-status" role="status">{{ lastSyncMessage }}</p>
+        <p v-if="loginError" class="login-error">{{ loginError }}</p>
+        <div class="login-actions">
+          <button class="primary" type="submit" :disabled="loginPending" :aria-busy="loginPending">
+            {{ loginPending ? '登录中...' : '登录后台' }}
+          </button>
+        </div>
+      </form>
     </section>
   </main>
 
@@ -739,7 +884,7 @@ function toErrorMessage(error: unknown) {
             </div>
           </article>
 
-          <article class="panel">
+          <article v-if="can('audit.read')" class="panel">
             <div class="panel-head">
               <h2>审计记录</h2>
               <span>最近动作</span>
@@ -788,7 +933,7 @@ function toErrorMessage(error: unknown) {
           </dl>
         </article>
 
-        <article class="panel wide">
+        <article v-if="can('system.email.test')" class="panel wide">
           <div class="panel-head">
             <h2>发送测试验证码</h2>
             <span>管理端测试</span>
@@ -823,7 +968,7 @@ function toErrorMessage(error: unknown) {
               <option v-for="status in statusOptionsForActiveModule" :key="status" :value="status">{{ status }}</option>
             </select>
           </label>
-          <button v-if="activeModule !== 'users'" class="primary" type="button" @click="createRecordNow"><Plus :size="16" /> 新建条目</button>
+          <button v-if="activeModule !== 'users' && can('content.write')" class="primary" type="button" @click="createRecordNow"><Plus :size="16" /> 新建条目</button>
         </div>
 
         <div class="table-wrap">
@@ -883,6 +1028,21 @@ function toErrorMessage(error: unknown) {
           <strong>内容审核流程</strong>
           <span class="status" :class="statusClass(currentRecord?.status || '')">{{ currentRecord?.status }}</span>
         </div>
+        <div v-if="currentReport" class="report-card" aria-label="举报详情">
+          <div>
+            <small>举报原因</small>
+            <strong>{{ currentReport.reason }}</strong>
+            <p v-if="currentReport.detail">{{ currentReport.detail }}</p>
+          </div>
+          <dl>
+            <dt>举报人</dt>
+            <dd>{{ currentReport.reporterName }}</dd>
+            <dt>次数</dt>
+            <dd>{{ currentReport.reportCount }}</dd>
+            <dt>时间</dt>
+            <dd>{{ currentReport.reportedAt }}</dd>
+          </dl>
+        </div>
         <div class="workflow-steps">
           <span v-for="step in selectedWorkflowSteps" :key="step.label" :class="{ active: step.active }">{{ step.label }}</span>
         </div>
@@ -892,12 +1052,14 @@ function toErrorMessage(error: unknown) {
             :key="action.id"
             :class="action.tone"
             type="button"
+            :disabled="workflowSaving"
             @click="openWorkflowConfirm(action.id)"
           >
             {{ action.label }}
           </button>
           <p v-if="!selectedWorkflowActions.length">当前状态暂无待处理动作。</p>
         </div>
+        <p v-if="workflowSuccess" class="workflow-success" role="status">{{ workflowSuccess }}</p>
         <div class="workflow-history">
           <strong>流程记录</strong>
           <ol v-if="recentWorkflowTrail.length">
@@ -913,7 +1075,7 @@ function toErrorMessage(error: unknown) {
       <section v-if="activeModule === 'users'" class="permission-card">
         <div class="permission-head">
           <strong>{{ draftRecord.title }}</strong>
-          <span class="status ok">真实数据库账号</span>
+          <span class="status" :class="statusClass(currentRecord?.status || '')">{{ currentRecord?.status }}</span>
         </div>
         <dl class="field-list">
           <dt>邮箱</dt><dd>{{ currentUserAccount.email }}</dd>
@@ -923,11 +1085,25 @@ function toErrorMessage(error: unknown) {
           <dt>已发布帖子</dt><dd>{{ currentUserAccount.postCount }}</dd>
           <dt>密码状态</dt><dd>{{ currentUserAccount.passwordConfigured ? '已设置' : '未设置' }}</dd>
         </dl>
-        <label>
+        <div v-if="can('users.ban')" class="workflow-actions" aria-label="账号处置">
+          <button
+            v-for="action in selectedWorkflowActions"
+            :key="action.id"
+            :class="action.tone"
+            type="button"
+            :disabled="workflowSaving"
+            @click="openWorkflowConfirm(action.id)"
+          >
+            {{ action.label }}
+          </button>
+          <p v-if="!selectedWorkflowActions.length">当前账号状态暂无待处理动作。</p>
+        </div>
+        <p v-if="workflowSuccess" class="workflow-success" role="status">{{ workflowSuccess }}</p>
+        <label v-if="can('users.password_reset')">
           设置新密码
           <input v-model="newUserPassword" type="password" minlength="8" autocomplete="new-password" placeholder="至少 8 位" />
         </label>
-        <button class="primary" type="button" @click="resetCurrentUserPassword">更新密码</button>
+        <button v-if="can('users.password_reset')" class="primary" type="button" @click="resetCurrentUserPassword">更新密码</button>
         <p class="result-text">{{ userPasswordResult }}</p>
       </section>
 
@@ -972,7 +1148,7 @@ function toErrorMessage(error: unknown) {
           </select>
         </label>
 
-        <section class="media-card">
+        <section v-if="can('media.upload')" class="media-card">
           <div class="media-head">
             <strong>本地图片</strong>
             <span>{{ currentImages.length }}/9</span>
@@ -994,8 +1170,8 @@ function toErrorMessage(error: unknown) {
         <label>摘要<textarea v-model="draftRecord.summary" /></label>
         <label>来源链接<input v-model="draftRecord.url" /></label>
         <div class="drawer-actions">
-          <button class="primary" type="button" @click="saveCurrentRecord">保存基础信息</button>
-          <button class="danger" type="button" @click="deleteCurrentRecord">删除</button>
+          <button v-if="can('content.write')" class="primary" type="button" @click="saveCurrentRecord">保存基础信息</button>
+          <button v-if="can('content.delete')" class="danger" type="button" @click="deleteCurrentRecord">删除</button>
         </div>
       </template>
     </aside>
@@ -1021,10 +1197,13 @@ function toErrorMessage(error: unknown) {
           <span>{{ selectedWorkflowAction.requiresNote ? '必填' : '选填' }}</span>
           <textarea v-model="workflowNote" :placeholder="selectedWorkflowAction.placeholder" />
         </label>
-        <p v-if="workflowError" class="confirm-error">{{ workflowError }}</p>
+        <p v-if="workflowSaving" class="confirm-loading" role="status">正在处理审核动作...</p>
+        <p v-if="workflowError" class="confirm-error" role="alert">{{ workflowError }}</p>
         <div class="modal-actions">
-          <button type="button" @click="closeWorkflowConfirm">取消</button>
-          <button class="primary" type="button" @click="confirmWorkflowAction">确认执行</button>
+          <button type="button" :disabled="workflowSaving" @click="closeWorkflowConfirm">取消</button>
+          <button class="primary" type="button" :disabled="workflowSaving" :aria-busy="workflowSaving" @click="confirmWorkflowAction">
+            {{ workflowSaving ? '处理中...' : '确认执行' }}
+          </button>
         </div>
       </section>
     </div>
@@ -1832,6 +2011,54 @@ td small {
   color: #0f766e;
 }
 
+.report-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff7f7;
+}
+
+.report-card small {
+  color: #be123c;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.report-card strong {
+  display: block;
+  margin-top: 4px;
+  color: #7f1d1d;
+}
+
+.report-card p {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.report-card dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 8px;
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+}
+
+.report-card dt {
+  font-weight: 800;
+}
+
+.report-card dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 900;
+}
+
 .workflow-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1871,6 +2098,17 @@ td small {
   border-color: #bfdbfe;
   background: #eff6ff;
   color: #1d4ed8;
+}
+
+.workflow-success {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(15, 159, 122, 0.32);
+  border-radius: 7px;
+  background: #ecfdf5;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .workflow-actions p,
@@ -2093,6 +2331,17 @@ td small {
   font-weight: 850;
 }
 
+.confirm-loading {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 850;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -2126,6 +2375,19 @@ td small {
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.28);
+}
+
+.login-panel form {
+  display: grid;
+  gap: 16px;
+}
+
+.login-panel form label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .login-brand {
@@ -2175,6 +2437,17 @@ td small {
   border-radius: 7px;
   background: #fff1f2;
   color: #be123c;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.login-status {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-size: 13px;
   font-weight: 850;
 }

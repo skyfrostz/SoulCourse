@@ -19,6 +19,7 @@ const route = useRoute()
 const openPanel = ref<'notifications' | 'profile' | null>(null)
 const searchOpen = ref(false)
 const searchRoot = ref<HTMLElement | null>(null)
+const signingOut = ref(false)
 let searchCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 let panelCloseTimer: ReturnType<typeof window.setTimeout> | undefined
 const popoverCloseDelay = 450
@@ -99,6 +100,17 @@ async function submitSearch() {
 function syncClearedSearch(event: Event) {
   const value = (event.target as HTMLInputElement).value
   if (!value) void runSearch('')
+}
+
+async function signOut() {
+  if (signingOut.value) return
+  signingOut.value = true
+  try {
+    await forumStore.logout()
+    openPanel.value = null
+  } finally {
+    signingOut.value = false
+  }
 }
 
 onMounted(() => {
@@ -224,6 +236,7 @@ onBeforeUnmount(() => {
               <strong>通知</strong>
               <RouterLink to="/notifications" @click="openPanel = null">通知中心</RouterLink>
             </header>
+            <p v-if="forumStore.notificationReadError" class="notification-sync-error">{{ forumStore.notificationReadError }}</p>
             <RouterLink
               v-for="item in notificationItems.slice(0, 4)"
               :key="item.id"
@@ -301,8 +314,8 @@ onBeforeUnmount(() => {
                 {{ post.title }}
               </RouterLink>
             </section>
-            <button type="button" @click="forumStore.logout(); openPanel = null">
-              <LogOut :size="16" /> 退出登录
+            <button type="button" :disabled="signingOut" :aria-busy="signingOut" @click="signOut">
+              <LogOut :size="16" /> {{ signingOut ? '正在退出...' : '退出登录' }}
             </button>
           </div>
         </Transition>

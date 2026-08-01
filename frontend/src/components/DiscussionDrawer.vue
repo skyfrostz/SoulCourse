@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { Bookmark, MessageSquare, Send, Share2, ThumbsUp, X } from '@lucide/vue'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { toggleFollowAuthor, togglePostFavorite, togglePostLike } from '../lib/api'
 import { categoryLabels, roleLabels, subjectLabels } from '../lib/labels'
 import { buildAppUrl } from '../lib/runtime'
@@ -16,8 +16,10 @@ const props = defineProps<{
 const forumStore = useForumStore()
 const queryClient = useQueryClient()
 const draft = ref('')
+const commentError = ref('')
 const commentInput = ref<HTMLInputElement | null>(null)
 const commentSection = ref<HTMLElement | null>(null)
+const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
 const livePost = ref<Post>(props.post)
 const { comments, submitComment, isSubmitting } = usePostComments(() => props.post.id)
 
@@ -26,6 +28,7 @@ watch(
   (post) => {
     livePost.value = forumStore.hydratePost(post)
     draft.value = ''
+    commentError.value = ''
   },
   { immediate: true },
 )
@@ -50,14 +53,8 @@ const followMutation = useMutation({
   mutationFn: () => toggleFollowAuthor(props.post.authorName),
   onSuccess: (result) => {
     livePost.value = { ...livePost.value, viewerFollowing: result.active }
-    forumStore.setUserFollow({
-      name: props.post.authorName,
-      role: props.post.authorRole,
-      province: props.post.province,
-      grade: props.post.grade,
-      followedAt: new Date().toISOString(),
-    }, result.active)
     queryClient.invalidateQueries({ queryKey: ['posts'] })
+    queryClient.invalidateQueries({ queryKey: ['profile'] })
   },
 })
 
@@ -68,13 +65,37 @@ function closeDrawer() {
 }
 
 async function submit() {
+  if (isOffline.value) {
+    commentError.value = '当前网络不可用，内容已保留，请恢复网络后再发表评论。'
+    return
+  }
   if (!forumStore.requireAuth()) return
   const content = draft.value.trim()
   if (!content) return
-  await submitComment(content)
-  livePost.value = { ...livePost.value, commentsCount: commentCount.value }
-  draft.value = ''
+  if (isSubmitting.value) return
+  commentError.value = ''
+  try {
+    await submitComment(content)
+    livePost.value = { ...livePost.value, commentsCount: commentCount.value }
+    draft.value = ''
+  } catch {
+    commentError.value = '评论发布失败，请检查网络或稍后重试。'
+  }
 }
+
+function updateOnlineState() {
+  isOffline.value = typeof navigator !== 'undefined' ? !navigator.onLine : false
+}
+
+onMounted(() => {
+  window.addEventListener('online', updateOnlineState)
+  window.addEventListener('offline', updateOnlineState)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('online', updateOnlineState)
+  window.removeEventListener('offline', updateOnlineState)
+})
 
 function like() {
   if (!forumStore.requireAuth()) return
@@ -149,8 +170,8 @@ function focusComments() {
           </RouterLink>
           <small>{{ livePost.grade }} · {{ roleLabels[livePost.authorRole] }}</small>
         </span>
-        <button class="follow-button" :class="{ active: livePost.viewerFollowing }" @click="follow">
-          {{ livePost.viewerFollowing ? '已关注' : '+ 关注' }}
+        <button class="follow-button" :class="{ active: livePost.viewerFollowing }" :disabled="followMutation.isPending.value" @click="follow">
+          {{ followMutation.isPending.value ? '处理中...' : livePost.viewerFollowing ? '已关注' : '+ 关注' }}
         </button>
       </div>
 
@@ -163,10 +184,10 @@ function focusComments() {
       <div class="drawer-actions">
         <button @click="sharePost"><Share2 :size="17" /> 分享</button>
         <button @click="focusComments"><MessageSquare :size="17" /> {{ commentCount }}</button>
-        <button :class="{ liked: livePost.viewerLiked }" @click="like">
+        <button :class="{ liked: livePost.viewerLiked }" :disabled="likeMutation.isPending.value" @click="like">
           <ThumbsUp :size="17" /> {{ livePost.likesCount }}
         </button>
-        <button :class="{ liked: livePost.viewerFavorited }" @click="favorite">
+        <button :class="{ liked: livePost.viewerFavorited }" :disabled="favoriteMutation.isPending.value" @click="favorite">
           <Bookmark :size="17" /> {{ livePost.viewerFavorited ? '已收藏' : '收藏' }}
         </button>
       </div>
@@ -180,11 +201,12 @@ function focusComments() {
 
       <form class="comment-form" @submit.prevent="submit">
         <input ref="commentInput" v-model="draft" type="text" :placeholder="forumStore.isAuthed ? '发表评论' : '登录后发表评论'" />
-        <button :disabled="forumStore.isAuthed && (!draft.trim() || isSubmitting)" type="submit">
+        <button :disabled="isOffline || (forumStore.isAuthed && (!draft.trim() || isSubmitting))" :aria-busy="isSubmitting" type="submit">
           <Send :size="16" />
-          {{ forumStore.isAuthed ? '发表评论' : '登录评论' }}
+          {{ forumStore.isAuthed ? isSubmitting ? '发布中...' : '发表评论' : '登录评论' }}
         </button>
       </form>
+      <p v-if="commentError" class="form-error">{{ commentError }}</p>
 
       <div class="comment-list">
         <article v-for="comment in comments" :key="comment.id" class="comment-item">

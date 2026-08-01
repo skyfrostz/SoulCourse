@@ -1,0 +1,65 @@
+
+         /\      Grafana   /‾‾/
+    /\  /  \     |\  __   /  /
+   /  \/    \    | |/ /  /   ‾‾\
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/
+
+
+     execution: local
+        script: scripts/k6/public-beta-readiness.js
+        output: -
+
+     scenarios: (100.00%) 2 scenarios, 2 max VUs, 10m30s max duration (incl. graceful stop):
+              * read_smoke: 1 iterations shared among 1 VUs (maxDuration: 10m0s, exec: readJourney, gracefulStop: 30s)
+              * write_smoke: 1 iterations shared among 1 VUs (maxDuration: 10m0s, exec: writeJourney, gracefulStop: 30s)
+
+
+
+  █ THRESHOLDS
+
+    http_req_failed
+    ✓ 'rate<0.01' rate=0.00%
+
+    scf_errors
+    ✓ 'rate<0.01' rate=0.00%
+
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 8       83.460879/s
+    checks_succeeded...: 100.00% 8 out of 8
+    checks_failed......: 0.00%   0 out of 8
+
+    ✓ provinces returns 2xx
+    ✓ provinces has bounded body
+    ✓ email code returns debug code in isolated write smoke
+    ✓ register returns user
+    ✓ create post returns id
+    ✓ create comment returns id
+    ✓ like returns active true
+    ✓ favorite returns active true
+
+    CUSTOM
+    scf_errors.....................: 0.00%  0 out of 7
+
+    HTTP
+    http_req_duration..............: avg=13.87ms min=2.6ms  med=3.79ms  max=72.56ms p(90)=33.98ms p(95)=53.27ms
+      { expected_response:true }...: avg=13.87ms min=2.6ms  med=3.79ms  max=72.56ms p(90)=33.98ms p(95)=53.27ms
+    http_req_failed................: 0.00%  0 out of 7
+    http_reqs......................: 7      73.028269/s
+
+    EXECUTION
+    iteration_duration.............: avg=50.65ms min=5.49ms med=50.65ms max=95.81ms p(90)=86.78ms p(95)=91.29ms
+    iterations.....................: 2      20.86522/s
+
+    NETWORK
+    data_received..................: 8.2 kB 85 kB/s
+    data_sent......................: 2.3 kB 24 kB/s
+
+
+
+
+running (00m00.1s), 0/2 VUs, 2 complete and 0 interrupted iterations
+read_smoke  ✓ [ 100% ] 1 VUs  00m00.0s/10m0s  1/1 shared iters
+write_smoke ✓ [ 100% ] 1 VUs  00m00.1s/10m0s  1/1 shared iters

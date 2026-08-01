@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"subject-choice-forum/backend/internal/config"
+	"subject-choice-forum/backend/internal/http/middleware"
 	"subject-choice-forum/backend/internal/storage"
 )
 
@@ -37,7 +38,7 @@ func TestAdminPostSyncPreservesImmutableOwnerAndPublicationState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := NewAdminHandler(cfg, nil, db)
+	handler := NewAdminHandler(cfg, nil, db, middleware.NewAdminSessionStore(0))
 	payload := json.RawMessage(fmt.Sprintf(`{
 		"createdByUserId":"%d",
 		"content":"通过后台导入但归属于真实账号的帖子。",

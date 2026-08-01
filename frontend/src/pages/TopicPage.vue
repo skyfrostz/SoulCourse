@@ -5,9 +5,11 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
 import { apiDataEnabled, fetchTopic } from '../lib/api'
+import { useOnlineState } from '../composables/useOnlineState'
 
 const route = useRoute()
 const router = useRouter()
+const { isOffline } = useOnlineState()
 const slug = computed(() => String(route.params.slug))
 const topicQuery = useQuery({
   queryKey: computed(() => ['topic-detail', slug.value]),
@@ -30,12 +32,16 @@ const topicDetail = computed(() => topicQuery.data.value)
       </div>
     </section>
 
-    <section v-else-if="!topicQuery.isLoading.value" class="empty-state detail-empty-state">
-      <h1>话题暂时无法加载</h1>
-      <p>请返回话题广场刷新，或稍后重试。</p>
+    <section v-else-if="topicQuery.isError.value || isOffline" class="empty-state detail-empty-state">
+      <h1>{{ isOffline ? '当前网络不可用' : '话题暂时无法加载' }}</h1>
+      <p>请检查网络后重试，本站不会用模拟讨论替代真实内容。</p>
+      <button class="primary-wide compact" type="button" @click="topicQuery.refetch()">重新加载</button>
     </section>
 
-    <section class="feed-panel topic-feed-panel">
+    <section v-if="topicQuery.isLoading.value" class="feed-panel topic-feed-panel" aria-label="正在加载讨论">
+      <div class="empty-state compact-empty"><p>正在加载相关讨论...</p></div>
+    </section>
+    <section v-else-if="topicDetail" class="feed-panel topic-feed-panel">
       <div class="feed-toolbar">
         <div class="feed-tabs">
           <button class="active">相关讨论</button>
@@ -43,6 +49,10 @@ const topicDetail = computed(() => topicQuery.data.value)
       </div>
       <div class="feed-grid">
         <PostCard v-for="post in topicDetail?.posts ?? []" :key="post.id" :post="post" />
+      </div>
+      <div v-if="!topicDetail.posts.length" class="empty-state compact-empty">
+        <h2>还没有相关讨论</h2>
+        <p>成为第一个分享选科经验的人。</p>
       </div>
     </section>
   </main>

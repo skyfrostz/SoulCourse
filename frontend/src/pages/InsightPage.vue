@@ -6,10 +6,12 @@ import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
 import { apiDataEnabled, fetchInsight, fetchPostCollection } from '../lib/api'
 import { useForumStore } from '../stores/forum'
+import { useOnlineState } from '../composables/useOnlineState'
 
 const route = useRoute()
 const router = useRouter()
 const forumStore = useForumStore()
+const { isOffline } = useOnlineState()
 const insightId = computed(() => Number(route.params.id))
 const insightQuery = useQuery({
   queryKey: computed(() => ['insight-detail', insightId.value]),
@@ -54,12 +56,17 @@ function combinationTag(combination: string) {
       </div>
     </article>
 
-    <section v-else-if="!insightQuery.isLoading.value" class="empty-state detail-empty-state">
-      <h1>趋势数据暂时无法加载</h1>
-      <p>请返回趋势中心刷新，或稍后重试。</p>
+    <section v-else-if="insightQuery.isError.value || isOffline" class="empty-state detail-empty-state">
+      <h1>{{ isOffline ? '当前网络不可用' : '趋势数据暂时无法加载' }}</h1>
+      <p>{{ isOffline ? '恢复网络后再重试，页面不会生成模拟趋势。' : '请返回趋势中心刷新，或稍后重试。' }}</p>
+      <button class="primary-wide compact" type="button" @click="insightQuery.refetch()">重新加载</button>
     </section>
 
-    <section class="feed-panel topic-feed-panel">
+    <section v-else-if="insightQuery.isLoading.value" class="empty-state detail-empty-state" aria-live="polite">
+      <p>正在加载趋势详情...</p>
+    </section>
+
+    <section v-if="insight" class="feed-panel topic-feed-panel">
       <div class="feed-toolbar">
         <div class="feed-tabs">
           <button class="active">同组合笔记</button>

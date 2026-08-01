@@ -1,0 +1,54 @@
+
+
+  █ THRESHOLDS
+
+    http_req_duration{kind:read}
+    ✓ 'p(95)<300' p(95)=2.87ms
+
+    http_req_failed
+    ✓ 'rate<0.001' rate=0.00%
+
+    scf_errors
+    ✓ 'rate<0.001' rate=0.00%
+
+
+  █ TOTAL RESULTS
+
+    checks_total.......: 3602    29.778621/s
+    checks_succeeded...: 100.00% 3602 out of 3602
+    checks_failed......: 0.00%   0 out of 3602
+
+    ✓ provinces returns 2xx
+    ✓ provinces has bounded body
+    ✓ health returns 2xx
+    ✓ health has bounded body
+    ✓ requirements returns 2xx
+    ✓ requirements has bounded body
+    ✓ topics returns 2xx
+    ✓ topics has bounded body
+    ✓ policies returns 2xx
+    ✓ policies has bounded body
+    ✓ posts returns 2xx
+    ✓ posts has bounded body
+    ✓ insights returns 2xx
+    ✓ insights has bounded body
+
+    CUSTOM
+    scf_errors.....................: 0.00%  0 out of 1801
+
+    HTTP
+    http_req_duration..............: avg=2.09ms min=414.54µs med=2.17ms max=5.12ms p(90)=2.69ms p(95)=2.87ms
+      { expected_response:true }...: avg=2.09ms min=414.54µs med=2.17ms max=5.12ms p(90)=2.69ms p(95)=2.87ms
+      { kind:read }................: avg=2.09ms min=414.54µs med=2.17ms max=5.12ms p(90)=2.69ms p(95)=2.87ms
+    http_req_failed................: 0.00%  0 out of 1801
+    http_reqs......................: 1801   14.889311/s
+
+    EXECUTION
+    iteration_duration.............: avg=1s     min=1s       med=1s     max=1.01s  p(90)=1s     p(95)=1s
+    iterations.....................: 1801   14.889311/s
+    vus............................: 1      min=1         max=16
+    vus_max........................: 50     min=50        max=50
+
+    NETWORK
+    data_received..................: 1.4 MB 12 kB/s
+    data_sent......................: 176 kB 1.5 kB/s

@@ -1,0 +1,2429 @@
+openapi: 3.1.0
+info:
+  title: SoulCourse API
+  version: 0.1.0-beta
+  summary: 选科π当前 API 契约骨架
+  description: |
+    该契约以当前 `/api/v1` 实现为基线，统一成功响应为 `{ data, meta? }`，
+    错误响应为 `{ error }`，并在成功/失败中返回 `requestId`。
+servers:
+  - url: http://localhost:1309{basePath}/api/v1
+    description: Local development
+    variables:
+      basePath:
+        default: ""
+        description: Optional APP_BASE_PATH, for example `/subject314`
+security:
+  - cookieAuth: []
+tags:
+  - name: Auth
+  - name: Profile
+  - name: Uploads
+  - name: Notifications
+  - name: Messages
+  - name: Taxonomy
+  - name: Content
+  - name: Insights
+  - name: Topics
+  - name: Posts
+  - name: Authors
+  - name: AI
+  - name: Admin
+paths:
+  /auth/email-verification-code:
+    post:
+      tags: [Auth]
+      operationId: sendEmailVerificationCode
+      summary: 发送邮箱验证码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerificationCodeInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmailVerificationCodeResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: 发送重置密码验证码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerificationCodeInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmailVerificationCodeResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: register
+      summary: 注册账号
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/AuthSessionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: 登录
+      description: 登录成功后设置 HttpOnly SameSite=Lax 会话 Cookie，并返回过渡期 opaque token。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/AuthSessionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: 使用邮箱验证码重置密码
+      description: 重置成功后撤销该账号全部服务端会话，并清理当前浏览器 Cookie。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminImageUploadResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: 退出登录
+      description: 撤销当前服务端会话并清理会话 Cookie；Cookie 会话写请求需带 X-CSRF-Token。
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/LogoutResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /me:
+    get:
+      tags: [Profile]
+      operationId: getCurrentUser
+      summary: 获取当前登录用户
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/UserResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      tags: [Profile]
+      operationId: deleteMe
+      summary: 注销当前账号
+      description: 校验当前密码后软删除账号、清除邮箱和密码哈希、撤销全部会话，并清理当前浏览器 Cookie。
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAccountInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /me/profile:
+    get:
+      tags: [Profile]
+      operationId: getMyProfile
+      summary: 获取当前用户画像
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/AccountProfileResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+    put:
+      tags: [Profile]
+      operationId: updateMyProfile
+      summary: 更新当前用户画像
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/AccountProfileResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /me/sessions:
+    get:
+      tags: [Profile]
+      operationId: listMySessions
+      summary: 获取当前账号会话列表
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/AccountSessionsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /me/sessions/{id}:
+    delete:
+      tags: [Profile]
+      operationId: revokeMySession
+      summary: 撤销当前账号指定会话
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /uploads/images/presign:
+    post:
+      tags: [Uploads]
+      operationId: presignImageUpload
+      summary: 创建图片上传会话
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresignImageUploadInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/PresignedImageUploadResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /uploads/images/{id}/object:
+    put:
+      tags: [Uploads]
+      operationId: putImageUploadObject
+      summary: 上传图片对象
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UploadID'
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/gif:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /uploads/images/{id}/complete:
+    post:
+      tags: [Uploads]
+      operationId: completeImageUpload
+      summary: 完成图片上传
+      description: 服务端校验对象实际存在、归属、大小、MIME、扩展名和像素尺寸后返回可用于帖子图片的 URL。相同用户对已完成上传以相同对象元数据重试时，幂等返回原成功结果。
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UploadID'
+      responses:
+        '200':
+          $ref: '#/components/responses/CompleteImageUploadResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /profiles/{name}:
+    get:
+      tags: [Profile]
+      operationId: getProfile
+      summary: 按用户名获取画像
+      parameters:
+        - $ref: '#/components/parameters/ProfileName'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/AccountProfileResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications:
+    get:
+      tags: [Notifications]
+      operationId: listNotifications
+      summary: 列出通知
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/NotificationsResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/read-all:
+    post:
+      tags: [Notifications]
+      operationId: markAllNotificationsRead
+      summary: 全部通知标记已读
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/BooleanActionResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      operationId: markNotificationRead
+      summary: 标记单条通知已读
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      responses:
+        '200':
+          $ref: '#/components/responses/BooleanActionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /messages:
+    get:
+      tags: [Messages]
+      operationId: listConversations
+      summary: 列出私信会话
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ConversationPageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/ConversationsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      tags: [Messages]
+      operationId: sendDirectMessage
+      summary: 发送私信
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/DirectMessageResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /messages/{name}:
+    get:
+      tags: [Messages]
+      operationId: listDirectMessages
+      summary: 获取与某用户的私信
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileName'
+      responses:
+        '200':
+          $ref: '#/components/responses/DirectMessagesResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /taxonomy:
+    get:
+      tags: [Taxonomy]
+      operationId: getTaxonomy
+      summary: 获取前端枚举与标签
+      responses:
+        '200':
+          $ref: '#/components/responses/TaxonomyResponse'
+  /content:
+    get:
+      tags: [Content]
+      operationId: listPublishedContent
+      summary: 获取公开 CMS 内容
+      parameters:
+        - in: query
+          name: module
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/PublishedContentResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /telemetry/web-vitals:
+    post:
+      tags: [Telemetry]
+      operationId: reportWebVital
+      summary: 匿名上报浏览器核心性能指标
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebVitalInput'
+      responses:
+        '204':
+          description: 指标已记录
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /provinces:
+    get:
+      tags: [RealData]
+      operationId: listProvinces
+      summary: 列出省份数据覆盖状态
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /policies:
+    get:
+      tags: [RealData]
+      operationId: listPolicies
+      summary: 列出已复核政策内容
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /requirements:
+    get:
+      tags: [RealData]
+      operationId: listRequirements
+      summary: 列出专业选科要求内容
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /sources/{id}:
+    get:
+      tags: [RealData]
+      operationId: getSource
+      summary: 获取数据来源追溯信息
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /insights:
+    get:
+      tags: [Insights]
+      operationId: listInsights
+      summary: 列出洞察
+      responses:
+        '200':
+          $ref: '#/components/responses/InsightsResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /insights/{id}:
+    get:
+      tags: [Insights]
+      operationId: getInsight
+      summary: 获取洞察详情
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      responses:
+        '200':
+          $ref: '#/components/responses/InsightResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /topics:
+    get:
+      tags: [Topics]
+      operationId: listTopics
+      summary: 列出话题
+      responses:
+        '200':
+          $ref: '#/components/responses/TopicsResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /topics/{slug}:
+    get:
+      tags: [Topics]
+      operationId: getTopic
+      summary: 获取话题详情
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/TopicResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /posts:
+    get:
+      tags: [Posts]
+      operationId: listPosts
+      summary: 列出帖子
+      parameters:
+        - in: query
+          name: track
+          schema: { type: string }
+        - in: query
+          name: subjects
+          schema: { type: string, description: Comma-separated subjects }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: province
+          schema: { type: string }
+        - in: query
+          name: tag
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1 }
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          $ref: '#/components/responses/PostsResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      tags: [Posts]
+      operationId: createPost
+      summary: 创建帖子
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/PostResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /posts/{id}:
+    get:
+      tags: [Posts]
+      operationId: getPost
+      summary: 获取帖子详情
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      responses:
+        '200':
+          $ref: '#/components/responses/PostDetailResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    put:
+      tags: [Posts]
+      operationId: updatePost
+      summary: 编辑自己发布的帖子
+      description: 作者可更新标题、正文、标签、分类、方向和再选科目；图片本轮仍通过发布/上传链路管理。
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePostInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/PostResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      tags: [Posts]
+      operationId: deletePost
+      summary: 删除自己发布的帖子
+      description: 作者软删除自己的帖子；非作者和不存在的帖子均返回 404，避免泄露归属关系。
+      security:
+        - cookieAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      responses:
+        '200':
+          $ref: '#/components/responses/BooleanActionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /posts/{id}/comments:
+    post:
+      tags: [Posts]
+      operationId: createComment
+      summary: 发表评论
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/CommentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /posts/{id}/report:
+    post:
+      tags: [Posts]
+      operationId: reportPost
+      summary: 举报帖子
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportPostInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /posts/{id}/like:
+    post:
+      tags: [Posts]
+      operationId: togglePostLike
+      summary: 点赞或取消点赞
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      responses:
+        '200':
+          $ref: '#/components/responses/ToggleResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /posts/{id}/favorite:
+    post:
+      tags: [Posts]
+      operationId: togglePostFavorite
+      summary: 收藏或取消收藏
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      responses:
+        '200':
+          $ref: '#/components/responses/ToggleResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /authors/{name}/follow:
+    post:
+      tags: [Authors]
+      operationId: toggleFollowAuthor
+      summary: 关注或取消关注作者
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileName'
+      responses:
+        '200':
+          $ref: '#/components/responses/FollowResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /ai/choice-advice:
+    post:
+      tags: [AI]
+      operationId: requestChoiceAdvice
+      summary: 获取 AI 选科建议
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile]
+              properties:
+                profile:
+                  type: object
+                  additionalProperties: true
+                question:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/ChoiceAdviceResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/login:
+    post:
+      tags: [Admin]
+      operationId: adminLogin
+      summary: 管理员登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminLoginResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/logout:
+    post:
+      tags: [Admin]
+      operationId: adminLogout
+      summary: 管理员退出登录
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          $ref: '#/components/responses/LogoutResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/email-config:
+    get:
+      tags: [Admin]
+      operationId: getAdminEmailConfig
+      summary: 获取邮件配置状态
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/email-test:
+    post:
+      tags: [Admin]
+      operationId: sendAdminTestEmail
+      summary: 发送后台测试邮件
+      security:
+        - adminSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerificationCodeInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/EmailVerificationCodeResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/content:
+    get:
+      tags: [Admin]
+      operationId: listAdminContent
+      summary: 列出后台内容记录
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminContentListResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      tags: [Admin]
+      operationId: createAdminContent
+      summary: 创建后台内容记录
+      security:
+        - adminSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminContentInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/AdminContentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/content/{id}:
+    put:
+      tags: [Admin]
+      operationId: updateAdminContent
+      summary: 更新后台内容记录
+      security:
+        - adminSession: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminContentInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminContentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      tags: [Admin]
+      operationId: deleteAdminContent
+      summary: 删除后台内容记录
+      security:
+        - adminSession: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          $ref: '#/components/responses/BooleanActionResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/content/{id}/workflow:
+    post:
+      tags: [Admin]
+      operationId: workflowAdminContent
+      summary: 推进后台内容工作流
+      security:
+        - adminSession: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminWorkflowInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminContentResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/uploads/images:
+    post:
+      tags: [Admin]
+      operationId: uploadAdminImage
+      summary: 上传后台图片
+      security:
+        - adminSession: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/content-summary:
+    get:
+      tags: [Admin]
+      operationId: getAdminContentSummary
+      summary: 获取后台内容汇总
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          $ref: '#/components/responses/AdminContentSummaryListResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      operationId: listAdminAuditLogs
+      summary: 获取后台审计日志
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericListResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/reports:
+    get:
+      tags: [Admin]
+      operationId: listAdminReports
+      summary: 获取内容举报列表
+      security:
+        - adminSession: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, actioned, dismissed]
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/reports/{id}/moderate:
+    post:
+      tags: [Admin]
+      operationId: moderateReport
+      summary: 处置内容举报
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminModerationInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/users/{id}/password:
+    put:
+      tags: [Admin]
+      operationId: resetUserPassword
+      summary: 重置用户密码
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserPasswordInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/users/{id}/ban:
+    post:
+      tags: [Admin]
+      operationId: banUser
+      summary: 封禁用户并撤销会话
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserModerationInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /admin/users/{id}/restore:
+    post:
+      tags: [Admin]
+      operationId: restoreUser
+      summary: 恢复被封禁用户
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/NumericId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserModerationInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/GenericObjectResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  parameters:
+    NumericId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ProfileName:
+      in: path
+      name: name
+      required: true
+      schema:
+        type: string
+    UploadID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Required for unsafe methods when authenticating with the scf_session cookie. Value must match the readable scf_csrf cookie.
+      schema:
+        type: string
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 30
+    PageCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+    ConversationPageLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 100
+  responses:
+    ErrorResponse:
+      description: Error envelope
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    AuthSessionResponse:
+      description: Auth session
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AuthSessionEnvelope'
+    LogoutResponse:
+      description: Sign-out result
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LogoutEnvelope'
+    UserResponse:
+      description: User
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UserEnvelope'
+    AccountProfileResponse:
+      description: Account profile
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AccountProfileEnvelope'
+    AccountSessionsResponse:
+      description: Account session list
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AccountSessionsEnvelope'
+    PresignedImageUploadResponse:
+      description: Presigned image upload session
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PresignedImageUploadEnvelope'
+    CompleteImageUploadResponse:
+      description: Completed image upload
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CompleteImageUploadEnvelope'
+    NotificationsResponse:
+      description: Notification list
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/NotificationsEnvelope'
+    ConversationsResponse:
+      description: Conversation list
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConversationsEnvelope'
+    DirectMessagesResponse:
+      description: Direct messages
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DirectMessagesEnvelope'
+    DirectMessageResponse:
+      description: Direct message
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DirectMessageEnvelope'
+    TaxonomyResponse:
+      description: Taxonomy
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TaxonomyEnvelope'
+    PublishedContentResponse:
+      description: Published content list
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PublishedContentEnvelope'
+    InsightsResponse:
+      description: Insight list
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InsightsEnvelope'
+    InsightResponse:
+      description: Insight
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InsightEnvelope'
+    TopicsResponse:
+      description: Topic list
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TopicsEnvelope'
+    TopicResponse:
+      description: Topic detail
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/TopicEnvelope'
+    PostsResponse:
+      description: Post list
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PostsEnvelope'
+    PostResponse:
+      description: Post
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PostEnvelope'
+    PostDetailResponse:
+      description: Post detail with comments
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PostDetailEnvelope'
+    CommentResponse:
+      description: Comment
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CommentEnvelope'
+    ToggleResponse:
+      description: Toggle result
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ToggleEnvelope'
+    FollowResponse:
+      description: Follow result
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/FollowEnvelope'
+    ChoiceAdviceResponse:
+      description: Choice advice
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ChoiceAdviceEnvelope'
+    EmailVerificationCodeResponse:
+      description: Email verification status
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/EmailVerificationCodeEnvelope'
+    BooleanActionResponse:
+      description: Simple action result
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BooleanActionEnvelope'
+    AdminLoginResponse:
+      description: Admin login
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminLoginEnvelope'
+    AdminContentListResponse:
+      description: Admin content list
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminContentListEnvelope'
+    AdminContentResponse:
+      description: Admin content
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminContentEnvelope'
+    AdminContentSummaryListResponse:
+      description: Admin content summary
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminContentSummaryEnvelope'
+    GenericObjectResponse:
+      description: Generic object response
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GenericObjectEnvelope'
+    AdminImageUploadResponse:
+      description: Admin image upload result
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminImageUploadEnvelope'
+    GenericListResponse:
+      description: Generic list response
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GenericListEnvelope'
+  headers:
+    RequestID:
+      description: Unique request identifier
+      schema:
+        type: string
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: scf_session
+      description: HttpOnly SameSite=Lax server-side session cookie. Unsafe methods also require X-CSRF-Token.
+    adminSession:
+      type: apiKey
+      name: scf_admin_session
+      in: cookie
+      description: HttpOnly SameSite=Lax admin session cookie. Unsafe methods also require X-CSRF-Token with scf_admin_csrf.
+  schemas:
+    Meta:
+      type: object
+      properties:
+        requestId:
+          type: string
+        nextCursor:
+          type: string
+        hasMore:
+          type: boolean
+        degraded:
+          type: boolean
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        requestId:
+          type: string
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+    GenericObject:
+      type: object
+      additionalProperties: true
+    GenericList:
+      type: array
+      items:
+        type: object
+        additionalProperties: true
+    EnvelopeOfGenericObject:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/GenericObject'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    EnvelopeOfGenericList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/GenericList'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    User:
+      type: object
+      additionalProperties: true
+    AuthSession:
+      type: object
+      required: [user, expiresAt]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        expiresAt:
+          type: string
+          format: date-time
+    AccountProfile:
+      type: object
+      additionalProperties: true
+    AccountSession:
+      type: object
+      required: [id, createdAt, expiresAt, current]
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+    Notification:
+      type: object
+      additionalProperties: true
+    Conversation:
+      type: object
+      additionalProperties: true
+    DirectMessage:
+      type: object
+      additionalProperties: true
+    Post:
+      type: object
+      additionalProperties: true
+    Comment:
+      type: object
+      additionalProperties: true
+    Topic:
+      type: object
+      additionalProperties: true
+    TopicDetail:
+      type: object
+      additionalProperties: true
+    Insight:
+      type: object
+      additionalProperties: true
+    ChoiceAdvice:
+      type: object
+      additionalProperties: true
+    PublishedContent:
+      type: object
+      additionalProperties: true
+    AdminContent:
+      type: object
+      additionalProperties: true
+    AdminContentSummary:
+      type: object
+      additionalProperties: true
+    ToggleResult:
+      type: object
+      additionalProperties: true
+    EmailVerificationCodeInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    RegisterInput:
+      type: object
+      required: [email, password, verificationCode, nickname, role, province, grade]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        verificationCode:
+          type: string
+        nickname:
+          type: string
+        role:
+          type: string
+        province:
+          type: string
+        grade:
+          type: string
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    ResetPasswordInput:
+      type: object
+      required: [email, verificationCode, password]
+      properties:
+        email:
+          type: string
+          format: email
+        verificationCode:
+          type: string
+          minLength: 6
+          maxLength: 6
+        password:
+          type: string
+          minLength: 6
+          maxLength: 72
+    DeleteAccountInput:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 1
+          maxLength: 72
+    PresignImageUploadInput:
+      type: object
+      required: [fileName, contentType, sizeBytes, width, height]
+      properties:
+        fileName:
+          type: string
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/gif]
+        sizeBytes:
+          type: integer
+          minimum: 1
+          maximum: 8388608
+        width:
+          type: integer
+          minimum: 1
+          maximum: 12000
+        height:
+          type: integer
+          minimum: 1
+          maximum: 12000
+    PresignedImageUpload:
+      type: object
+      required: [id, assetKey, uploadUrl, method, contentType, maxBytes, expiresAt]
+      properties:
+        id:
+          type: string
+        assetKey:
+          type: string
+        uploadUrl:
+          type: string
+        method:
+          type: string
+          const: PUT
+        contentType:
+          type: string
+        maxBytes:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+    CompleteImageUpload:
+      type: object
+      required: [id, assetKey, url, contentType, sizeBytes, width, height]
+      properties:
+        id:
+          type: string
+        assetKey:
+          type: string
+        url:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+        width:
+          type: integer
+        height:
+          type: integer
+    AdminImageUpload:
+      type: object
+      required: [url, contentType, size, width, height, name]
+      properties:
+        url:
+          type: string
+          pattern: '^/.*/?uploads/images/.+'
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/gif, image/webp]
+        size:
+          type: integer
+          minimum: 1
+          maximum: 8388608
+        width:
+          type: integer
+          minimum: 1
+          maximum: 12000
+        height:
+          type: integer
+          minimum: 1
+          maximum: 12000
+        name:
+          type: string
+    UpdateProfileInput:
+      type: object
+      required: [bio, choiceProfile]
+      properties:
+        bio:
+          type: string
+        choiceProfile:
+          type: object
+          additionalProperties: true
+    SendMessageInput:
+      type: object
+      required: [recipientName, content]
+      properties:
+        recipientName:
+          type: string
+        content:
+          type: string
+    CreatePostInput:
+      type: object
+      required: [title, content, imageUrls, tags, track, electives, category, grade, province]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        imageUrls:
+          type: array
+          maxItems: 9
+          items:
+            type: string
+            maxLength: 512
+            pattern: '^/.*/?uploads/images/.+'
+        tags:
+          type: array
+          items:
+            type: string
+        track:
+          type: string
+        electives:
+          type: array
+          items:
+            type: string
+        category:
+          type: string
+        grade:
+          type: string
+        province:
+          type: string
+    UpdatePostInput:
+      type: object
+      required: [title, content, tags, track, electives, category]
+      properties:
+        title:
+          type: string
+          minLength: 4
+          maxLength: 80
+        content:
+          type: string
+          minLength: 10
+          maxLength: 4000
+        tags:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 20
+        track:
+          type: string
+          enum: [physics, history]
+        electives:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: string
+            enum: [chemistry, biology, politics, geography]
+        category:
+          type: string
+          enum: [experience, question, data]
+    CreateCommentInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+    ReportPostInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 80
+        detail:
+          type: string
+          maxLength: 1200
+    AdminLoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    WebVitalInput:
+      type: object
+      additionalProperties: false
+      required: [name, value, rating]
+      properties:
+        name:
+          type: string
+          enum: [LCP, INP, CLS]
+        value:
+          type: number
+          minimum: 0
+          maximum: 60000
+        rating:
+          type: string
+          enum: [good, needs-improvement, poor]
+    AdminLoginData:
+      type: object
+      required: [email, role, permissions, expiresAt]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [super_admin, content_editor, moderator]
+        permissions:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+    AdminUserPasswordInput:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+    AdminUserModerationInput:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 1200
+    AdminModerationInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [hide, restore, dismiss]
+        note:
+          type: string
+          maxLength: 1200
+    AdminContentInput:
+      type: object
+      required: [module, title]
+      properties:
+        id:
+          type: string
+        module:
+          type: string
+        title:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        scope:
+          type: string
+        owner:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        summary:
+          type: string
+        url:
+          type: string
+        priority:
+          type: string
+        sortOrder:
+          type: integer
+        payload:
+          type: object
+          additionalProperties: true
+    AdminWorkflowInput:
+      type: object
+      required: [action, actionLabel, nextStatus]
+      properties:
+        action:
+          type: string
+          description: 服务端工作流动作；动作必须与内容当前状态匹配。
+          enum: [submit-content-review, approve-content, send-to-review, return-content, pass-review, keep-review, reject-after-review, start-review, unpublish-content]
+        actionLabel:
+          type: string
+          description: 兼容字段；审计标签由服务端根据 action 决定。
+        nextStatus:
+          type: string
+          description: 兼容校验字段；目标状态由服务端根据当前状态与 action 决定。
+          enum: [待审核, 已上架, 需复核, 退回修改, 下架]
+        note:
+          type: string
+          maxLength: 1200
+        priority:
+          type: string
+          description: 兼容字段；优先级由服务端根据目标状态决定。
+        payload:
+          type: object
+          description: 已弃用且被服务端忽略；现有 payload 会被保留，工作流轨迹由服务端追加。
+          deprecated: true
+          additionalProperties: true
+    AuthSessionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AuthSession'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    LogoutEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [signedOut]
+          properties:
+            signedOut:
+              type: boolean
+        meta:
+          $ref: '#/components/schemas/Meta'
+    UserEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    AccountProfileEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AccountProfile'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    AccountSessionsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountSession'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    PresignedImageUploadEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/PresignedImageUpload'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    CompleteImageUploadEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CompleteImageUpload'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    NotificationsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ConversationsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Conversation'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    DirectMessagesEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectMessage'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    DirectMessageEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/DirectMessage'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    TaxonomyEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeOfGenericObject'
+    PublishedContentEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeOfGenericObject'
+    InsightsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Insight'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    InsightEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Insight'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    TopicsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Topic'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    TopicEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/TopicDetail'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    PostsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    PostEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Post'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    PostDetailEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [post, comments]
+          properties:
+            post:
+              $ref: '#/components/schemas/Post'
+            comments:
+              type: array
+              items:
+                $ref: '#/components/schemas/Comment'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    CommentEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Comment'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ToggleEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ToggleResult'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    FollowEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeOfGenericObject'
+    ChoiceAdviceEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ChoiceAdvice'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    EmailVerificationCodeEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeOfGenericObject'
+    BooleanActionEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeOfGenericObject'
+    AdminLoginEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminLoginData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    AdminImageUploadEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminImageUpload'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    AdminContentListEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminContent'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    AdminContentEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdminContent'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    AdminContentSummaryEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminContentSummary'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    GenericObjectEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeOfGenericObject'
+    GenericListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeOfGenericList'

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Check, ChevronLeft, Save, Sparkles } from '@lucide/vue'
-import { onMounted, reactive, ref } from 'vue'
+import { Check, ChevronLeft, LoaderCircle, RefreshCcw, Save, ShieldCheck, Sparkles, Trash2, WifiOff } from '@lucide/vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGlobalSearch } from '../composables/useGlobalSearch'
-import { fetchMyProfile, requestChoiceAdvice, updateMyProfile } from '../lib/api'
+import { deleteMyAccount, fetchMyProfile, fetchMySessions, requestChoiceAdvice, revokeMySession, updateMyProfile } from '../lib/api'
 import { subjectLabels, trackLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
-import type { ChoiceAdvice, ChoiceProfile, Subject, Track } from '../types/forum'
+import type { AccountSession, ChoiceAdvice, ChoiceProfile, Subject, Track } from '../types/forum'
 
 const router = useRouter()
 const forumStore = useForumStore()
@@ -17,6 +17,19 @@ const bio = ref('')
 const advice = ref<ChoiceAdvice | null>(null)
 const adviceLoading = ref(false)
 const adviceError = ref('')
+const profileLoading = ref(false)
+const profileError = ref('')
+const saveError = ref('')
+const sessions = ref<AccountSession[]>([])
+const sessionsLoading = ref(false)
+const sessionsError = ref('')
+const sessionActionId = ref<number | null>(null)
+const sessionMessage = ref('')
+const deletePassword = ref('')
+const deleteConfirmation = ref('')
+const deleteLoading = ref(false)
+const deleteError = ref('')
+const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
 const form = reactive<ChoiceProfile>({ ...forumStore.choiceProfile })
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']
 const tracks: Track[] = ['physics', 'history']
@@ -32,7 +45,16 @@ function toggleSubject(subject: Subject) {
 }
 
 async function save() {
+  if (!forumStore.currentUser) {
+    forumStore.openAuth('/settings')
+    return
+  }
+  if (isOffline.value) {
+    saveError.value = '当前网络不可用，恢复连接后再保存。'
+    return
+  }
   saving.value = true
+  saveError.value = ''
   try {
     const profile = await updateMyProfile({ bio: bio.value, choiceProfile: { ...form } })
     forumStore.saveChoiceProfile(profile.choiceProfile)
@@ -40,6 +62,8 @@ async function save() {
     window.setTimeout(() => {
       saved.value = false
     }, 1800)
+  } catch {
+    saveError.value = '保存失败，请检查网络后重试。'
   } finally {
     saving.value = false
   }
@@ -62,10 +86,92 @@ async function generateAdvice() {
   }
 }
 
-onMounted(async () => {
-  const profile = await fetchMyProfile()
-  bio.value = profile.bio
-  Object.assign(form, profile.choiceProfile)
+async function loadProfile() {
+  if (!forumStore.currentUser) return
+  profileLoading.value = true
+  profileError.value = ''
+  try {
+    const profile = await fetchMyProfile()
+    bio.value = profile.bio
+    Object.assign(form, profile.choiceProfile)
+  } catch {
+    profileError.value = '个人资料加载失败，请稍后重试。'
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+async function loadSessions() {
+  if (!forumStore.currentUser) return
+  sessionsLoading.value = true
+  sessionsError.value = ''
+  try {
+    sessions.value = await fetchMySessions()
+  } catch {
+    sessionsError.value = '会话列表加载失败，请稍后重试。'
+  } finally {
+    sessionsLoading.value = false
+  }
+}
+
+async function revokeSession(session: AccountSession) {
+  if (session.current || sessionActionId.value) return
+  sessionActionId.value = session.id
+  sessionsError.value = ''
+  sessionMessage.value = ''
+  try {
+    await revokeMySession(session.id)
+    sessions.value = sessions.value.filter((item) => item.id !== session.id)
+    sessionMessage.value = '已撤销该设备会话。'
+  } catch {
+    sessionsError.value = '撤销失败，请刷新后重试。'
+  } finally {
+    sessionActionId.value = null
+  }
+}
+
+async function deleteAccount() {
+  if (deleteLoading.value) return
+  deleteError.value = ''
+  if (deleteConfirmation.value.trim() !== '注销账号') {
+    deleteError.value = '请先输入“注销账号”确认操作。'
+    return
+  }
+  if (!deletePassword.value) {
+    deleteError.value = '请输入当前密码。'
+    return
+  }
+  deleteLoading.value = true
+  try {
+    await deleteMyAccount(deletePassword.value)
+    await forumStore.logout()
+    await router.push('/')
+  } catch {
+    deleteError.value = '账号注销失败，请确认密码是否正确。'
+  } finally {
+    deleteLoading.value = false
+  }
+}
+
+function formatSessionTime(value: string) {
+  if (!value) return '未知时间'
+  return new Date(value).toLocaleString('zh-CN')
+}
+
+function updateOnlineState() {
+  isOffline.value = typeof navigator !== 'undefined' ? !navigator.onLine : false
+}
+
+onMounted(() => {
+  window.addEventListener('online', updateOnlineState)
+  window.addEventListener('offline', updateOnlineState)
+  void loadProfile()
+  void loadSessions()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('online', updateOnlineState)
+  window.removeEventListener('offline', updateOnlineState)
 })
 
 function searchSuggestion(keyword: string) {
@@ -82,12 +188,33 @@ function searchSuggestion(keyword: string) {
         <h1>个人信息与选科画像</h1>
         <p>完善这些信息后，后续可以据此推荐更贴近你的组合、帖子和数据建议。</p>
       </div>
-      <button class="write-button" type="button" :disabled="saving" @click="save">
+      <button class="write-button" type="button" :disabled="saving || profileLoading || isOffline" @click="save">
         <Save :size="16" /> {{ saving ? '保存中' : '保存设置' }}
       </button>
     </section>
 
-    <section class="settings-grid">
+    <section v-if="!forumStore.currentUser" class="empty-state detail-empty-state public-page-state">
+      <Sparkles :size="34" />
+      <h1>登录后完善画像</h1>
+      <p>画像、AI 建议和保存结果会跟随账号同步。登录后可以继续编辑。</p>
+      <button class="primary-wide compact" type="button" @click="forumStore.openAuth('/settings')">登录 / 注册</button>
+    </section>
+
+    <section v-else-if="profileLoading" class="empty-state detail-empty-state public-page-state">
+      <RefreshCcw class="state-spin" :size="34" />
+      <h1>正在加载个人设置</h1>
+      <p>请稍等，正在同步你的选科画像。</p>
+    </section>
+
+    <section v-else-if="profileError || isOffline" class="empty-state detail-empty-state public-page-state">
+      <WifiOff v-if="isOffline" :size="34" />
+      <Sparkles v-else :size="34" />
+      <h1>{{ isOffline ? '当前网络不可用' : '个人设置加载失败' }}</h1>
+      <p>{{ isOffline ? '恢复网络后再继续编辑，避免保存失败。' : profileError }}</p>
+      <button v-if="!isOffline" class="primary-wide compact" type="button" @click="loadProfile">重试</button>
+    </section>
+
+    <section v-else class="settings-grid">
       <form class="settings-card" @submit.prevent="save">
         <h2>基础信息</h2>
         <div class="settings-fields">
@@ -172,6 +299,53 @@ function searchSuggestion(keyword: string) {
         </div>
       </form>
 
+      <section class="settings-card settings-card-wide account-security-card">
+        <div class="settings-card-heading">
+          <div>
+            <h2><ShieldCheck :size="18" /> 账号安全</h2>
+            <p>查看当前账号登录设备。发现异常时，可以撤销其它设备的会话。</p>
+          </div>
+          <button type="button" :disabled="sessionsLoading" @click="loadSessions">
+            <RefreshCcw v-if="!sessionsLoading" :size="15" />
+            <LoaderCircle v-else class="state-spin" :size="15" />
+            刷新
+          </button>
+        </div>
+        <p v-if="sessionsError" class="form-error">{{ sessionsError }}</p>
+        <p v-if="sessionMessage" class="form-success">{{ sessionMessage }}</p>
+        <div v-if="sessionsLoading && !sessions.length" class="session-state">
+          <LoaderCircle class="state-spin" :size="20" /> 正在加载会话
+        </div>
+        <div v-else-if="!sessions.length" class="session-state">暂无可显示的登录会话。</div>
+        <div v-else class="session-list">
+          <article v-for="session in sessions" :key="session.id" class="session-item">
+            <div>
+              <strong>{{ session.current ? '当前设备' : `设备会话 #${session.id}` }}</strong>
+              <small>创建：{{ formatSessionTime(session.createdAt) }} · 过期：{{ formatSessionTime(session.expiresAt) }}</small>
+            </div>
+            <span v-if="session.current" class="session-badge">当前</span>
+            <button v-else type="button" :disabled="sessionActionId === session.id" @click="revokeSession(session)">
+              {{ sessionActionId === session.id ? '撤销中' : '撤销' }}
+            </button>
+          </article>
+        </div>
+      </section>
+
+      <section class="settings-card settings-card-wide danger-zone-card">
+        <div>
+          <h2><Trash2 :size="18" /> 注销账号</h2>
+          <p>注销后会清除邮箱、密码和当前所有登录会话；已发布内容会保留为社区上下文，但账号无法再登录。</p>
+        </div>
+        <div class="settings-fields">
+          <label>输入“注销账号”确认<input v-model="deleteConfirmation" autocomplete="off" placeholder="注销账号" /></label>
+          <label>当前密码<input v-model="deletePassword" type="password" autocomplete="current-password" placeholder="请输入当前密码" /></label>
+        </div>
+        <p v-if="deleteError" class="form-error">{{ deleteError }}</p>
+        <button class="danger-action-button" type="button" :disabled="deleteLoading || deleteConfirmation.trim() !== '注销账号' || !deletePassword" @click="deleteAccount">
+          <Trash2 :size="15" /> {{ deleteLoading ? '注销中' : '确认注销账号' }}
+        </button>
+      </section>
+
       <aside class="settings-summary">
         <h2>画像摘要</h2>
         <p><strong>{{ form.realName || forumStore.currentUser?.nickname || '未填写称呼' }}</strong></p>
@@ -187,6 +361,7 @@ function searchSuggestion(keyword: string) {
           <button type="button" :disabled="adviceLoading" @click="generateAdvice">
             {{ adviceLoading ? '分析中...' : '生成建议' }}
           </button>
+          <p v-if="saveError" class="ai-advice-error">{{ saveError }}</p>
           <p v-if="adviceError" class="ai-advice-error">{{ adviceError }}</p>
           <template v-if="advice">
             <blockquote>{{ advice.summary }}</blockquote>

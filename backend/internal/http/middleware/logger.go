@@ -2,7 +2,10 @@ package middleware
 
 import (
 	"net/http"
+	"net/url"
 	"path"
+	"sort"
+	"strings"
 	"time"
 
 	"subject-choice-forum/backend/internal/logx"
@@ -55,5 +58,32 @@ func requestPathWithQuery(c *gin.Context) string {
 	if c.Request.URL.RawQuery == "" {
 		return c.Request.URL.Path
 	}
-	return c.Request.URL.Path + "?" + c.Request.URL.RawQuery
+	return c.Request.URL.Path + "?" + redactQuery(c.Request.URL.Query()).Encode()
+}
+
+func redactQuery(values url.Values) url.Values {
+	redacted := make(url.Values, len(values))
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if isSensitiveQueryKey(key) {
+			redacted[key] = []string{"[REDACTED]"}
+			continue
+		}
+		redacted[key] = append([]string(nil), values[key]...)
+	}
+	return redacted
+}
+
+func isSensitiveQueryKey(key string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
+	return strings.Contains(normalized, "password") ||
+		strings.Contains(normalized, "token") ||
+		strings.Contains(normalized, "code") ||
+		strings.Contains(normalized, "secret") ||
+		strings.Contains(normalized, "email") ||
+		strings.Contains(normalized, "phone")
 }

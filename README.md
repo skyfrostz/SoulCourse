@@ -2,10 +2,26 @@
 
 - 前端：Vue + Vite，开发端口 `5712`
 - 管理后台：并入 Vue 前端，开发时访问 `http://localhost:5712/admin/`
-- 后端：Go + Gin + SQLite，API 端口 `1309`
+- 后端：Go + Gin；生产 PostgreSQL、本地开发可用 SQLite，API 端口 `1309`
 - 日志：Go 后端使用中文彩色日志，格式为 `[时间]...[级别]...[模块]...[操作]...`
 - 存储：`backend/data/soulcourse.db`
 - 上传目录：`backend/data/uploads`
+
+公测前验收以 [docs/public-beta-readiness.md](docs/public-beta-readiness.md) 为准；未通过 P0/P1 闸门不得开放公测。
+当前 API 契约骨架见 [docs/openapi/openapi.yaml](docs/openapi/openapi.yaml)。
+PostgreSQL 16 公测 schema 由 goose migration 管理，见 `backend/migrations/postgres/`；生产运行时使用 PostgreSQL repository，SQLite 仅保留本地开发和迁移源用途。
+前端契约类型由 OpenAPI 生成：
+
+```bash
+go -C backend run ./cmd/openapi-types
+```
+
+检查生成产物是否与契约同步：
+
+```bash
+cd frontend
+pnpm openapi:check
+```
 
 ## 目录说明
 
@@ -13,8 +29,9 @@
 frontend/                 Vue 前端
 frontend/dist/            前端构建产物，可由 Go 直接托管
 backend/main.go           后端主入口
-backend/internal/         配置、HTTP、服务、SQLite 仓储
+backend/internal/         配置、HTTP、服务、SQLite/PostgreSQL 仓储
 backend/internal/logx/    中文彩色日志实现
+backend/migrations/       PostgreSQL 16 goose 目标 schema
 backend/internal/http/webdist/
                          内嵌前端资源目录
 backend/cmd/release/      一键构建跨平台二进制
@@ -207,18 +224,63 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o sou
 GOMEMLIMIT=1536MiB ./soulcourse
 ```
 
-`GOMEMLIMIT` 给 SQLite、系统和反向代理预留内存；应用自身已使用 SQLite WAL、单写连接和有限 HTTP 超时，适合小规格服务器。
+`GOMEMLIMIT` 给系统和反向代理预留内存；生产应用使用托管 PostgreSQL 16（连接池上限 20）和 S3 兼容对象存储，本地开发仍可使用 SQLite 与本地上传目录。
 
 建议将 `.env.example` 复制为 `.env` 后，按需修改以下变量：
 
 - `APP_BASE_PATH`
 - `HTTP_PORT`
-- `ADMIN_TOKEN`
+- `TRUSTED_PROXIES`（生产必填）
 - `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
+- `ADMIN_PASSWORD`（仅本地开发）
+- `ADMIN_PASSWORD_HASH`（生产必填）
 - `JWT_SECRET`
-- `SQLITE_PATH`
-- `MEDIA_UPLOAD_DIR`
+- `METRICS_TOKEN`（生产必填）
+- `DATABASE_DRIVER`、`DATABASE_URL` 与数据库连接池/超时
+- `STORAGE_DRIVER`、`S3_ENDPOINT`、`S3_BUCKET`、`S3_REGION`、`S3_CDN_BASE_URL`
+
+公测生产固定使用托管 PostgreSQL 16 和 S3 兼容对象存储；本轮不引入 Redis。部署应用前必须在目标 PostgreSQL 16 实例执行并确认 goose migration：
+
+```bash
+export DATABASE_URL='postgres://user:password@host:5432/soulcourse?sslmode=require'
+APP_ENV=production GUANGDONG_DATA_YEAR=2026 \
+  GOOSE_BIN=/opt/soulcourse/bin/goose deploy/migrate-production.sh
+```
+
+数据库工厂会精确校验 goose schema 版本与核心表；空库、落后/超前版本、已回滚版本和缺表都会在监听端口前拒绝启动。生产启动还会执行一次 S3 `HeadBucket` 与 SMTP TLS/AUTH/NOOP 检查，不创建对象或发送邮件。`HeadBucket` 和 SMTP NOOP 只能证明目标凭证/网络/协议可用，不能证明供应商侧的 bucket 生命周期、版本控制、CDN 缓存或投递到收件箱；这些必须在目标环境用下面的命令逐项记录结果。
+
+对象存储上线前（以 AWS CLI 或兼容其 API 的 CLI 为例）执行并保存输出；不要把下面的占位符提交到仓库：
+
+```bash
+export AWS_ENDPOINT_URL='https://<s3-endpoint>'
+export AWS_DEFAULT_REGION='<region>'
+export S3_BUCKET='<bucket>'
+aws --endpoint-url "$AWS_ENDPOINT_URL" s3api get-bucket-versioning --bucket "$S3_BUCKET"
+aws --endpoint-url "$AWS_ENDPOINT_URL" s3api get-bucket-lifecycle-configuration --bucket "$S3_BUCKET"
+aws --endpoint-url "$AWS_ENDPOINT_URL" s3api head-bucket --bucket "$S3_BUCKET"
+```
+
+验收要求：版本控制状态为 `Enabled`；生命周期至少覆盖未完成 multipart upload 的清理（不超过 1 天）和上传临时前缀的 30 天回收，并由供应商规则实际确认。公开图片前缀还必须通过 CDN GET 验证，私有原始政策文件必须验证未经签名 URL 不可读；不同 S3 兼容供应商的生命周期字段可能不同，不能仅凭 AWS CLI 成功推断规则已生效。
+
+运行账号需要业务表 DML、`goose_db_version` 只读权限，以及目标 bucket 的 `HeadBucket`/ListBucket、对象前缀 Get/Put 权限；migration 使用独立高权限账号。SMTP 启动检查会产生一次认证审计事件但不会发送邮件，systemd 将启动失败限制为 5 分钟内最多 3 次。
+
+SQLite -> PostgreSQL 演练命令（只读源 SQLite，事务写入目标 PostgreSQL，并输出每张表的行数与 SHA-256 manifest）：
+
+```bash
+go -C backend run ./cmd/sqlite-to-postgres \
+  -sqlite data/soulcourse.db \
+  -postgres "$DATABASE_URL" \
+  -manifest ../tmp/sqlite-to-postgres-manifest.json
+```
+
+只生成迁移前 manifest、不写入 PostgreSQL：
+
+```bash
+go -C backend run ./cmd/sqlite-to-postgres \
+  -sqlite data/soulcourse.db \
+  -dry-run \
+  -manifest ../tmp/sqlite-source-manifest.json
+```
 
 ## 环境变量
 
@@ -233,14 +295,17 @@ cp .env.example .env
 ```env
 APP_BASE_PATH=
 HTTP_PORT=1309
+TRUSTED_PROXIES=
 SQLITE_PATH=data/soulcourse.db
 MEDIA_UPLOAD_DIR=data/uploads
+HTTP_MAX_BODY_BYTES=1048576
 CORS_ALLOWED_ORIGINS=http://localhost:5712,http://127.0.0.1:5712
 FRONTEND_DIST_DIR=
 VITE_API_BASE_URL=
-ADMIN_TOKEN=replace-me-for-admin-panel
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=admin_dev_password
+ADMIN_PASSWORD_HASH=
+METRICS_TOKEN=
 JWT_SECRET=replace-me-before-production
 EMAIL_VERIFICATION_COOLDOWN_SECONDS=60
 EMAIL_VERIFICATION_EMAIL_HOURLY_LIMIT=5
@@ -254,6 +319,9 @@ EMAIL_VERIFICATION_MAX_VALIDATION_ATTEMPTS=5
 - 如果要挂到 `/subject314`，写成 `APP_BASE_PATH=/subject314`。
 - 前端默认会根据 `APP_BASE_PATH` 生成路由和 API 地址，一般不需要单独设置 `VITE_API_BASE_URL`。
 - `VITE_API_BASE_URL` 只在你想把 API 单独指到其他地址时再填写。
+- 生产环境使用独立管理员 Cookie 会话登录后台，必须配置 `ADMIN_EMAIL` 与 `ADMIN_PASSWORD_HASH`，不要配置明文 `ADMIN_PASSWORD`。
+- 生产环境必须配置至少 32 字符的 `JWT_SECRET` 和 `METRICS_TOKEN`；`METRICS_TOKEN` 用于保护 `/metrics`，可用 `openssl rand -hex 32` 生成。
+- 生产环境必须配置 `TRUSTED_PROXIES`，只填写你实际信任的 Nginx/负载均衡 IP 或 CIDR。同机 Nginx 通常为 `127.0.0.1,::1`；反向代理需传 `X-Forwarded-For`、`X-Forwarded-Proto` 和 `X-Request-ID`，应用会据此正确计算限流 IP 并发送 HSTS。
 
 其中 `FRONTEND_DIST_DIR` 留空时，后端会自动尝试：
 
@@ -261,6 +329,31 @@ EMAIL_VERIFICATION_MAX_VALIDATION_ATTEMPTS=5
 - `../frontend/dist`
 
 二进制运行时，如果已经使用 `go run ./cmd/release` 构建了内嵌前端版本，可以不再单独提供 `FRONTEND_DIST_DIR`。
+
+## 生产服务安装
+
+生产服务必须使用专用账号和权限为 `0600` 的环境文件，不再从 root 目录读取明文管理员密码：
+
+```bash
+sudo useradd --system --home /var/lib/soulcourse --shell /usr/sbin/nologin soulcourse
+sudo install -d -o soulcourse -g soulcourse -m 0700 /var/lib/soulcourse /var/lib/soulcourse/uploads
+sudo install -d -o root -g soulcourse -m 0750 /etc/soulcourse
+sudo install -o root -g soulcourse -m 0600 .env.production.example /etc/soulcourse/soulcourse.env
+sudo install -o root -g root -m 0644 deploy/soulcourse.service /etc/systemd/system/soulcourse.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now soulcourse
+```
+
+编辑 `/etc/soulcourse/soulcourse.env`，替换所有占位值后再启动。`deploy/run-production.sh` 会先执行 `deploy/preflight.sh`，弱密钥、明文管理员密码、SMTP 缺失、PostgreSQL/S3 配置错误、缺少前端产物或 root 运行都会阻止服务启动。migration 与广东数据闸门必须在重启应用前独立执行。
+
+发布后必须同时验证存活和依赖就绪：
+
+```bash
+curl -fsS http://127.0.0.1:1309/healthz
+curl -fsS http://127.0.0.1:1309/readyz
+```
+
+本地/测试默认使用 SQLite；生产配置强制使用 PostgreSQL。PostgreSQL repository 已通过真实 PostgreSQL 16 的注册、会话、发帖、评论、互动、举报、私信、通知和列表集成测试，两次 SQLite 快照迁移演练也已通过；托管实例最终切换、完整 HTTP/管理后台回归、PITR 和性能验收仍是上线闸门。
 
 ## 说明
 

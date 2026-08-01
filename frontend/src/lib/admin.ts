@@ -39,6 +39,11 @@ export interface AdminRecordPayload {
   workflow?: WorkflowEntry[]
   permissionPreset?: PermissionPresetId
   permissions?: string[]
+  reportReason?: string
+  reportDetail?: string
+  reporterName?: string
+  reportCount?: number
+  reportedAt?: string
   [key: string]: unknown
 }
 
@@ -68,7 +73,6 @@ export interface AdminState {
 export interface AdminSettings {
   apiBase: string
   adminEmail: string
-  adminToken: string
 }
 
 export interface AdminSession {
@@ -76,11 +80,27 @@ export interface AdminSession {
   mode?: 'online'
   email?: string
   signedAt?: string
+  role?: 'super_admin' | 'content_editor' | 'moderator'
+  permissions?: string[]
 }
 
 export interface AdminLoginResponse {
   email: string
-  token: string
+  role: 'super_admin' | 'content_editor' | 'moderator'
+  permissions: string[]
+  expiresAt: string
+}
+
+export class AdminApiError extends Error {
+  status?: number
+  code?: string
+
+  constructor(message: string, options: { status?: number; code?: string } = {}) {
+    super(message)
+    this.name = 'AdminApiError'
+    this.status = options.status
+    this.code = options.code
+  }
 }
 
 export interface AdminEmailConfig {
@@ -109,6 +129,23 @@ export interface AdminAuditLog {
   detail: string
   actor: string
   createdAt: string
+}
+
+export interface AdminContentReport {
+  id: number
+  reporterId: number
+  reporterName: string
+  targetType: string
+  targetId: number
+  targetTitle: string
+  targetAuthor: string
+  reason: string
+  detail: string
+  status: 'open' | 'actioned' | 'dismissed'
+  resolutionNote: string
+  resolvedAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface AdminApiRecord {
@@ -268,14 +305,12 @@ export function loadAdminSettings(): AdminSettings {
     return {
       apiBase: (raw.apiBase || defaultApiBase()).replace(/\/$/, ''),
       adminEmail: raw.adminEmail || '',
-      adminToken: raw.adminToken || '',
     }
   } catch {
     localStorage.removeItem(SETTINGS_KEY)
     return {
       apiBase: defaultApiBase(),
       adminEmail: '',
-      adminToken: '',
     }
   }
 }
@@ -461,6 +496,7 @@ export function workflowActionsFor(item: AdminRecord, moduleId: EditableModuleId
   }
 
   const isAdvice = moduleId === 'advice'
+  const isReportedPost = moduleId === 'posts' && Boolean(item.payload?.reportReason || item.payload?.reportCount)
   const publishedCopy = isAdvice ? '建议笔记会进入前台建议库展示。' : '内容会进入前台可见状态。'
   const actions = {
     待审核: [
@@ -475,7 +511,15 @@ export function workflowActionsFor(item: AdminRecord, moduleId: EditableModuleId
     ],
     已上架: [
       workflowAction('start-review', '发起复核', '需复核', '已上架内容进入风险复核队列，复核期间保留记录。', '说明触发复核的政策、数据或投诉原因。', 'warning', true),
-      workflowAction('unpublish-content', '确认下架', '下架', '内容从前台可见列表移除。', '请写明下架原因。', 'danger', true),
+      workflowAction(
+        'unpublish-content',
+        isReportedPost ? '隐藏内容' : '确认下架',
+        '下架',
+        isReportedPost ? '被举报内容会从前台隐藏，并保留记录供后续复核。' : '内容从前台可见列表移除。',
+        isReportedPost ? '请写明举报核验结果、隐藏原因和恢复条件。' : '请写明下架原因。',
+        'danger',
+        true,
+      ),
     ],
     退回修改: [
       workflowAction('submit-content-review', '重新提交审核', '待审核', '修改完成后重新进入初审队列。', '说明本次修改了哪些问题。', 'primary'),
@@ -484,7 +528,15 @@ export function workflowActionsFor(item: AdminRecord, moduleId: EditableModuleId
       workflowAction('submit-content-review', '提交审核', '待审核', '草稿进入初审队列，等待运营审核。', '说明提交审核的范围或重点。', 'primary'),
     ],
     下架: [
-      workflowAction('submit-content-review', '整改后提交审核', '待审核', '整改后的内容重新进入初审队列。', '说明整改内容和重新上架依据。', 'primary', true),
+      workflowAction(
+        'submit-content-review',
+        isReportedPost ? '恢复展示审核' : '整改后提交审核',
+        '待审核',
+        isReportedPost ? '内容先进入审核队列，审核通过后才会重新展示。' : '整改后的内容重新进入初审队列。',
+        isReportedPost ? '说明误报依据、整改结果或恢复展示条件。' : '说明整改内容和重新上架依据。',
+        'primary',
+        true,
+      ),
     ],
   }
   return actions[item.status as keyof typeof actions] || []
@@ -531,13 +583,16 @@ function normalizeApiBase(apiBase: string) {
 
 async function requestAdmin<T>(apiBase: string, path: string, options?: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; data?: unknown; token?: string; headers?: Record<string, string> }) {
   try {
+    const method = options?.method || 'GET'
+    const csrfToken = readCookie('scf_admin_csrf')
     const response = await axios.request<ApiEnvelope<T>>({
       baseURL: normalizeApiBase(apiBase),
       url: path,
-      method: options?.method || 'GET',
+      method,
       data: options?.data,
+      withCredentials: true,
       headers: {
-        ...(options?.token ? { 'X-Admin-Token': options.token } : {}),
+        ...(csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method) ? { 'X-CSRF-Token': csrfToken } : {}),
         ...(options?.headers || {}),
       },
     })
@@ -552,16 +607,35 @@ async function requestAdmin<T>(apiBase: string, path: string, options?: { method
         throw new Error(`验证码请求受限，请在 ${retryText}后重试（本小时剩余 ${responseError.hourlyRemaining ?? 0} 次）`)
       }
       const message = responseError?.message || error.message
-      throw new Error(message)
+      throw new AdminApiError(message, { status: error.response?.status, code: responseError?.code })
     }
     throw error
   }
+}
+
+export function isAdminUnauthorizedError(error: unknown) {
+  return error instanceof AdminApiError && error.status === 401
+}
+
+function readCookie(name: string): string {
+  const prefix = `${encodeURIComponent(name)}=`
+  return document.cookie
+    .split(';')
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(prefix))
+    ?.slice(prefix.length) ?? ''
 }
 
 export async function adminLogin(apiBase: string, email: string, password: string) {
   return requestAdmin<AdminLoginResponse>(apiBase, '/admin/login', {
     method: 'POST',
     data: { email, password },
+  })
+}
+
+export async function adminLogout(apiBase: string) {
+  await requestAdmin<{ signedOut: boolean }>(apiBase, '/admin/logout', {
+    method: 'POST',
   })
 }
 
@@ -577,6 +651,26 @@ export async function fetchAdminContent(apiBase: string, token: string) {
 export async function fetchAdminAuditLogs(apiBase: string, token: string) {
   const data = await requestAdmin<{ logs: AdminAuditLog[] }>(apiBase, '/admin/audit-logs', { token })
   return data.logs || []
+}
+
+export async function fetchAdminReports(apiBase: string, status = 'open') {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  const data = await requestAdmin<{ reports: AdminContentReport[] }>(apiBase, `/admin/reports${query}`)
+  return data.reports || []
+}
+
+export async function moderateAdminReport(apiBase: string, reportId: number, action: 'hide' | 'restore' | 'dismiss', note: string) {
+  return requestAdmin<AdminContentReport>(apiBase, `/admin/reports/${reportId}/moderate`, {
+    method: 'POST',
+    data: { action, note },
+  })
+}
+
+export async function moderateAdminUser(apiBase: string, userId: number, action: 'ban' | 'restore', reason: string) {
+  return requestAdmin<{ banned?: boolean; restored?: boolean; userId: number }>(apiBase, `/admin/users/${userId}/${action}`, {
+    method: 'POST',
+    data: { reason },
+  })
 }
 
 export async function saveAdminContent(apiBase: string, token: string, moduleId: EditableModuleId, item: AdminRecord) {

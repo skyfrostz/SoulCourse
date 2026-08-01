@@ -1,38 +1,50 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
-import { ChevronLeft, ExternalLink, FileText, MapPin, Newspaper, Search, ShieldCheck } from '@lucide/vue'
+import { ChevronLeft, ExternalLink, FileText, MapPin, RefreshCcw, Search, ShieldCheck } from '@lucide/vue'
 import { useRouter } from 'vue-router'
-import { apiDataEnabled, fetchPublishedContent, type PublishedContentRecord } from '../lib/api'
-import {
-  knowledgeTakeaways,
-  mediaInsightSources,
-  nationalOfficialSources,
-  provinceKnowledge,
-} from '../lib/knowledgeBase'
+import { apiDataEnabled, fetchProvinceCoverage, fetchPublishedPolicies, type ProvinceCoverage, type RealDataRecord } from '../lib/api'
+import { knowledgeTakeaways } from '../lib/knowledgeBase'
+import { useOnlineState } from '../composables/useOnlineState'
 
 const router = useRouter()
+const { isOffline } = useOnlineState()
 const keyword = ref('')
-const activeRegion = ref<'全部' | '华北' | '东北' | '华东' | '华中' | '华南' | '西南' | '西北' | '港澳台'>('全部')
-const regions = ['全部', '华北', '东北', '华东', '华中', '华南', '西南', '西北', '港澳台'] as const
-const policyRecordsQuery = useQuery({
-  queryKey: ['content', 'policies'],
-  queryFn: () => fetchPublishedContent('policies'),
+const activeRegion = ref<'全部' | '已复核' | '待复核'>('全部')
+const regions = ['全部', '已复核', '待复核'] as const
+const provinceCoverageQuery = useQuery({
+  queryKey: ['real-data', 'provinces'],
+  queryFn: fetchProvinceCoverage,
   enabled: apiDataEnabled,
+})
+const policyRecordsQuery = useQuery({
+  queryKey: ['real-data', 'policies'],
+  queryFn: fetchPublishedPolicies,
+  enabled: apiDataEnabled,
+})
+const hasKnowledgeError = computed(() => provinceCoverageQuery.isError.value || policyRecordsQuery.isError.value)
+const isKnowledgeLoading = computed(() => provinceCoverageQuery.isLoading.value || policyRecordsQuery.isLoading.value)
+const verifiedSourceRecords = computed(() => {
+  const seen = new Set<string>()
+  return (policyRecordsQuery.data.value ?? []).filter((record) => {
+    if (record.coverageStatus !== 'verified' || !record.source.url || seen.has(record.source.url)) return false
+    seen.add(record.source.url)
+    return true
+  }).slice(0, 8)
 })
 
 const filteredProvinces = computed(() => {
   const q = keyword.value.trim()
-  return provinceKnowledge.filter((item) => {
-    const matchRegion = activeRegion.value === '全部' || item.region === activeRegion.value
+  return (provinceCoverageQuery.data.value ?? []).filter((item) => {
+    const matchRegion =
+      activeRegion.value === '全部' ||
+      (activeRegion.value === '已复核' && item.coverageStatus === 'verified') ||
+      (activeRegion.value === '待复核' && item.coverageStatus !== 'verified')
     const searchable = [
       item.province,
-      item.region,
-      item.authority,
-      item.reformMode,
-      item.status,
-      item.focus.join(''),
-      item.checklist.join(''),
+      item.coverageStatus,
+      item.methodology,
+      String(item.dataYear),
     ].join('')
     return matchRegion && (!q || searchable.includes(q))
   })
@@ -42,11 +54,8 @@ function provincePath(province: string) {
   return `/knowledge/${encodeURIComponent(province)}`
 }
 
-function reformLabel(mode: string) {
-  if (mode === '3+3') return '3+3 新高考'
-  if (mode === '3+1+2') return '3+1+2 新高考'
-  if (mode === 'special') return '特殊招生'
-  return '传统/过渡'
+function coverageLabel(status: ProvinceCoverage['coverageStatus']) {
+  return status === 'verified' ? '已复核数据' : '暂无已复核数据'
 }
 
 function provinceTone(index: number) {
@@ -54,10 +63,9 @@ function provinceTone(index: number) {
 }
 
 const modeCount = computed(() => ({
-  newGaokao: provinceKnowledge.filter((item) => item.reformMode === '3+3' || item.reformMode === '3+1+2').length,
-  traditional: provinceKnowledge.filter((item) => item.reformMode === 'traditional').length,
-  special: provinceKnowledge.filter((item) => item.reformMode === 'special').length,
-  provinces: provinceKnowledge.length,
+  verified: (provinceCoverageQuery.data.value ?? []).filter((item) => item.coverageStatus === 'verified').length,
+  pending: (provinceCoverageQuery.data.value ?? []).filter((item) => item.coverageStatus !== 'verified').length,
+  provinces: provinceCoverageQuery.data.value?.length ?? 0,
 }))
 
 const policyImagesByScope = computed(() => {
@@ -66,8 +74,6 @@ const policyImagesByScope = computed(() => {
     const image = firstRecordImage(record)
     if (!image) return
     if (record.scope) map.set(record.scope, image)
-    const province = provinceKnowledge.find((item) => record.title.includes(item.province))
-    if (province) map.set(province.province, image)
   })
   return map
 })
@@ -81,8 +87,9 @@ const policyImagesByUrl = computed(() => {
   return map
 })
 
-function firstRecordImage(record: PublishedContentRecord) {
-  return Array.isArray(record.payload?.imageUrls) ? record.payload.imageUrls.find(Boolean) || '' : ''
+function firstRecordImage(record: RealDataRecord) {
+  void record
+  return ''
 }
 
 function provinceCover(province: string) {
@@ -91,6 +98,11 @@ function provinceCover(province: string) {
 
 function sourceCover(url: string) {
   return policyImagesByUrl.value.get(url) || ''
+}
+
+function refetchKnowledge() {
+  void provinceCoverageQuery.refetch()
+  void policyRecordsQuery.refetch()
 }
 </script>
 
@@ -102,17 +114,16 @@ function sourceCover(url: string) {
       <div>
         <div class="breadcrumb">工具 / 全国政策与舆情信息库</div>
         <h1>全国招生考试与选科知识库</h1>
-        <p>把全国省级考试院入口、招生政策核对点、选考科目要求和媒体评论线索集中到一个页面。政策判断以官方来源为准，媒体内容用于理解趋势和用户焦虑。</p>
+        <p>把已接入 API 的省份覆盖状态、招生政策、选考科目要求和来源线索集中到一个页面。政策判断以官方来源和已复核记录为准。</p>
         <div class="overview-metrics">
           <span><ShieldCheck :size="18" /> {{ modeCount.provinces }} 个省级条目</span>
-          <span>{{ modeCount.newGaokao }} 个新高考/改革省份</span>
-          <span>{{ modeCount.traditional }} 个需按最新公告核对</span>
-          <span>{{ modeCount.special }} 个港澳台特殊招生入口</span>
+          <span>{{ modeCount.verified }} 个已复核</span>
+          <span>{{ modeCount.pending }} 个暂无已复核数据</span>
         </div>
       </div>
       <label class="knowledge-search">
         <Search :size="18" />
-        <input v-model="keyword" placeholder="搜索省份、考试院、物化、志愿、专项计划..." />
+        <input v-model="keyword" placeholder="搜索省份、年份、方法说明..." />
       </label>
     </section>
 
@@ -128,22 +139,37 @@ function sourceCover(url: string) {
       </button>
     </nav>
 
-    <section class="knowledge-source-grid">
-      <article v-for="source in nationalOfficialSources" :key="source.url" class="knowledge-source-card">
-        <img v-if="sourceCover(source.url)" class="knowledge-source-cover" :src="sourceCover(source.url)" :alt="source.title" />
+    <section v-if="!isKnowledgeLoading && !hasKnowledgeError && verifiedSourceRecords.length" class="knowledge-source-grid">
+      <article v-for="record in verifiedSourceRecords" :key="record.id" class="knowledge-source-card">
+        <img v-if="sourceCover(record.source.url)" class="knowledge-source-cover" :src="sourceCover(record.source.url)" :alt="record.title" />
         <small>官方来源</small>
-        <h2>{{ source.title }}</h2>
-        <p>{{ source.summary }}</p>
+        <h2>{{ record.title }}</h2>
+        <p>{{ record.summary || record.methodology }}</p>
         <div class="mini-tag-row">
-          <span v-for="tag in source.tags" :key="tag"># {{ tag }}</span>
+          <span v-for="tag in record.tags" :key="tag"># {{ tag }}</span>
         </div>
-        <a :href="source.url" target="_blank" rel="noreferrer">
-          {{ source.publisher }} <ExternalLink :size="14" />
+        <a :href="record.source.url" target="_blank" rel="noreferrer">
+          {{ record.source.name }} <ExternalLink :size="14" />
         </a>
       </article>
     </section>
 
-    <section class="province-knowledge-grid xhs-province-waterfall">
+    <section v-if="hasKnowledgeError || isOffline" class="empty-state public-page-state">
+      <RefreshCcw :size="30" />
+      <h2>{{ isOffline ? '当前网络不可用' : '政策资料加载失败' }}</h2>
+      <p>{{ isOffline ? '恢复网络后再重试，已复核数据不会被模拟内容替代。' : '服务暂时不可用，已复核数据没有同步成功。请重试后再查看政策结论。' }}</p>
+      <div class="state-action-row">
+        <button class="primary-wide compact" type="button" @click="refetchKnowledge">重试</button>
+      </div>
+    </section>
+
+    <section v-else-if="isKnowledgeLoading" class="empty-state public-page-state">
+      <RefreshCcw class="state-spin" :size="30" />
+      <h2>正在加载政策资料</h2>
+      <p>请稍等，正在同步省份覆盖状态和已复核政策记录。</p>
+    </section>
+
+    <section v-else class="province-knowledge-grid xhs-province-waterfall">
       <article
         v-for="(item, index) in filteredProvinces"
         :key="item.province"
@@ -158,35 +184,38 @@ function sourceCover(url: string) {
               :alt="`${item.province}资料包图片`"
             />
             <div>
-              <small><MapPin :size="14" /> {{ item.region }}</small>
+              <small><MapPin :size="14" /> {{ item.coverageStatus === 'verified' ? '官方已复核' : '待复核' }}</small>
               <strong>{{ item.province }}</strong>
-              <span>{{ reformLabel(item.reformMode) }}</span>
+              <span>{{ coverageLabel(item.coverageStatus) }}</span>
             </div>
-            <em>{{ item.focus[0] }}</em>
+            <em>{{ item.dataYear }} 年</em>
           </div>
           <div class="province-note-body">
             <div class="province-card-head">
-              <span>{{ item.authority }}</span>
-              <small>{{ item.checklist.length }} 项核对</small>
+              <span>{{ item.coverageStatus === 'verified' ? '已发布结构化数据' : '不展示模拟结论' }}</span>
+              <small>{{ item.recordsCount }} 条记录</small>
             </div>
-            <p>{{ item.status }}</p>
+            <p>{{ item.methodology || '暂无已复核数据，页面不会生成本地模拟政策或专业要求结论。' }}</p>
             <div class="mini-tag-row">
-              <span v-for="tag in item.focus" :key="tag"># {{ tag }}</span>
+              <span># {{ item.coverageStatus === 'verified' ? '已复核' : '待复核' }}</span>
+              <span># {{ item.dataYear }}</span>
             </div>
             <div class="province-checklist">
-              <span v-for="task in item.checklist.slice(0, 3)" :key="task">
-                <FileText :size="14" /> {{ task }}
-              </span>
+              <span><FileText :size="14" /> 仅展示 API 返回的覆盖状态和已复核记录</span>
             </div>
           </div>
         </RouterLink>
         <footer class="province-note-footer">
           <RouterLink :to="provincePath(item.province)">查看资料包</RouterLink>
-          <a :href="item.portalUrl" target="_blank" rel="noreferrer" @click.stop>
-            官方入口 <ExternalLink :size="14" />
-          </a>
+          <span>{{ item.coverageStatus === 'verified' ? '可查看已复核文件' : '暂无已复核文件' }}</span>
         </footer>
       </article>
+    </section>
+
+    <section v-if="!isKnowledgeLoading && !hasKnowledgeError && !filteredProvinces.length" class="empty-state">
+      <FileText :size="30" />
+      <h2>暂无匹配的已复核数据</h2>
+      <p>请调整筛选；本页不会根据本地静态清单生成省份结论。</p>
     </section>
 
     <section class="knowledge-review-band">
@@ -197,14 +226,10 @@ function sourceCover(url: string) {
         </ul>
       </div>
       <div class="media-source-stack">
-        <article v-for="source in mediaInsightSources" :key="source.url">
-          <small><Newspaper :size="14" /> {{ source.publisher }}</small>
-          <h3>{{ source.title }}</h3>
-          <p>{{ source.summary }}</p>
-          <div class="mini-tag-row">
-            <span v-for="tag in source.tags" :key="tag"># {{ tag }}</span>
-          </div>
-          <a :href="source.url" target="_blank" rel="noreferrer">查看原文 <ExternalLink :size="14" /></a>
+        <article>
+          <small><FileText :size="14" /> 数据边界</small>
+          <h3>只发布可追溯记录</h3>
+          <p>政策标题、摘要、年份、适用范围、采集方法和来源链接均来自已发布 API；缺少复核记录时明确显示空状态。</p>
         </article>
       </div>
     </section>

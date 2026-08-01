@@ -1,0 +1,58 @@
+name: Production Release Gates
+
+on:
+  workflow_dispatch:
+    inputs:
+      guangdong_data_year:
+        description: Verified Guangdong dataset year
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-release-gates
+  cancel-in-progress: false
+
+jobs:
+  managed-postgres:
+    name: Managed PostgreSQL migration and data gate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      DATABASE_URL: ${{ secrets.PRODUCTION_MIGRATION_DATABASE_URL }}
+      GUANGDONG_DATA_YEAR: ${{ inputs.guangdong_data_year }}
+    steps:
+      - name: Checkout exact release revision
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.5'
+          cache-dependency-path: backend/go.sum
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Require protected production database secret
+        run: test -n "$DATABASE_URL"
+
+      - name: Install pinned goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@v3.27.3
+
+      - name: Apply migrations and validate official Guangdong data
+        run: GOOSE_BIN="$(go env GOPATH)/bin/goose" deploy/migrate-production.sh
+
+      - name: Record gate summary
+        run: |
+          {
+            printf '### Production database gate passed\n'
+            printf -- '- Revision: %s\n' "$GITHUB_SHA"
+            printf -- '- Guangdong data year: %s\n' "$GUANGDONG_DATA_YEAR"
+          } >> "$GITHUB_STEP_SUMMARY"

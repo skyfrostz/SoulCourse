@@ -5,17 +5,23 @@ import (
 	"errors"
 	"net/http"
 
+	"subject-choice-forum/backend/internal/http/middleware"
+
 	"github.com/gin-gonic/gin"
 )
 
 type envelope gin.H
 
 func ok(c *gin.Context, data any) {
-	c.JSON(http.StatusOK, envelope{"data": data})
+	c.JSON(http.StatusOK, successEnvelope(c, data))
+}
+
+func okWithMeta(c *gin.Context, data any, extraMeta envelope) {
+	c.JSON(http.StatusOK, successEnvelopeWithMeta(c, data, extraMeta))
 }
 
 func created(c *gin.Context, data any) {
-	c.JSON(http.StatusCreated, envelope{"data": data})
+	c.JSON(http.StatusCreated, successEnvelope(c, data))
 }
 
 func fail(c *gin.Context, status int, code string, message string) {
@@ -24,8 +30,9 @@ func fail(c *gin.Context, status int, code string, message string) {
 
 func failWithDetails(c *gin.Context, status int, code string, message string, details envelope) {
 	errorPayload := envelope{
-		"code":    code,
-		"message": message,
+		"code":      code,
+		"message":   message,
+		"requestId": middleware.GetRequestID(c),
 	}
 	for key, value := range details {
 		errorPayload[key] = value
@@ -33,6 +40,25 @@ func failWithDetails(c *gin.Context, status int, code string, message string, de
 	c.JSON(status, envelope{
 		"error": errorPayload,
 	})
+}
+
+func successEnvelope(c *gin.Context, data any) envelope {
+	return successEnvelopeWithMeta(c, data, nil)
+}
+
+func successEnvelopeWithMeta(c *gin.Context, data any, extraMeta envelope) envelope {
+	meta := envelope{}
+	if requestID := middleware.GetRequestID(c); requestID != "" {
+		meta["requestId"] = requestID
+	}
+	for key, value := range extraMeta {
+		meta[key] = value
+	}
+	payload := envelope{"data": data}
+	if len(meta) > 0 {
+		payload["meta"] = meta
+	}
+	return payload
 }
 
 func failNotFoundOrInternal(c *gin.Context, err error, resource string) {

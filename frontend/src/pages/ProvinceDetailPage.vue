@@ -2,82 +2,126 @@
 import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ChevronLeft, ExternalLink, FileText, ShieldCheck } from '@lucide/vue'
+import { ChevronLeft, ExternalLink, FileText, RefreshCcw, ShieldCheck } from '@lucide/vue'
 import PostCard from '../components/PostCard.vue'
-import { fetchPostCollection } from '../lib/api'
-import { provinceKnowledge } from '../lib/knowledgeBase'
-import { createProvincePolicyDocuments, policyDocumentPath } from '../lib/policyDocuments'
-import { requirementData } from '../lib/realData'
+import { fetchPostCollection, fetchProvinceCoverage, fetchPublishedPolicies } from '../lib/api'
+import { policyDocumentPath } from '../lib/policyDocuments'
+import { useOnlineState } from '../composables/useOnlineState'
 
 const route = useRoute()
 const router = useRouter()
+const { isOffline } = useOnlineState()
 const provinceName = computed(() => decodeURIComponent(String(route.params.province ?? '')))
-const province = computed(() => provinceKnowledge.find((item) => item.province === provinceName.value))
-const requirement = computed(() => requirementData.find((item) => item.province === provinceName.value))
+const coverageQuery = useQuery({
+  queryKey: ['real-data', 'provinces'],
+  queryFn: fetchProvinceCoverage,
+})
+const policyRecordsQuery = useQuery({
+  queryKey: ['real-data', 'policies', provinceName],
+  queryFn: fetchPublishedPolicies,
+})
+const coverage = computed(() => coverageQuery.data.value?.find((item) => item.province === provinceName.value))
+const hasCoverageRecord = computed(() => Boolean(coverage.value))
 const provincePostsQuery = useQuery({
   queryKey: computed(() => ['province-posts', provinceName.value]),
   queryFn: () => fetchPostCollection({ province: provinceName.value, sort: 'latest', limit: 50 }),
-  enabled: computed(() => Boolean(province.value)),
+  enabled: computed(() => hasCoverageRecord.value),
 })
 const nationalPostsQuery = useQuery({
   queryKey: ['province-posts', '全国'],
   queryFn: () => fetchPostCollection({ province: '全国', sort: 'latest', limit: 20 }),
 })
 const provincePosts = computed(() => {
-  if (!province.value) return []
+  if (!hasCoverageRecord.value) return []
   const focused = provincePostsQuery.data.value ?? []
-  const byPolicy = (nationalPostsQuery.data.value ?? []).filter(
-    (post) =>
-      post.tags.some((tag) => province.value?.focus.some((focus) => tag.includes(focus) || focus.includes(tag))),
+  const byPolicy = (nationalPostsQuery.data.value ?? []).filter((post) =>
+    post.tags.some((tag) => tag.includes(provinceName.value) || provinceName.value.includes(tag)),
   )
   const merged = new Map([...focused, ...byPolicy].map((post) => [post.id, post]))
   return Array.from(merged.values()).slice(0, 12)
 })
 
-const fileCards = computed(() => (province.value ? createProvincePolicyDocuments(province.value) : []))
+const fileCards = computed(() =>
+  (policyRecordsQuery.data.value ?? [])
+    .filter((record) =>
+      record.coverageStatus === 'verified' &&
+      (record.scope === provinceName.value || record.title.includes(provinceName.value)),
+    )
+    .slice(0, 12),
+)
+const hasProvinceError = computed(() => coverageQuery.isError.value || policyRecordsQuery.isError.value)
+
+function refetchProvinceData() {
+  void coverageQuery.refetch()
+  void policyRecordsQuery.refetch()
+  void provincePostsQuery.refetch()
+  void nationalPostsQuery.refetch()
+}
 </script>
 
 <template>
   <main class="detail-page">
     <button class="back-link" @click="router.push('/knowledge')"><ChevronLeft :size="17" /> 返回政策库</button>
 
-    <section v-if="province" class="province-detail-hero">
-      <div>
-        <div class="breadcrumb">政策库 / {{ province.region }} / {{ province.province }}</div>
-        <h1>{{ province.province }}招生考试与选科文件</h1>
-        <p>{{ province.status }}</p>
-        <div class="overview-metrics">
-          <span><ShieldCheck :size="18" /> {{ province.reformMode }}</span>
-          <span v-for="tag in province.focus" :key="tag"># {{ tag }}</span>
-        </div>
-      </div>
-      <a :href="province.portalUrl" target="_blank" rel="noreferrer" class="primary-wide compact">
-        官方入口 <ExternalLink :size="15" />
-      </a>
+    <section v-if="coverageQuery.isLoading.value" class="empty-state public-page-state">
+      <RefreshCcw class="state-spin" :size="30" />
+      <h1>正在加载省份资料</h1>
+      <p>请稍等，正在同步 {{ provinceName }} 的 API 覆盖状态。</p>
     </section>
 
-    <section v-if="province" class="province-file-grid">
-      <article v-for="file in fileCards" :key="file.title" class="province-file-card">
+    <section v-else-if="hasProvinceError || isOffline" class="empty-state detail-empty-state public-page-state">
+      <FileText :size="30" />
+      <h1>{{ isOffline ? '当前网络不可用' : '省份资料加载失败' }}</h1>
+      <p>{{ isOffline ? `恢复网络后再重试，当前不会推断 ${provinceName} 的数据状态。` : `服务暂时不可用，暂时不能确认 ${provinceName} 的已复核数据状态。` }}</p>
+      <div class="state-action-row">
+        <button class="primary-wide compact" type="button" @click="refetchProvinceData">重试</button>
+        <RouterLink class="ghost-button compact" to="/knowledge">返回政策库</RouterLink>
+      </div>
+    </section>
+
+    <template v-else>
+    <section v-if="hasCoverageRecord" class="province-detail-hero">
+      <div>
+        <div class="breadcrumb">政策库 / API 覆盖状态 / {{ provinceName }}</div>
+        <h1>{{ provinceName }}招生考试与选科文件</h1>
+        <p>{{ coverage?.methodology || '暂无已复核方法说明。' }}</p>
+        <div class="overview-metrics">
+          <span><ShieldCheck :size="18" /> {{ coverage?.coverageStatus === 'verified' ? '已复核' : '暂无已复核数据' }}</span>
+          <span>{{ coverage?.dataYear }} 年</span>
+          <span>{{ coverage?.recordsCount }} 条记录</span>
+        </div>
+      </div>
+      <span class="primary-wide compact">{{ coverage?.coverageStatus === 'verified' ? '可查看已复核文件' : '不展示模拟结论' }}</span>
+    </section>
+
+    <section v-if="hasCoverageRecord && fileCards.length" class="province-file-grid">
+      <article v-for="file in fileCards" :key="file.id" class="province-file-card">
         <small><FileText :size="15" /> {{ file.type }}</small>
         <h2>{{ file.title }}</h2>
-        <p>{{ file.abstract }}</p>
+        <p>{{ file.summary || file.methodology }}</p>
         <div class="province-file-actions">
-          <RouterLink :to="policyDocumentPath(province.province, file.id)">
+          <RouterLink :to="policyDocumentPath(provinceName, file.id)">
             <FileText :size="15" /> 查看网页化全文
           </RouterLink>
-          <a :href="file.downloadUrl" target="_blank" rel="noreferrer">
+          <a :href="file.source.url || file.url" target="_blank" rel="noreferrer">
             官方/下载入口 <ExternalLink :size="14" />
           </a>
         </div>
       </article>
     </section>
 
-    <section v-if="province" class="province-content-grid">
+    <section v-else-if="hasCoverageRecord && !policyRecordsQuery.isLoading.value" class="empty-state">
+      <FileText :size="30" />
+      <h2>暂无已复核政策文件</h2>
+      <p>当前省份还没有通过 API 发布的已复核政策记录，本页不会生成模板文件。</p>
+    </section>
+
+    <section v-if="hasCoverageRecord" class="province-content-grid">
       <article>
-        <h2>文件内容速读</h2>
+        <h2>数据覆盖说明</h2>
         <ul>
-          <li v-for="item in province.checklist" :key="item">{{ item }}</li>
-          <li v-if="requirement">{{ requirement.note }}</li>
+          <li v-if="coverage?.coverageStatus === 'verified'">{{ coverage.methodology }}</li>
+          <li v-else>暂无已复核数据，本页不会生成本地模拟政策或专业要求结论。</li>
         </ul>
       </article>
       <article>
@@ -91,10 +135,10 @@ const fileCards = computed(() => (province.value ? createProvincePolicyDocuments
       </article>
     </section>
 
-    <section v-if="province" class="feed-panel province-post-panel">
+    <section v-if="hasCoverageRecord" class="feed-panel province-post-panel">
       <div class="feed-toolbar">
         <div class="feed-tabs">
-          <button class="active">{{ province.province }}相关笔记</button>
+          <button class="active">{{ provinceName }}相关笔记</button>
         </div>
         <button class="sort-button" type="button" @click="router.push('/')">回首页看更多</button>
       </div>
@@ -108,7 +152,8 @@ const fileCards = computed(() => (province.value ? createProvincePolicyDocuments
 
     <section v-else class="empty-state">
       <h2>没有找到该省份</h2>
-      <p>请返回政策库，从省份卡片进入。</p>
+      <p>当前 API 未返回该省份覆盖记录。请返回政策库，从已接入省份卡片进入。</p>
     </section>
+    </template>
   </main>
 </template>

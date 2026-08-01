@@ -1,0 +1,70 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.001 }] } }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "targets": [{ "expr": "sum(rate(soulcourse_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(soulcourse_http_requests_total[5m])), 0.001)", "refId": "A" }],
+      "title": "5xx ratio (5m)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 0 },
+      "id": 2,
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(soulcourse_http_request_duration_seconds_bucket{method=~\"GET|HEAD\"}[5m])))", "legendFormat": "read p95", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(soulcourse_http_request_duration_seconds_bucket{method=~\"POST|PUT|PATCH|DELETE\"}[5m])))", "legendFormat": "write p95", "refId": "B" }
+      ],
+      "title": "API latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 0 },
+      "id": 3,
+      "targets": [{ "expr": "sum(rate(soulcourse_http_requests_total[5m]))", "legendFormat": "RPS", "refId": "A" }],
+      "title": "Request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 4,
+      "targets": [
+        { "expr": "histogram_quantile(0.75, sum by (le, name) (rate(soulcourse_web_vital_value_bucket[30m])))", "legendFormat": "{{name}} p75", "refId": "A" }
+      ],
+      "title": "Web Vitals p75",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 5,
+      "targets": [
+        { "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))", "legendFormat": "CPU", "refId": "A" },
+        { "expr": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "legendFormat": "memory", "refId": "B" }
+      ],
+      "title": "Host utilization",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["soulcourse", "public-beta"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "SoulCourse Public Beta Readiness",
+  "uid": "soulcourse-public-beta",
+  "version": 1
+}

@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query'
-import { computed, ref } from 'vue'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Bookmark, Brain, ChevronLeft, MessageSquare, PenLine, Settings, Sparkles, UserCheck, UserPlus, UserRound, Users } from '@lucide/vue'
+import { Bookmark, Brain, ChevronLeft, Mail, MessageSquare, PenLine, RefreshCcw, Settings, Sparkles, UserCheck, UserPlus, UserRound, Users, WifiOff } from '@lucide/vue'
 import PostCard from '../components/PostCard.vue'
-import { fetchProfile } from '../lib/api'
+import { fetchProfile, toggleFollowAuthor } from '../lib/api'
 import { roleLabels, subjectLabels, trackLabels } from '../lib/labels'
-import { useForumStore, type FollowProfile } from '../stores/forum'
+import { useForumStore } from '../stores/forum'
 import type { Role } from '../types/forum'
 
 const route = useRoute()
 const router = useRouter()
 const forumStore = useForumStore()
+const queryClient = useQueryClient()
 const activeProfileTab = ref<'posts' | 'comments' | 'favorites'>(route.hash === '#favorites' ? 'favorites' : 'posts')
+const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
 
 const profileName = computed(() => decodeURIComponent(String(route.params.name ?? '')))
 const isCurrentUser = computed(() => forumStore.currentUser?.nickname === profileName.value)
@@ -54,16 +56,16 @@ const profile = computed(() => {
 })
 
 const favoritePosts = computed(() => isCurrentUser.value ? (accountProfile.value?.favorites ?? forumStore.getFavoritePosts(allPosts.value)) : [])
-const followingList = computed(() => forumStore.getFollowing(profile.value.name))
-const followerList = computed(() => forumStore.getFollowers(profile.value.name))
-const isFollowing = computed(() => forumStore.isUserFollowing(profile.value.name))
-const profileAsFollow = computed<FollowProfile>(() => ({
-  name: profile.value.name,
-  role: profile.value.role,
-  province: profile.value.province,
-  grade: profile.value.grade,
-  followedAt: new Date().toISOString(),
-}))
+const followingList = computed(() => accountProfile.value?.following ?? [])
+const followerList = computed(() => accountProfile.value?.followers ?? [])
+const isFollowing = computed(() => accountProfile.value?.viewerFollowing ?? false)
+const followMutation = useMutation({
+  mutationFn: () => toggleFollowAuthor(profile.value.name),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['profile'] })
+    queryClient.invalidateQueries({ queryKey: ['posts'] })
+  },
+})
 const commentCards = computed(() =>
   accountProfile.value?.comments.map((item) => ({ comment: item.comment, postId: item.comment.postId, postTitle: item.postTitle })) ?? [],
 )
@@ -102,14 +104,46 @@ function inferGrade(name: string) {
 }
 
 function toggleFollow() {
-  forumStore.toggleUserFollow(profileAsFollow.value)
+  if (forumStore.requireAuth()) followMutation.mutate()
 }
+
+function updateOnlineState() {
+  isOffline.value = typeof navigator !== 'undefined' ? !navigator.onLine : false
+}
+
+onMounted(() => {
+  window.addEventListener('online', updateOnlineState)
+  window.addEventListener('offline', updateOnlineState)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('online', updateOnlineState)
+  window.removeEventListener('offline', updateOnlineState)
+})
 </script>
 
 <template>
   <main class="detail-page user-profile-page">
     <button class="back-link" @click="router.back()"><ChevronLeft :size="17" /> 返回上一页</button>
 
+    <section v-if="accountProfileQuery.isLoading.value" class="empty-state public-page-state">
+      <RefreshCcw class="state-spin" :size="34" />
+      <h1>正在加载用户主页</h1>
+      <p>请稍等，正在同步公开帖子、评论和关注信息。</p>
+    </section>
+
+    <section v-else-if="isOffline || accountProfileQuery.isError.value || !accountProfile" class="empty-state detail-empty-state public-page-state">
+      <WifiOff v-if="isOffline" :size="34" />
+      <UserRound v-else :size="34" />
+      <h1>{{ isOffline ? '当前网络不可用' : '用户主页加载失败' }}</h1>
+      <p>{{ isOffline ? '恢复网络后可以重新加载这个用户主页。' : '这个用户可能不存在，或页面数据暂时无法同步。' }}</p>
+      <div class="state-action-row">
+        <button v-if="!isOffline" class="primary-wide compact" type="button" @click="accountProfileQuery.refetch()">重试</button>
+        <RouterLink class="ghost-button compact" to="/">返回首页</RouterLink>
+      </div>
+    </section>
+
+    <template v-else>
     <section class="user-profile-hero">
       <div class="user-profile-avatar">{{ profile.name.slice(0, 1) }}</div>
       <div>
@@ -129,7 +163,10 @@ function toggleFollow() {
         <RouterLink v-if="isCurrentUser" class="write-button" to="/settings">
           <Settings :size="16" /> 编辑资料
         </RouterLink>
-        <button v-else class="follow-button" :class="{ active: isFollowing }" type="button" @click="toggleFollow">
+        <RouterLink v-else-if="accountProfile" class="write-button" :to="`/messages?to=${encodeURIComponent(profile.name)}`">
+          <Mail :size="16" /> 私信
+        </RouterLink>
+        <button v-if="!isCurrentUser" class="follow-button" :class="{ active: isFollowing }" type="button" :disabled="followMutation.isPending.value" @click="toggleFollow">
           <component :is="isFollowing ? UserCheck : UserPlus" :size="16" />
           {{ isFollowing ? '已关注' : '关注' }}
         </button>
@@ -320,5 +357,6 @@ function toggleFollow() {
         <p>把重要经验帖先收藏，后续可以作为自己的选科档案。</p>
       </div>
     </section>
+    </template>
   </main>
 </template>

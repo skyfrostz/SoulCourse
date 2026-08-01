@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { authStorageKey, fetchMyProfile, fetchNotifications, markAllNotificationsRead, markNotificationRead } from '../lib/api'
+import { authStorageKey, fetchMyProfile, fetchNotifications, logout as apiLogout, markAllNotificationsRead, markNotificationRead, registerUnauthorizedHandler } from '../lib/api'
 import type {
   AppNotification,
   AuthSession,
@@ -65,16 +65,18 @@ export const useForumStore = defineStore('forum', {
     session: readStoredSession(),
     authOpen: false,
     authRedirect: '',
+    authMessage: '',
     publishOpen: false,
     publishCategory: 'question' as Category,
     refreshHint: '',
     notifications: [] as AppNotification[],
+    notificationReadError: '',
     choiceProfile: readStoredChoiceProfile(),
     localEngagement: readStoredLocalEngagement(),
     detailPanel: { kind: 'none' } as DetailPanel,
   }),
   getters: {
-    isAuthed: (state) => Boolean(state.session?.token),
+    isAuthed: (state) => Boolean(state.session?.user) && (!state.session?.expiresAt || new Date(state.session.expiresAt).getTime() > Date.now()),
     currentUser: (state) => state.session?.user ?? null,
     unreadNotificationCount: (state) => state.notifications.filter((notification) => !notification.readAt).length,
   },
@@ -129,14 +131,19 @@ export const useForumStore = defineStore('forum', {
     },
     async markNotificationsRead(ids?: number[]) {
       if (!this.isAuthed) return
-      if (ids?.length) {
-        await Promise.all(ids.map((id) => markNotificationRead(id)))
-        this.notifications = this.notifications.map((item) => ids.includes(item.id) ? { ...item, readAt: new Date().toISOString() } : item)
-        return
+      this.notificationReadError = ''
+      try {
+        if (ids?.length) {
+          await Promise.all(ids.map((id) => markNotificationRead(id)))
+          this.notifications = this.notifications.map((item) => ids.includes(item.id) ? { ...item, readAt: new Date().toISOString() } : item)
+          return
+        }
+        await markAllNotificationsRead()
+        const readAt = new Date().toISOString()
+        this.notifications = this.notifications.map((item) => ({ ...item, readAt: item.readAt ?? readAt }))
+      } catch {
+        this.notificationReadError = '通知状态同步失败，请稍后重试。'
       }
-      await markAllNotificationsRead()
-      const readAt = new Date().toISOString()
-      this.notifications = this.notifications.map((item) => ({ ...item, readAt: item.readAt ?? readAt }))
     },
     setPage(page: number) {
       this.page = Math.max(1, page)
@@ -149,14 +156,27 @@ export const useForumStore = defineStore('forum', {
       this.session = session
       localStorage.setItem(authStorageKey, JSON.stringify(session))
       this.authOpen = false
+      this.authMessage = ''
       void this.hydrateAccount()
     },
-    logout() {
+    async logout() {
       this.session = null
       this.notifications = []
       localStorage.removeItem(choiceProfileStorageKey)
       this.choiceProfile = readStoredChoiceProfile(true)
       localStorage.removeItem(authStorageKey)
+      this.authRedirect = ''
+      try {
+        await apiLogout()
+      } catch {
+        // Local sign-out must still complete if the current cookie session is already invalid.
+      }
+    },
+    handleUnauthorized() {
+      if (!this.session) return
+      void this.logout()
+      this.authMessage = '登录状态已失效，请重新登录后继续。'
+      this.openAuth()
     },
     openAuth(redirect = '') {
       this.authRedirect = redirect
@@ -164,6 +184,7 @@ export const useForumStore = defineStore('forum', {
     },
     requireAuth(redirect = '') {
       if (!this.isAuthed) {
+        if (this.session) this.authMessage = '登录状态已过期，请重新登录后继续。'
         this.openAuth(redirect)
         return false
       }
@@ -184,7 +205,7 @@ export const useForumStore = defineStore('forum', {
       try {
         const [profile, notifications] = await Promise.all([fetchMyProfile(), fetchNotifications()])
         this.choiceProfile = profile.choiceProfile
-        this.notifications = notifications
+        this.notifications = notifications.items
         localStorage.setItem(choiceProfileStorageKey, JSON.stringify(profile.choiceProfile))
       } catch {
         this.notifications = []
@@ -198,8 +219,7 @@ export const useForumStore = defineStore('forum', {
     },
     hydratePost(post: Post): Post {
       const engagement = this.localEngagement.posts[post.id] ?? {}
-      const graphFollowing = this.currentUser ? this.isUserFollowing(post.authorName) : undefined
-      return { ...post, ...engagement, viewerFollowing: graphFollowing ?? engagement.viewerFollowing ?? post.viewerFollowing }
+      return { ...post, ...engagement, viewerFollowing: post.viewerFollowing }
     },
     hydratePosts(posts: Post[]): Post[] {
       return posts.map((post) => this.hydratePost(post))
@@ -210,49 +230,6 @@ export const useForumStore = defineStore('forum', {
     },
     getActualCommentCount(postId: number, fallback: Comment[] = []): number {
       return this.getPostComments(postId, fallback).length
-    },
-    currentFollowProfile(): FollowProfile | null {
-      if (!this.currentUser) return null
-      return {
-        name: this.currentUser.nickname,
-        role: this.currentUser.role,
-        province: this.currentUser.province,
-        grade: this.currentUser.grade,
-        followedAt: new Date().toISOString(),
-      }
-    },
-    isUserFollowing(name: string): boolean {
-      const currentName = this.currentUser?.nickname
-      if (!currentName) return false
-      return Boolean(this.localEngagement.follows.following[currentName]?.[name])
-    },
-    getFollowing(name: string): FollowProfile[] {
-      return Object.values(this.localEngagement.follows.following[name] ?? {}).sort((a, b) => b.followedAt.localeCompare(a.followedAt))
-    },
-    getFollowers(name: string): FollowProfile[] {
-      return Object.values(this.localEngagement.follows.followers[name] ?? {}).sort((a, b) => b.followedAt.localeCompare(a.followedAt))
-    },
-    setUserFollow(profile: FollowProfile, active: boolean): boolean {
-      const current = this.currentFollowProfile()
-      if (!current || current.name === profile.name) return false
-      const currentFollowing = { ...(this.localEngagement.follows.following[current.name] ?? {}) }
-      const targetFollowers = { ...(this.localEngagement.follows.followers[profile.name] ?? {}) }
-      if (active) {
-        const stampedProfile = { ...profile, followedAt: new Date().toISOString() }
-        currentFollowing[profile.name] = stampedProfile
-        targetFollowers[current.name] = { ...current, followedAt: stampedProfile.followedAt }
-      } else {
-        delete currentFollowing[profile.name]
-        delete targetFollowers[current.name]
-      }
-      this.localEngagement.follows.following[current.name] = currentFollowing
-      this.localEngagement.follows.followers[profile.name] = targetFollowers
-      persistLocalEngagement(this.localEngagement)
-      return active
-    },
-    toggleUserFollow(profile: FollowProfile): boolean {
-      if (!this.requireAuth()) return false
-      return this.setUserFollow(profile, !this.isUserFollowing(profile.name))
     },
     getFavoritePosts(fallbackPosts: Post[] = []): Post[] {
       const merged = new Map<number, Post>()
@@ -268,12 +245,23 @@ export const useForumStore = defineStore('forum', {
   },
 })
 
+registerUnauthorizedHandler(() => {
+  const forumStore = useForumStore()
+  forumStore.handleUnauthorized()
+})
+
 export const choiceProfileStorageKey = 'scf_choice_profile'
 
 function readStoredSession(): AuthSession | null {
   try {
     const raw = localStorage.getItem(authStorageKey)
-    return raw ? (JSON.parse(raw) as AuthSession) : null
+    if (!raw) return null
+    const session = JSON.parse(raw) as AuthSession
+    if (session.expiresAt && new Date(session.expiresAt).getTime() <= Date.now()) {
+      localStorage.removeItem(authStorageKey)
+      return null
+    }
+    return session
   } catch {
     localStorage.removeItem(authStorageKey)
     return null
@@ -313,10 +301,6 @@ function readStoredChoiceProfile(reset = false): ChoiceProfile {
 }
 
 export const localEngagementStorageKey = 'scf_local_engagement'
-
-function persistLocalEngagement(state: LocalEngagementState) {
-  localStorage.setItem(localEngagementStorageKey, JSON.stringify(state))
-}
 
 function readStoredLocalEngagement(): LocalEngagementState {
   try {

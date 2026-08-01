@@ -17,8 +17,13 @@ export function usePostComments(postId: () => number) {
 
   const submitMutation = useMutation({
     mutationFn: (content: string) => createComment(postId(), content),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['post-detail', postId()] })
+    onSuccess: (created) => {
+      queryClient.setQueryData<{ post: unknown; comments: typeof comments.value }>(
+        ['post-detail', postId()],
+        (current) => current && !current.comments.some((comment) => comment.id === created.id)
+          ? { ...current, comments: [...current.comments, created] }
+          : current,
+      )
       queryClient.invalidateQueries({ queryKey: ['posts'] })
     },
   })

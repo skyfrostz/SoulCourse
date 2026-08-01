@@ -43,7 +43,7 @@ func TestSendEmailVerificationCodeReturnsRateLimitMetadata(t *testing.T) {
 	forumService := service.NewForumService(rateLimitRepositoryStub{}, config.Config{
 		JWTSecret: "test-secret",
 	}, nil)
-	forumHandler := NewForumHandler(forumService, nil)
+	forumHandler := NewForumHandler(forumService, nil, false, "", "")
 	router := gin.New()
 	router.POST("/api/v1/auth/email-verification-code", forumHandler.SendEmailVerificationCode)
 

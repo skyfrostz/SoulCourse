@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"subject-choice-forum/backend/internal/config"
@@ -300,4 +302,221 @@ func countString(values []string, target string) int {
 		}
 	}
 	return count
+}
+
+func TestSQLiteSchemaSeedsConstraintsAndPragmas(t *testing.T) {
+	dir := t.TempDir()
+	db, err := NewSQLiteDB(config.Config{SQLitePath: filepath.Join(dir, "app.db"), MediaUploadDir: filepath.Join(dir, "uploads")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var foreignKeys, busyTimeout int
+	if err := db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("PRAGMA busy_timeout").Scan(&busyTimeout); err != nil {
+		t.Fatal(err)
+	}
+	if foreignKeys != 1 || busyTimeout != 5000 {
+		t.Fatalf("pragmas = foreign_keys:%d busy_timeout:%d", foreignKeys, busyTimeout)
+	}
+	var users, posts, topics int
+	if err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&users); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM posts").Scan(&posts); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM topics").Scan(&topics); err != nil {
+		t.Fatal(err)
+	}
+	if users == 0 || posts == 0 || topics == 0 {
+		t.Fatalf("unexpected seed counts users=%d posts=%d topics=%d", users, posts, topics)
+	}
+	if _, err := db.Exec(`INSERT INTO post_likes(user_id, post_id, created_at) VALUES (999999, 1, 'now')`); err == nil {
+		t.Fatal("foreign key violation was accepted")
+	}
+	if _, err := db.Exec(`INSERT INTO users(email, password_hash, nickname, role, created_at, updated_at) VALUES ('duplicate@example.com','x','a','student','now','now'), ('DUPLICATE@example.com','x','b','student','now','now')`); err == nil {
+		t.Fatal("case-insensitive email duplicate was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "uploads")); err != nil {
+		t.Fatalf("upload directory missing: %v", err)
+	}
+}
+
+func TestSQLiteMigrationRejectsMalformedPayloads(t *testing.T) {
+	dir := t.TempDir()
+	db, err := NewSQLiteDB(config.Config{SQLitePath: filepath.Join(dir, "app.db"), MediaUploadDir: filepath.Join(dir, "uploads")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := sqliteNow()
+	if _, err := db.Exec(`INSERT INTO admin_content_records(id,module,title,status,payload,created_at,updated_at) VALUES ('bad','posts','bad','已上架','{',?,?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	err = backfillPostUserOwnership(db)
+	if err == nil || !strings.Contains(err.Error(), "migrate post ownership") {
+		t.Fatalf("ownership error = %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM admin_content_records WHERE id='bad'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO admin_content_records(id,module,title,status,payload,created_at,updated_at) VALUES ('bad-visibility','posts','bad','待审核','{',?,?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	err = hideNonPublicAdminPosts(db)
+	if err == nil || !strings.Contains(err.Error(), "migrate post visibility") {
+		t.Fatalf("visibility error = %v", err)
+	}
+}
+
+func TestSQLiteDataMigrationsRejectCorruptLegacyRows(t *testing.T) {
+	dir := t.TempDir()
+	db, err := NewSQLiteDB(config.Config{SQLitePath: filepath.Join(dir, "app.db"), MediaUploadDir: filepath.Join(dir, "uploads")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := sqliteNow()
+	post, err := db.Exec(`INSERT INTO posts(author_name,author_role,title,content,track,electives,category,grade,province,created_at,updated_at,tags) VALUES ('x','student','x','x','physics','["chemistry"]','question','高一','广东',?,?,?)`, now, now, "{")
+	if err != nil {
+		t.Fatal(err)
+	}
+	postID, err := post.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO topics(slug,topic_tag,title,summary,created_at) VALUES ('unknown-slug','topic-x','unknown','unknown',?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO topic_posts(topic_id,post_id) VALUES ((SELECT id FROM topics WHERE slug='unknown-slug'),?)`, postID); err != nil {
+		t.Fatal(err)
+	}
+	if err := backfillTopicTags(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLegacyTopicPostTags(db); err == nil || !strings.Contains(err.Error(), "migrate topic tags") {
+		t.Fatalf("legacy tag error = %v", err)
+	}
+	if err := backfillSubjectPostTags(db); err == nil || !strings.Contains(err.Error(), "migrate subject tags") {
+		t.Fatalf("subject tag error = %v", err)
+	}
+}
+
+func TestSQLiteHelpersHandleInvalidAndClosedDatabase(t *testing.T) {
+	dir := t.TempDir()
+	db, err := NewSQLiteDB(config.Config{SQLitePath: filepath.Join(dir, "app.db"), MediaUploadDir: filepath.Join(dir, "uploads")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := initSQLiteSchema(db); err == nil {
+		t.Fatal("schema initialization on closed database succeeded")
+	}
+	if _, err := NewSQLiteDB(config.Config{SQLitePath: filepath.Join(dir, "app2.db"), MediaUploadDir: filepath.Join(dir, "uploads2")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "uploads2")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNewSQLiteDBRejectsBlockedUploadDirectory(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "uploads")
+	if err := os.WriteFile(blocker, []byte("not a directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := NewSQLiteDB(config.Config{
+		SQLitePath:     filepath.Join(dir, "app.db"),
+		MediaUploadDir: filepath.Join(blocker, "images"),
+	})
+	if db != nil || err == nil {
+		t.Fatalf("NewSQLiteDB() = %v, %v; want upload directory error", db, err)
+	}
+}
+
+func TestNewSQLiteDBRejectsCorruptDatabaseFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "corrupt.db")
+	if err := os.WriteFile(path, []byte("this is not sqlite"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := NewSQLiteDB(config.Config{
+		SQLitePath:     path,
+		MediaUploadDir: filepath.Join(dir, "uploads"),
+	})
+	if db != nil || err == nil {
+		t.Fatalf("NewSQLiteDB() = %v, %v; want corrupt database error", db, err)
+	}
+}
+
+func TestInitSQLiteSchemaRejectsIncompatibleExistingUsersTable(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "legacy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE users (id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := initSQLiteSchema(db); err == nil {
+		t.Fatal("initSQLiteSchema unexpectedly accepted an incompatible users table")
+	}
+}
+
+func TestInitSQLiteSchemaPropagatesSeedFailure(t *testing.T) {
+	dir := t.TempDir()
+	db, err := NewSQLiteDB(config.Config{
+		SQLitePath:     filepath.Join(dir, "app.db"),
+		MediaUploadDir: filepath.Join(dir, "uploads"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`DELETE FROM posts`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		CREATE TRIGGER reject_seed BEFORE INSERT ON posts
+		BEGIN
+			SELECT RAISE(FAIL, 'seed rejected');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+	err = initSQLiteSchema(db)
+	if err == nil || !strings.Contains(err.Error(), "seed sqlite database") || !strings.Contains(err.Error(), "seed rejected") {
+		t.Fatalf("initSQLiteSchema() error = %v, want wrapped seed failure", err)
+	}
+}
+
+func TestSQLiteMigrationHelpersRejectInvalidInputAndClosedDB(t *testing.T) {
+	for _, payload := range []map[string]any{
+		{},
+		{"id": nil},
+		{"id": "not-a-number"},
+		{"id": -1},
+	} {
+		if got := migrationPayloadID(payload, "id"); got != 0 {
+			t.Fatalf("migrationPayloadID(%v) = %d, want 0", payload, got)
+		}
+	}
+
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "closed.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSQLiteColumn(db, "users", "nickname", "TEXT"); err == nil {
+		t.Fatal("ensureSQLiteColumn unexpectedly succeeded on a closed database")
+	}
 }

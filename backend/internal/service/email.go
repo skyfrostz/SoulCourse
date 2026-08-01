@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html/template"
 	"mime"
@@ -86,8 +87,8 @@ var verificationEmailHTMLTemplate = template.Must(template.New("verification-ema
           <tr>
             <td style="padding:32px;">
               <div style="font-size:13px;font-weight:800;line-height:1.5;color:#0f9f7a;">账号安全</div>
-              <h1 style="margin:6px 0 0;font-size:28px;font-weight:800;line-height:1.3;color:#0f172a;">邮箱验证码</h1>
-              <p style="margin:12px 0 0;font-size:15px;line-height:1.7;color:#475569;">你正在注册选科π账号，请在验证页面输入以下 6 位验证码。</p>
+              <h1 style="margin:6px 0 0;font-size:28px;font-weight:800;line-height:1.3;color:#0f172a;">账号安全验证码</h1>
+              <p style="margin:12px 0 0;font-size:15px;line-height:1.7;color:#475569;">你正在进行选科π账号安全验证，请在验证页面输入以下 6 位验证码。</p>
 
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin:24px 0;">
                 <tr>
@@ -127,6 +128,44 @@ func NewSMTPEmailSender(cfg config.Config, logger *logx.Logger) *SMTPEmailSender
 
 func (s *SMTPEmailSender) Enabled() bool {
 	return s.cfg.SMTPEnabled()
+}
+
+// Check verifies the configured transport and credentials without creating a message.
+func (s *SMTPEmailSender) Check(ctx context.Context) error {
+	if !s.Enabled() {
+		return errors.New("SMTP is not configured")
+	}
+	addr := net.JoinHostPort(s.cfg.SMTPHost, fmt.Sprintf("%d", s.cfg.SMTPPort))
+	conn, err := s.dial(ctx, addr)
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer conn.Close()
+
+	var client *smtp.Client
+	if s.cfg.SMTPUseTLS {
+		tlsConn := tls.Client(conn, &tls.Config{ServerName: s.cfg.SMTPHost, MinVersion: tls.VersionTLS12})
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			return fmt.Errorf("negotiate TLS: %w", err)
+		}
+		client, err = smtp.NewClient(tlsConn, s.cfg.SMTPHost)
+	} else {
+		client, err = smtp.NewClient(conn, s.cfg.SMTPHost)
+		if err == nil && s.cfg.SMTPStartTLS {
+			err = client.StartTLS(&tls.Config{ServerName: s.cfg.SMTPHost, MinVersion: tls.VersionTLS12})
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("create secure SMTP client: %w", err)
+	}
+	defer client.Quit()
+	if err := client.Auth(smtp.PlainAuth("", s.cfg.SMTPUsername, s.cfg.SMTPPassword, s.cfg.SMTPHost)); err != nil {
+		return fmt.Errorf("authenticate: %w", err)
+	}
+	if err := client.Noop(); err != nil {
+		return fmt.Errorf("NOOP: %w", err)
+	}
+	return nil
 }
 
 func (s *SMTPEmailSender) SendVerificationCode(ctx context.Context, to string, code string, ttl time.Duration) error {

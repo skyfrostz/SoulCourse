@@ -130,6 +130,35 @@ export interface AccountProfile {
   posts: Post[]
   comments: ProfileComment[]
   favorites: Post[]
+  viewerFollowing: boolean
+  following: FollowProfile[]
+  followers: FollowProfile[]
+}
+
+export interface FollowProfile {
+  name: string
+  role: Role
+  province: string
+  grade: string
+  followedAt: string
+}
+
+export interface DirectMessage {
+  id: number
+  senderId: number
+  senderName: string
+  recipientId: number
+  recipientName: string
+  content: string
+  createdAt: string
+  readAt?: string
+}
+
+export interface Conversation {
+  user: User
+  lastMessage: string
+  lastMessageAt: string
+  unreadCount: number
 }
 
 export type NotificationType = 'comment' | 'like' | 'favorite' | 'follow' | 'profile' | 'policy' | 'system'
@@ -147,7 +176,33 @@ export interface AppNotification {
 
 export interface AuthSession {
   user: User
-  token: string
+  token?: string
+  expiresAt: string
+}
+
+export interface AccountSession {
+  id: number
+  createdAt: string
+  expiresAt: string
+  revokedAt?: string
+  current: boolean
+}
+
+export interface ContentReport {
+  id: number
+  reporterId: number
+  reporterName: string
+  targetType: string
+  targetId: number
+  targetTitle: string
+  targetAuthor: string
+  reason: string
+  detail: string
+  status: string
+  resolutionNote: string
+  resolvedAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Topic {

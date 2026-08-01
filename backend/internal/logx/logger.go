@@ -1,6 +1,7 @@
 package logx
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +29,7 @@ type Logger struct {
 	out      io.Writer
 	minLevel Level
 	colorful bool
+	json     bool
 }
 
 func New(out io.Writer, minLevel Level) *Logger {
@@ -35,6 +37,14 @@ func New(out io.Writer, minLevel Level) *Logger {
 		out:      out,
 		minLevel: minLevel,
 		colorful: detectColorSupport(out),
+	}
+}
+
+func NewJSON(out io.Writer, minLevel Level) *Logger {
+	return &Logger{
+		out:      out,
+		minLevel: minLevel,
+		json:     true,
 	}
 }
 
@@ -47,8 +57,8 @@ func (l *Logger) Log(level Level, module string, action string, fields ...Field)
 		return
 	}
 
-	line := buildLine(level, module, action, fields...)
-	if l.colorful {
+	line := buildLine(level, module, action, l.json, fields...)
+	if l.colorful && !l.json {
 		line = levelColor(level) + line + "\033[0m"
 	}
 
@@ -73,7 +83,11 @@ func (l *Logger) Error(module string, action string, fields ...Field) {
 	l.Log(LevelError, module, action, fields...)
 }
 
-func buildLine(level Level, module string, action string, fields ...Field) string {
+func buildLine(level Level, module string, action string, jsonFormat bool, fields ...Field) string {
+	if jsonFormat {
+		return buildJSONLine(level, module, action, fields...)
+	}
+
 	var builder strings.Builder
 	builder.WriteString("[时间]")
 	builder.WriteString(time.Now().Format("2006-01-02 15:04:05"))
@@ -95,6 +109,40 @@ func buildLine(level Level, module string, action string, fields ...Field) strin
 	}
 
 	return builder.String()
+}
+
+func buildJSONLine(level Level, module string, action string, fields ...Field) string {
+	entry := map[string]any{
+		"time":   time.Now().UTC().Format(time.RFC3339Nano),
+		"level":  levelName(level),
+		"module": fallback(module, "system"),
+		"action": fallback(action, "log"),
+	}
+	for _, field := range fields {
+		key := strings.TrimSpace(field.Key)
+		if key == "" || field.Value == nil {
+			continue
+		}
+		entry[key] = sanitizeLogValue(key, field.Value)
+	}
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Sprintf(`{"time":%q,"level":"error","module":"logger","action":"encode_failed","error":%q}`, time.Now().UTC().Format(time.RFC3339Nano), err.Error())
+	}
+	return string(encoded)
+}
+
+func levelName(level Level) string {
+	switch level {
+	case LevelDebug:
+		return "debug"
+	case LevelWarn:
+		return "warn"
+	case LevelError:
+		return "error"
+	default:
+		return "info"
+	}
 }
 
 func levelLabel(level Level) string {
@@ -131,6 +179,25 @@ func formatValue(value any) string {
 		return typed.Error()
 	default:
 		return fmt.Sprint(value)
+	}
+}
+
+func sanitizeLogValue(key string, value any) any {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
+	if strings.Contains(normalized, "password") ||
+		strings.Contains(normalized, "token") ||
+		strings.Contains(normalized, "cookie") ||
+		strings.Contains(normalized, "secret") ||
+		strings.Contains(normalized, "authorization") {
+		return "[REDACTED]"
+	}
+	switch typed := value.(type) {
+	case time.Duration:
+		return typed.Round(time.Millisecond).String()
+	case error:
+		return typed.Error()
+	default:
+		return value
 	}
 }
 

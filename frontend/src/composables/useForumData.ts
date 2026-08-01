@@ -1,11 +1,23 @@
 import { useQuery } from '@tanstack/vue-query'
-import { computed } from 'vue'
-import { apiDataEnabled, fetchInsights, fetchPosts, fetchTopics } from '../lib/api'
+import { computed, ref, watch } from 'vue'
+import { apiDataEnabled, fetchFeedPage, fetchInsights, fetchTopics } from '../lib/api'
 import { useForumStore } from '../stores/forum'
 import type { Post } from '../types/forum'
 
 export function useForumData() {
   const forumStore = useForumStore()
+  const pageCursors = ref<Record<number, string | undefined>>({ 1: undefined })
+  const feedIdentity = computed(() => JSON.stringify({
+    track: forumStore.filter.track,
+    subjects: forumStore.filter.subjects,
+    category: forumStore.filter.category,
+    keyword: forumStore.filter.keyword,
+    sort: forumStore.filter.sort,
+  }))
+
+  watch(feedIdentity, () => {
+    pageCursors.value = { 1: undefined }
+  })
 
   const postsQuery = useQuery({
     queryKey: computed(() => [
@@ -18,7 +30,21 @@ export function useForumData() {
       forumStore.page,
       forumStore.session?.user.id ?? 'guest',
     ]),
-    queryFn: () => fetchPosts(forumStore.filter, forumStore.page, forumStore.pageSize),
+    queryFn: async () => {
+      const page = forumStore.page
+      const result = await fetchFeedPage(
+        forumStore.filter,
+        page,
+        forumStore.pageSize,
+        pageCursors.value[page],
+      )
+      if (result.hasMore && result.nextCursor) {
+        pageCursors.value[page + 1] = result.nextCursor
+      } else {
+        delete pageCursors.value[page + 1]
+      }
+      return result
+    },
     enabled: apiDataEnabled,
   })
 
@@ -35,7 +61,7 @@ export function useForumData() {
   })
 
   const posts = computed(() => {
-    const apiPosts = postsQuery.data.value ?? []
+    const apiPosts = postsQuery.data.value?.items ?? []
     const merged = new Map<number, Post>()
     apiPosts.forEach((post) => {
       merged.set(post.id, forumStore.hydratePost(post))
@@ -45,10 +71,25 @@ export function useForumData() {
 
   return {
     posts,
+    hasMore: computed(() => postsQuery.data.value?.hasMore ?? false),
     insights: computed(() => insightsQuery.data.value ?? []),
     topics: computed(() => topicsQuery.data.value ?? []),
     source: computed(() => 'api' as const),
     isLoading: computed(() => postsQuery.isLoading.value && !postsQuery.data.value),
-    hasError: computed(() => postsQuery.isError.value || insightsQuery.isError.value || topicsQuery.isError.value),
+    hasError: computed(() => postsQuery.isError.value),
+    observationLoading: computed(() =>
+      (insightsQuery.isLoading.value && !insightsQuery.data.value) ||
+      (topicsQuery.isLoading.value && !topicsQuery.data.value),
+    ),
+    observationHasError: computed(() => insightsQuery.isError.value || topicsQuery.isError.value),
+    refetchObservations: () => {
+      void insightsQuery.refetch()
+      void topicsQuery.refetch()
+    },
+    refetch: () => {
+      void postsQuery.refetch()
+      void insightsQuery.refetch()
+      void topicsQuery.refetch()
+    },
   }
 }

@@ -1,0 +1,18 @@
+[Unit]
+Description=SoulCourse expired upload cleanup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=soulcourse
+Group=soulcourse
+EnvironmentFile=/etc/soulcourse/soulcourse.env
+ExecStart=/opt/soulcourse/bin/soulcourse-cleanup-uploads -execute -limit 500
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/soulcourse

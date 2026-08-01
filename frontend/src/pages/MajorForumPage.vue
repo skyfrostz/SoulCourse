@@ -1,24 +1,30 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
-import { Bookmark, ChevronLeft, MessageCircle, PenLine, Search, ShieldCheck, Sparkles, ThumbsUp, TrendingUp } from '@lucide/vue'
+import { Bookmark, ChevronLeft, MessageCircle, PenLine, RefreshCcw, Search, ShieldCheck, Sparkles, ThumbsUp, TrendingUp, WifiOff } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
 import { categoryLabels } from '../lib/labels'
-import { fetchPostCollection } from '../lib/api'
-import { majorRequirements } from '../lib/majorRequirements'
-import { findMajorRequirement, formatCompactCount, getMajorForumStats, hydrateMajorPosts, majorForumPath } from '../lib/majorForum'
+import { fetchPostCollection, fetchPublishedRequirements } from '../lib/api'
+import { findMajorRequirement, formatCompactCount, getMajorForumStats, hydrateMajorPosts, majorForumPath, toMajorRequirementCard } from '../lib/majorForum'
 import { useForumStore } from '../stores/forum'
+import { useOnlineState } from '../composables/useOnlineState'
 import type { Category, Post } from '../types/forum'
 
 const route = useRoute()
 const router = useRouter()
 const forumStore = useForumStore()
+const { isOffline } = useOnlineState()
 const activeCategory = ref<Category | 'all'>('all')
 const activeSort = ref<'hot' | 'latest' | 'saved'>('hot')
 
 const majorName = computed(() => decodeURIComponent(String(route.params.major ?? '')))
-const requirement = computed(() => findMajorRequirement(majorName.value))
+const requirementsQuery = useQuery({
+  queryKey: ['real-data', 'requirements'],
+  queryFn: fetchPublishedRequirements,
+})
+const requirementCards = computed(() => (requirementsQuery.data.value ?? []).map(toMajorRequirementCard))
+const requirement = computed(() => findMajorRequirement(majorName.value, requirementCards.value))
 const displayMajor = computed(() => requirement.value?.major ?? majorName.value)
 const forumPostsQuery = useQuery({
   queryKey: computed(() => ['major-posts', displayMajor.value]),
@@ -42,14 +48,15 @@ const sortedPosts = computed(() => {
   return [...filtered].sort((a, b) => {
     if (activeSort.value === 'latest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     if (activeSort.value === 'saved') return b.favoritesCount - a.favoritesCount
-    return b.likesCount + b.commentsCount * 4 + b.favoritesCount * 2 - (a.likesCount + a.commentsCount * 4 + a.favoritesCount * 2)
+    return b.likesCount + b.commentsCount + b.favoritesCount - (a.likesCount + a.commentsCount + a.favoritesCount)
   })
 })
 
 const relatedMajors = computed(() => {
   const current = requirement.value
-  if (!current) return majorRequirements.slice(0, 8)
-  return majorRequirements
+  const records = requirementCards.value
+  if (!current) return records.filter((item) => item.major !== displayMajor.value).slice(0, 8)
+  return records
     .filter((item) => item.category === current.category && item.major !== current.major)
     .slice(0, 10)
 })
@@ -61,7 +68,7 @@ function openPublish(category: Category = 'question') {
 }
 
 function postScore(post: Post) {
-  return post.likesCount + post.commentsCount * 4 + post.favoritesCount * 2
+  return post.likesCount + post.commentsCount + post.favoritesCount
 }
 </script>
 
@@ -90,6 +97,10 @@ function postScore(post: Post) {
         <small><ShieldCheck :size="16" /> 选科要求摘要</small>
         <h2>{{ requirement?.requiredSubjects.join(' / ') ?? '等待补充官方目录' }}</h2>
         <p><strong>建议组合：</strong>{{ requirement?.suggestedCombination ?? '先按目标院校目录核对' }}</p>
+        <p v-if="isOffline || requirementsQuery.isError.value">
+          {{ isOffline ? '当前网络不可用，官方要求尚未同步；社区讨论仍可查看。' : '专业要求接口暂时不可用，本页不生成模拟结论。' }}
+        </p>
+        <p v-else-if="!requirementsQuery.isLoading.value && !requirement">暂无已复核数据，请以目标院校最新目录为准。</p>
         <a v-if="requirement?.sourceUrl" :href="requirement.sourceUrl" target="_blank" rel="noreferrer">
           查看官方口径
         </a>
@@ -126,7 +137,19 @@ function postScore(post: Post) {
 
     <section class="major-forum-layout">
       <div>
-        <div v-if="sortedPosts.length" class="feed-grid major-forum-feed">
+        <section v-if="forumPostsQuery.isLoading.value" class="empty-state">
+          <RefreshCcw class="state-spin" :size="30" />
+          <h2>正在加载相关帖子</h2>
+          <p>正在同步 {{ displayMajor }} 的最新讨论。</p>
+        </section>
+        <section v-else-if="isOffline || forumPostsQuery.isError.value" class="empty-state">
+          <WifiOff v-if="isOffline" :size="30" />
+          <MessageCircle v-else :size="30" />
+          <h2>{{ isOffline ? '当前网络不可用' : '帖子加载失败' }}</h2>
+          <p>{{ isOffline ? '恢复网络后可继续查看专业讨论。' : '后端服务或网络暂时不可用，请稍后重试。' }}</p>
+          <button v-if="!isOffline" class="state-inline-button" type="button" @click="forumPostsQuery.refetch()">重试</button>
+        </section>
+        <div v-else-if="sortedPosts.length" class="feed-grid major-forum-feed">
           <PostCard v-for="post in sortedPosts" :key="post.id" :post="post" />
         </div>
         <section v-else class="empty-state">

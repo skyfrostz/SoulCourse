@@ -4,10 +4,12 @@ import { computed } from 'vue'
 import { ChevronLeft, Eye, Hash, MessageSquare, PenLine, Search, TrendingUp } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { apiDataEnabled, fetchTopic, fetchTopics } from '../lib/api'
+import { useOnlineState } from '../composables/useOnlineState'
 import { useForumStore } from '../stores/forum'
 
 const router = useRouter()
 const forumStore = useForumStore()
+const { isOffline } = useOnlineState()
 const topicsQuery = useQuery({
   queryKey: ['topics-overview', 'real-prompts'],
   queryFn: async () => {
@@ -24,15 +26,6 @@ const topicsQuery = useQuery({
   enabled: apiDataEnabled,
 })
 
-const fallbackQuestions: Record<string, string[]> = {
-  物理方向: ['物理成绩波动大，还适合选物理方向吗？', '目标专业没定，物理方向该怎么留余地？', '物理方向不同组合的学习强度差多少？'],
-  历史方向: ['历史方向填志愿时最容易忽略什么限制？', '偏文科但数学不错，组合该怎么取舍？', '历史方向如何提前核对目标专业要求？'],
-  化学重要性: ['哪些专业明确要求再选化学？', '化学成绩一般，保专业覆盖还是保赋分？', '不同省份对化学的选科要求差别大吗？'],
-  选科时间线: ['高一什么时候开始记录单科排名最有用？', '正式选科前要做哪几轮组合验证？', '选科确认后还能调整吗，成本有多大？'],
-  提分方法: ['选科后应该优先补短板还是放大优势？', '赋分科目怎样判断真实提分空间？', '不同组合如何安排一周复习时间？'],
-  家长选科: ['家长和孩子意见相反时怎么做验证？', '家长该看分数、排名还是专业方向？', '咨询老师前应该准备哪些成绩信息？'],
-}
-
 const topicCards = computed(() => {
   const usedPrompts = new Set<string>()
   return (topicsQuery.data.value ?? []).map(({ topic, posts }, index) => {
@@ -43,12 +36,6 @@ const topicCards = computed(() => {
       usedPrompts.add(label)
       prompts.push({ label, postId: post.id })
       if (prompts.length === 3) break
-    }
-    for (const label of fallbackQuestions[topic.topicTag] ?? []) {
-      if (prompts.length === 3) break
-      if (usedPrompts.has(label)) continue
-      usedPrompts.add(label)
-      prompts.push({ label })
     }
     return { ...topic, tone: index % 4, prompts }
   })
@@ -78,7 +65,28 @@ function openPrompt(slug: string, postId?: number) {
       </button>
     </section>
 
-    <section class="topic-card-grid">
+    <section v-if="topicsQuery.isError.value || isOffline" class="empty-state detail-empty-state">
+      <h2>{{ isOffline ? '当前网络不可用' : '话题暂时无法加载' }}</h2>
+      <p>{{ isOffline ? '恢复网络后再刷新，本站不会用模拟话题替代真实讨论。' : '请检查网络后重试，本站不会用模拟话题替代真实讨论。' }}</p>
+      <button class="primary-wide compact" type="button" @click="topicsQuery.refetch()">重新加载</button>
+    </section>
+
+    <section v-else-if="topicsQuery.isLoading.value" class="topic-card-grid" aria-label="正在加载话题">
+      <article v-for="index in 3" :key="index" class="topic-discovery-card topic-loading-card" aria-hidden="true">
+        <span class="topic-skeleton-line" />
+        <span class="topic-skeleton-line short" />
+        <span class="topic-skeleton-block" />
+      </article>
+    </section>
+
+    <section v-else-if="!topicCards.length" class="empty-state detail-empty-state">
+      <Hash :size="30" />
+      <h2>暂时没有已发布话题</h2>
+      <p>话题会在真实讨论达到发布条件后出现，你可以先发起一个选科问题。</p>
+      <button class="primary-wide compact" type="button" @click="forumStore.openPublish('question')">发起话题</button>
+    </section>
+
+    <section v-else class="topic-card-grid">
       <article
         v-for="topic in topicCards"
         :key="topic.slug"

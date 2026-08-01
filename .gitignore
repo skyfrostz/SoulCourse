@@ -15,8 +15,11 @@ dist/
 backend/internal/http/webdist/dist/*
 !backend/internal/http/webdist/dist/.gitkeep
 coverage/
+frontend/test-results/
+.cache/
 
 tmp/
+**/.tmp/
 logs/
 
 backend/bin/

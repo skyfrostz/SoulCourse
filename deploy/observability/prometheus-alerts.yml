@@ -1,0 +1,91 @@
+groups:
+  - name: soulcourse-public-beta
+    interval: 30s
+    rules:
+      - alert: SoulCourseBackendDown
+        expr: up{job="soulcourse"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: SoulCourse backend is unavailable
+          description: Prometheus has failed to scrape the backend for two minutes.
+
+      - alert: SoulCourseHigh5xxRate
+        expr: |
+          sum(rate(soulcourse_http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(soulcourse_http_requests_total[5m])), 0.001)
+          > 0.001
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Backend 5xx rate exceeds the public-beta gate
+          description: The five-minute 5xx ratio has remained above 0.1%.
+
+      - alert: SoulCourseReadLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(soulcourse_http_request_duration_seconds_bucket{method=~"GET|HEAD"}[5m]))
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Read p95 latency exceeds 300 ms
+          description: Public read latency has remained above the beta target for ten minutes.
+
+      - alert: SoulCourseWriteLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(soulcourse_http_request_duration_seconds_bucket{method=~"POST|PUT|PATCH|DELETE"}[5m]))
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Write p95 latency exceeds 500 ms
+          description: Public write latency has remained above the beta target for ten minutes.
+
+      - alert: SoulCourseWebVitalLCPPoor
+        expr: |
+          histogram_quantile(0.75,
+            sum by (le) (rate(soulcourse_web_vital_value_bucket{name="LCP"}[30m]))
+          ) > 2500
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: LCP p75 exceeds 2.5 seconds
+          description: Anonymous browser telemetry is outside the public-beta LCP target.
+
+      - alert: SoulCourseWebVitalINPPoor
+        expr: |
+          histogram_quantile(0.75,
+            sum by (le) (rate(soulcourse_web_vital_value_bucket{name="INP"}[30m]))
+          ) > 200
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: INP p75 exceeds 200 ms
+          description: Anonymous browser telemetry is outside the public-beta INP target.
+
+      - alert: SoulCourseHostCPUHigh
+        expr: 1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.7
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Application host CPU exceeds 70%
+          description: Node exporter reports sustained CPU usage above the capacity gate.
+
+      - alert: SoulCourseHostMemoryHigh
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.7
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Application host memory exceeds 70%
+          description: Node exporter reports sustained memory usage above the capacity gate.

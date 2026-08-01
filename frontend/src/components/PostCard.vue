@@ -38,11 +38,13 @@ function formatCount(value: number) {
 }
 
 function toggleLike() {
+  if (likeMutation.isPending.value) return
   if (!forumStore.requireAuth()) return
   likeMutation.mutate()
 }
 
 function toggleFavorite() {
+  if (favoriteMutation.isPending.value) return
   if (!forumStore.requireAuth()) return
   favoriteMutation.mutate()
 }
@@ -100,10 +102,10 @@ function toggleFavorite() {
     <footer class="post-card-actions">
       <RouterLink :to="`/posts/${livePost.id}`"><MessageSquare :size="16" /> {{ formatCount(livePost.commentsCount) }} 条讨论</RouterLink>
       <div class="post-stats">
-        <button type="button" :class="{ active: livePost.viewerLiked }" :aria-pressed="livePost.viewerLiked" aria-label="点赞帖子" @click="toggleLike">
+        <button type="button" :class="{ active: livePost.viewerLiked }" :aria-pressed="livePost.viewerLiked" :disabled="likeMutation.isPending.value" aria-label="点赞帖子" @click="toggleLike">
           <ThumbsUp :size="16" /> {{ formatCount(livePost.likesCount) }}
         </button>
-        <button type="button" :class="{ active: livePost.viewerFavorited }" :aria-pressed="livePost.viewerFavorited" aria-label="收藏帖子" @click="toggleFavorite">
+        <button type="button" :class="{ active: livePost.viewerFavorited }" :aria-pressed="livePost.viewerFavorited" :disabled="favoriteMutation.isPending.value" aria-label="收藏帖子" @click="toggleFavorite">
           <Bookmark :size="16" /> {{ formatCount(livePost.favoritesCount) }}
         </button>
       </div>

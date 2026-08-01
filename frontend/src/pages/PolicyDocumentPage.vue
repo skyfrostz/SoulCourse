@@ -1,22 +1,35 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { BookOpenCheck, ChevronLeft, Download, ExternalLink, FileText, Search, ShieldCheck } from '@lucide/vue'
-import { provinceKnowledge } from '../lib/knowledgeBase'
-import { createProvincePolicyDocuments, findProvincePolicyDocument, policyDocumentPath } from '../lib/policyDocuments'
+import { BookOpenCheck, ChevronLeft, ExternalLink, FileText, Search, ShieldCheck } from '@lucide/vue'
+import { fetchPublishedPolicies } from '../lib/api'
+import { policyDocumentPath } from '../lib/policyDocuments'
 import { useGlobalSearch } from '../composables/useGlobalSearch'
+import { useOnlineState } from '../composables/useOnlineState'
 
 const route = useRoute()
 const router = useRouter()
 const { runSearch } = useGlobalSearch()
+const { isOffline } = useOnlineState()
 const provinceName = computed(() => decodeURIComponent(String(route.params.province ?? '')))
 const documentId = computed(() => String(route.params.documentId ?? ''))
-const province = computed(() => provinceKnowledge.find((item) => item.province === provinceName.value))
-const documents = computed(() => (province.value ? createProvincePolicyDocuments(province.value) : []))
-const document = computed(() => findProvincePolicyDocument(province.value, documentId.value))
+const policiesQuery = useQuery({
+  queryKey: ['real-data', 'policies', provinceName],
+  queryFn: fetchPublishedPolicies,
+})
+const documents = computed(() =>
+  (policiesQuery.data.value ?? [])
+    .filter((record) =>
+      record.coverageStatus === 'verified' &&
+      (record.scope === provinceName.value || record.title.includes(provinceName.value)),
+    ),
+)
+const document = computed(() => documents.value.find((item) => item.id === documentId.value))
+const documentTags = computed(() => document.value?.tags.slice(0, 4) ?? [])
 
 function goBack() {
-  router.push(province.value ? `/knowledge/${encodeURIComponent(province.value.province)}` : '/knowledge')
+  router.push(provinceName.value ? `/knowledge/${encodeURIComponent(provinceName.value)}` : '/knowledge')
 }
 
 function searchInForum(query: string) {
@@ -28,33 +41,31 @@ function searchInForum(query: string) {
   <main class="detail-page policy-document-page">
     <button class="back-link" @click="goBack"><ChevronLeft :size="17" /> 返回省份资料包</button>
 
-    <section v-if="province && document" class="policy-document-hero">
+    <section v-if="document" class="policy-document-hero">
       <div>
-        <div class="breadcrumb">政策库 / {{ province.province }} / PDF网页化阅读</div>
+        <div class="breadcrumb">政策库 / {{ provinceName }} / 来源记录</div>
         <h1>{{ document.title }}</h1>
-        <p>{{ document.subtitle }}。{{ document.abstract }}</p>
+        <p>{{ document.summary || document.methodology }}</p>
         <div class="overview-metrics">
-          <span><ShieldCheck :size="18" /> {{ document.sourceName }}</span>
-          <span v-for="tag in document.tags.slice(0, 4)" :key="tag"># {{ tag }}</span>
+          <span><ShieldCheck :size="18" /> {{ document.source.name }}</span>
+          <span>{{ document.dataYear }}</span>
+          <span v-for="tag in documentTags" :key="tag"># {{ tag }}</span>
         </div>
       </div>
       <div class="policy-document-actions">
-        <a :href="document.downloadUrl" target="_blank" rel="noreferrer" class="primary-wide compact">
-          下载/检索 PDF <Download :size="15" />
-        </a>
-        <a :href="document.sourceUrl" target="_blank" rel="noreferrer">
+        <a :href="document.source.url || document.url" target="_blank" rel="noreferrer" class="primary-wide compact">
           官方来源 <ExternalLink :size="15" />
         </a>
       </div>
     </section>
 
-    <section v-if="province && document" class="policy-document-layout">
+    <section v-if="document" class="policy-document-layout">
       <aside class="policy-document-toc">
-        <strong><BookOpenCheck :size="17" /> {{ province.province }}文件目录</strong>
+        <strong><BookOpenCheck :size="17" /> {{ provinceName }}已复核记录</strong>
         <RouterLink
           v-for="item in documents"
           :key="item.id"
-          :to="policyDocumentPath(province.province, item.id)"
+          :to="policyDocumentPath(provinceName, item.id)"
           :class="{ active: item.id === document.id }"
         >
           <small>{{ item.type }}</small>
@@ -66,32 +77,42 @@ function searchInForum(query: string) {
         <section class="policy-reader-note">
           <FileText :size="20" />
           <div>
-            <strong>网页化正文</strong>
+            <strong>来源记录摘要</strong>
             <p>
-              本页将政策 PDF/附件的核对框架转换为站内可读内容，方便搜索、收藏和转发讨论。最终报考仍以官方 PDF、考试院公告和高校招生章程为准。
+              本页只展示已发布来源记录的摘要、采集方法和校验信息，不生成政策原文。最终报考仍以官方 PDF、考试院公告和高校招生章程为准。
             </p>
           </div>
         </section>
 
-        <section v-for="section in document.sections" :key="section.heading" class="policy-reader-section">
-          <h2>{{ section.heading }}</h2>
-          <p v-for="paragraph in section.paragraphs" :key="paragraph">{{ paragraph }}</p>
+        <section class="policy-reader-section">
+          <h2>记录摘要</h2>
+          <p>{{ document.summary || '暂无摘要，请打开官方来源核对完整内容。' }}</p>
           <ul>
-            <li v-for="bullet in section.bullets" :key="bullet">{{ bullet }}</li>
+            <li>覆盖状态：{{ document.coverageStatus === 'verified' ? '已复核' : '暂无已复核数据' }}</li>
+            <li>适用范围：{{ document.scope }}</li>
+            <li>采集时间：{{ document.capturedAt }}</li>
+            <li>文件哈希：{{ document.fileHash }}</li>
           </ul>
+        </section>
+
+        <section class="policy-reader-section">
+          <h2>方法说明</h2>
+          <p>{{ document.methodology || '管理员尚未补充方法说明。' }}</p>
         </section>
 
         <section class="policy-check-board">
           <div>
             <h2>下载前核对清单</h2>
             <ol>
-              <li v-for="item in document.checkItems" :key="item">{{ item }}</li>
+              <li>确认官方来源域名、发布单位和文件年份。</li>
+              <li>核对记录哈希与管理员采集说明是否完整。</li>
+              <li>专业选考、招生计划和高校章程需要分别查证。</li>
             </ol>
           </div>
           <div>
             <h2>站内继续检索</h2>
             <button
-              v-for="query in document.relatedQueries"
+              v-for="query in [provinceName, document.title, document.type]"
               :key="query"
               type="button"
               @click="searchInForum(query)"
@@ -103,10 +124,17 @@ function searchInForum(query: string) {
       </article>
     </section>
 
+    <section v-else-if="policiesQuery.isError.value || isOffline" class="empty-state">
+      <FileText :size="30" />
+      <h1>{{ isOffline ? '当前网络不可用' : '政策记录暂时无法加载' }}</h1>
+      <p>{{ isOffline ? '恢复网络后再重试，当前不会推断这条记录的复核状态。' : '服务暂时不可用，当前无法确认这条记录的复核状态。' }}</p>
+      <button class="primary-wide compact" type="button" @click="policiesQuery.refetch()">重新加载</button>
+    </section>
+
     <section v-else class="empty-state">
       <FileText :size="30" />
-      <h2>没有找到这份政策文档</h2>
-      <p>请返回政策库，从省份资料包重新进入。</p>
+      <h1>{{ policiesQuery.isLoading.value ? '正在加载政策记录' : '没有找到已复核政策记录' }}</h1>
+      <p>请返回政策库，从省份资料包重新进入；本站不会为缺失来源生成模板正文。</p>
       <button class="primary-wide compact" type="button" @click="router.push('/knowledge')">返回政策库</button>
     </section>
   </main>

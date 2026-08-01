@@ -13,6 +13,8 @@ import (
 type verificationRepositoryStub struct {
 	ForumRepository
 	limit       domain.EmailVerificationAttemptLimit
+	reserveErr  error
+	createErr   error
 	codeCreated bool
 }
 
@@ -25,25 +27,27 @@ func (r *verificationRepositoryStub) ReserveEmailVerificationAttempt(
 	int,
 	int,
 ) (domain.EmailVerificationAttemptLimit, error) {
-	return r.limit, nil
+	return r.limit, r.reserveErr
 }
 
 func (r *verificationRepositoryStub) CreateEmailVerificationCode(context.Context, string, string, time.Time) error {
 	r.codeCreated = true
-	return nil
+	return r.createErr
 }
 
 type verificationEmailSenderStub struct {
-	sent bool
+	sent    bool
+	enabled bool
+	err     error
 }
 
 func (s *verificationEmailSenderStub) Enabled() bool {
-	return true
+	return s.enabled
 }
 
 func (s *verificationEmailSenderStub) SendVerificationCode(context.Context, string, string, time.Duration) error {
 	s.sent = true
-	return nil
+	return s.err
 }
 
 func TestSendEmailVerificationCodeReturnsServerRateLimitState(t *testing.T) {
@@ -53,7 +57,7 @@ func TestSendEmailVerificationCodeReturnsServerRateLimitState(t *testing.T) {
 		EmailHourlyLimit:     5,
 		EmailHourlyRemaining: 4,
 	}}
-	sender := &verificationEmailSenderStub{}
+	sender := &verificationEmailSenderStub{enabled: true}
 	forumService := NewForumService(repository, config.Config{
 		JWTSecret:                         "test-secret",
 		EmailVerificationTTLMinutes:       10,
@@ -90,7 +94,7 @@ func TestSendEmailVerificationCodeStopsBeforeGenerationWhenRateLimited(t *testin
 		EmailHourlyRemaining: 3,
 		Scope:                "cooldown",
 	}}
-	sender := &verificationEmailSenderStub{}
+	sender := &verificationEmailSenderStub{enabled: true}
 	forumService := NewForumService(repository, config.Config{JWTSecret: "test-secret"}, sender)
 
 	_, err := forumService.SendEmailVerificationCode(context.Background(), domain.EmailVerificationCodeInput{
@@ -107,4 +111,60 @@ func TestSendEmailVerificationCodeStopsBeforeGenerationWhenRateLimited(t *testin
 	if repository.codeCreated || sender.sent {
 		t.Fatal("rate-limited request must not create or send a code")
 	}
+}
+
+func TestSendEmailVerificationCodeStopsOnRepositoryErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		repository *verificationRepositoryStub
+	}{
+		{"reserve", &verificationRepositoryStub{reserveErr: errors.New("reserve failed")}},
+		{"create", &verificationRepositoryStub{limit: domain.EmailVerificationAttemptLimit{Allowed: true}, createErr: errors.New("create failed")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sender := &verificationEmailSenderStub{enabled: true}
+			forum := NewForumService(tt.repository, config.Config{JWTSecret: "test"}, sender)
+			if _, err := forum.SendEmailVerificationCode(context.Background(), domain.EmailVerificationCodeInput{Email: "a@example.com"}); err == nil {
+				t.Fatal("expected repository error")
+			}
+			if sender.sent {
+				t.Fatal("repository failure must prevent email delivery")
+			}
+		})
+	}
+}
+
+func TestSendEmailVerificationCodeHandlesSenderAvailability(t *testing.T) {
+	t.Run("sender failure", func(t *testing.T) {
+		repository := &verificationRepositoryStub{limit: domain.EmailVerificationAttemptLimit{Allowed: true}}
+		sender := &verificationEmailSenderStub{enabled: true, err: errors.New("smtp failed")}
+		forum := NewForumService(repository, config.Config{JWTSecret: "test", AppEnv: "production"}, sender)
+		if _, err := forum.SendEmailVerificationCode(context.Background(), domain.EmailVerificationCodeInput{Email: "a@example.com"}); err == nil {
+			t.Fatal("expected sender error")
+		}
+		if !repository.codeCreated || !sender.sent {
+			t.Fatal("expected code persistence before attempted delivery")
+		}
+	})
+
+	t.Run("production disabled", func(t *testing.T) {
+		repository := &verificationRepositoryStub{limit: domain.EmailVerificationAttemptLimit{Allowed: true}}
+		forum := NewForumService(repository, config.Config{JWTSecret: "test", AppEnv: "production"}, &verificationEmailSenderStub{})
+		if _, err := forum.SendEmailVerificationCode(context.Background(), domain.EmailVerificationCodeInput{Email: "a@example.com"}); err == nil {
+			t.Fatal("production must reject an unavailable sender")
+		}
+	})
+
+	t.Run("local debug code", func(t *testing.T) {
+		repository := &verificationRepositoryStub{limit: domain.EmailVerificationAttemptLimit{Allowed: true}}
+		forum := NewForumService(repository, config.Config{JWTSecret: "test", AppEnv: "local"}, nil)
+		result, err := forum.SendEmailVerificationCode(context.Background(), domain.EmailVerificationCodeInput{Email: "a@example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result.DebugCode) != 6 {
+			t.Fatalf("debug code length = %d, want 6", len(result.DebugCode))
+		}
+	})
 }

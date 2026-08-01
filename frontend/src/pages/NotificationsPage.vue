@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { useInfiniteQuery } from '@tanstack/vue-query'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bell, ChevronLeft, ExternalLink, Heart, MessageCircle, Plus, Search, ShieldCheck, UserPlus } from '@lucide/vue'
+import { Bell, ChevronLeft, ExternalLink, Heart, MessageCircle, Plus, RefreshCcw, Search, ShieldCheck, UserPlus, WifiOff } from '@lucide/vue'
+import { fetchNotifications } from '../lib/api'
 import { notificationTypeLabels } from '../lib/notifications'
 import { useForumStore } from '../stores/forum'
 import type { NotificationType } from '../types/forum'
@@ -13,6 +15,7 @@ const activeType = ref<NotificationFilter>('all')
 const activeId = ref<number | null>(null)
 const keyword = ref('')
 const mobileSearchOpen = ref(false)
+const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
 
 const typeTabs: Array<{ label: string; value: NotificationFilter }> = [
   { label: '全部', value: 'all' },
@@ -23,7 +26,34 @@ const typeTabs: Array<{ label: string; value: NotificationFilter }> = [
   { label: '系统提醒', value: 'system' },
 ]
 
+const notificationsQuery = useInfiniteQuery({
+  queryKey: ['notifications'],
+  queryFn: ({ pageParam }) => fetchNotifications({ limit: 30, cursor: pageParam }),
+  initialPageParam: undefined as string | undefined,
+  getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.nextCursor : undefined,
+  retry: false,
+  enabled: computed(() => forumStore.isAuthed),
+})
+
+watch(() => notificationsQuery.data.value, (data) => {
+  if (!data) return
+  const seen = new Set<number>()
+  forumStore.notifications = data.pages.flatMap((page) => page.items).filter((item) => {
+    if (seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
+})
+
+function loadMoreNotifications() {
+  if (!isOffline.value && notificationsQuery.hasNextPage.value && !notificationsQuery.isFetchingNextPage.value) {
+    void notificationsQuery.fetchNextPage()
+  }
+}
+
 const notifications = computed(() => forumStore.notifications.map((item) => ({ ...item, unread: !item.readAt })))
+const initialLoadFailed = computed(() => notificationsQuery.isError.value && notifications.value.length === 0)
+const hasSearchFilter = computed(() => keyword.value.trim().length > 0)
 
 const filteredNotifications = computed(() => {
   const q = keyword.value.trim()
@@ -53,8 +83,18 @@ function openTarget() {
   router.push(activeNotification.value.targetUrl)
 }
 
+function updateOnlineState() {
+  isOffline.value = typeof navigator !== 'undefined' ? !navigator.onLine : false
+}
+
 onMounted(() => {
-  void forumStore.hydrateAccount()
+  window.addEventListener('online', updateOnlineState)
+  window.addEventListener('offline', updateOnlineState)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('online', updateOnlineState)
+  window.removeEventListener('offline', updateOnlineState)
 })
 
 function formatTime(value: string) {
@@ -73,6 +113,14 @@ function formatShortTime(value: string) {
 
 <template>
   <main class="detail-page notifications-page">
+    <section v-if="!forumStore.isAuthed" class="empty-state detail-empty-state public-page-state notification-auth-state">
+      <Bell :size="34" />
+      <h1>登录后查看通知</h1>
+      <p>评论、点赞、收藏、关注和系统提醒会跟随账号同步。</p>
+      <button class="primary-wide compact" type="button" @click="forumStore.openAuth('/notifications')">登录 / 注册</button>
+    </section>
+
+    <template v-else>
     <header class="mobile-message-header">
       <h1>消息</h1>
       <div>
@@ -104,24 +152,44 @@ function formatShortTime(value: string) {
     </nav>
 
     <section class="mobile-notification-list" aria-label="通知列表">
-      <button v-for="item in filteredNotifications" :key="item.id" type="button" @click="openMobileNotification(item.id, item.targetUrl)">
-        <span class="mobile-notification-avatar" :class="`tone-${item.type}`">
-          <Heart v-if="['like', 'favorite'].includes(item.type)" :size="21" />
-          <MessageCircle v-else-if="item.type === 'comment'" :size="21" />
-          <UserPlus v-else-if="item.type === 'follow'" :size="21" />
-          <ShieldCheck v-else :size="21" />
-        </span>
-        <span class="mobile-notification-copy">
-          <strong>{{ item.title }}</strong>
-          <small>{{ item.summary }}</small>
-        </span>
-        <time>{{ formatShortTime(item.createdAt) }}</time>
-        <i v-if="item.unread"></i>
-      </button>
-      <div v-if="!filteredNotifications.length" class="mobile-message-empty">
+      <div v-if="notificationsQuery.isLoading.value" class="mobile-message-empty">
+        <RefreshCcw class="state-spin" :size="28" />
+        <strong>正在加载通知</strong>
+        <p>请稍等，正在同步你的未读提醒。</p>
+      </div>
+      <div v-else-if="isOffline || initialLoadFailed" class="mobile-message-empty">
+        <WifiOff v-if="isOffline" :size="28" />
+        <Bell v-else :size="28" />
+        <strong>{{ isOffline ? '当前网络不可用' : '通知加载失败' }}</strong>
+        <p>{{ isOffline ? '恢复网络后会继续同步提醒。' : '请稍后重试，或先返回论坛继续浏览。' }}</p>
+        <button v-if="!isOffline" class="state-inline-button" type="button" @click="notificationsQuery.refetch()">重试</button>
+      </div>
+      <template v-else>
+        <button v-for="item in filteredNotifications" :key="item.id" type="button" @click="openMobileNotification(item.id, item.targetUrl)">
+          <span class="mobile-notification-avatar" :class="`tone-${item.type}`">
+            <Heart v-if="['like', 'favorite'].includes(item.type)" :size="21" />
+            <MessageCircle v-else-if="item.type === 'comment'" :size="21" />
+            <UserPlus v-else-if="item.type === 'follow'" :size="21" />
+            <ShieldCheck v-else :size="21" />
+          </span>
+          <span class="mobile-notification-copy">
+            <strong>{{ item.title }}</strong>
+            <small>{{ item.summary }}</small>
+          </span>
+          <time>{{ formatShortTime(item.createdAt) }}</time>
+          <i v-if="item.unread"></i>
+        </button>
+      </template>
+      <div v-if="notificationsQuery.hasNextPage.value || notificationsQuery.isFetchingNextPage.value || notificationsQuery.isFetchNextPageError.value" class="mobile-message-empty">
+        <p v-if="notificationsQuery.isFetchNextPageError.value" role="alert">更多通知加载失败，已加载内容不受影响。</p>
+        <button class="state-inline-button" type="button" :disabled="isOffline || notificationsQuery.isFetchingNextPage.value" @click="loadMoreNotifications">
+          {{ notificationsQuery.isFetchingNextPage.value ? '正在加载更多' : notificationsQuery.isFetchNextPageError.value ? '重试加载更多' : '加载更多' }}
+        </button>
+      </div>
+      <div v-if="!notificationsQuery.isLoading.value && !initialLoadFailed && !isOffline && !filteredNotifications.length" class="mobile-message-empty">
         <Bell :size="28" />
-        <strong>暂时没有新消息</strong>
-        <p>与你有关的赞、收藏、关注和评论会出现在这里。</p>
+        <strong>{{ hasSearchFilter ? '没有匹配的通知' : '暂时没有新消息' }}</strong>
+        <p>{{ hasSearchFilter ? '试试清空搜索词，或者换一个通知关键词。' : '与你有关的赞、收藏、关注和评论会出现在这里。' }}</p>
       </div>
     </section>
 
@@ -158,24 +226,45 @@ function formatShortTime(value: string) {
       </button>
       <button type="button" @click="forumStore.markNotificationsRead()">全部已读</button>
     </nav>
+    <p v-if="forumStore.notificationReadError" class="notification-sync-error">{{ forumStore.notificationReadError }}</p>
 
     <section class="notifications-shell">
       <aside class="notification-list-panel">
-        <button
-          v-for="item in filteredNotifications"
-          :key="item.id"
-          type="button"
-          :class="{ active: activeNotification?.id === item.id, unread: item.unread }"
-          @click="selectNotification(item.id)"
-        >
-          <span></span>
-          <small>{{ notificationTypeLabels[item.type] }} · {{ formatTime(item.createdAt) }}</small>
-          <strong>{{ item.title }}</strong>
-          <p>{{ item.summary }}</p>
-        </button>
+        <div v-if="notificationsQuery.isLoading.value" class="empty-state compact-empty notification-panel-state">
+          <RefreshCcw class="state-spin" :size="30" />
+          <h2>正在加载通知</h2>
+          <p>请稍等，正在同步你的未读提醒。</p>
+        </div>
+        <div v-else-if="isOffline || initialLoadFailed" class="empty-state compact-empty notification-panel-state">
+          <WifiOff v-if="isOffline" :size="30" />
+          <Bell v-else :size="30" />
+          <h2>{{ isOffline ? '当前网络不可用' : '通知加载失败' }}</h2>
+          <p>{{ isOffline ? '恢复网络后会继续同步提醒。' : '请稍后重试，或先返回论坛继续浏览。' }}</p>
+          <button v-if="!isOffline" class="primary-wide compact" type="button" @click="notificationsQuery.refetch()">重试</button>
+        </div>
+        <template v-else>
+          <button
+            v-for="item in filteredNotifications"
+            :key="item.id"
+            type="button"
+            :class="{ active: activeNotification?.id === item.id, unread: item.unread }"
+            @click="selectNotification(item.id)"
+          >
+            <span></span>
+            <small>{{ notificationTypeLabels[item.type] }} · {{ formatTime(item.createdAt) }}</small>
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.summary }}</p>
+          </button>
+          <div v-if="notificationsQuery.hasNextPage.value || notificationsQuery.isFetchingNextPage.value || notificationsQuery.isFetchNextPageError.value" class="empty-state compact-empty notification-panel-state">
+            <p v-if="notificationsQuery.isFetchNextPageError.value" role="alert">更多通知加载失败，已加载内容不受影响。</p>
+            <button class="primary-wide compact" type="button" :disabled="isOffline || notificationsQuery.isFetchingNextPage.value" @click="loadMoreNotifications">
+              {{ notificationsQuery.isFetchingNextPage.value ? '正在加载更多' : notificationsQuery.isFetchNextPageError.value ? '重试加载更多' : '加载更多' }}
+            </button>
+          </div>
+        </template>
       </aside>
 
-      <article v-if="activeNotification" class="notification-detail-panel">
+      <article v-if="!notificationsQuery.isLoading.value && !initialLoadFailed && !isOffline && activeNotification" class="notification-detail-panel">
         <small>{{ notificationTypeLabels[activeNotification.type] }} · {{ formatTime(activeNotification.createdAt) }}</small>
         <h2>{{ activeNotification.title }}</h2>
         <p>{{ activeNotification.summary }}</p>
@@ -187,11 +276,12 @@ function formatShortTime(value: string) {
         </div>
       </article>
 
-      <section v-else class="empty-state compact-empty">
+      <section v-else-if="!notificationsQuery.isLoading.value && !initialLoadFailed && !isOffline" class="empty-state compact-empty">
         <Bell :size="30" />
-        <h2>暂无通知</h2>
-        <p>有新的评论、政策更新和关注动态时，会出现在这里。</p>
+        <h2>{{ hasSearchFilter ? '没有匹配的通知' : '暂无通知' }}</h2>
+        <p>{{ hasSearchFilter ? '试试清空搜索词，或者换一个通知关键词。' : '有新的评论、政策更新和关注动态时，会出现在这里。' }}</p>
       </section>
     </section>
+    </template>
   </main>
 </template>

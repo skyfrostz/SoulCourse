@@ -1,4 +1,4 @@
-import { majorRequirements, type MajorRequirement } from './majorRequirements'
+import type { RealDataRecord } from './api'
 import type { Post } from '../types/forum'
 
 interface ForumStoreLike {
@@ -13,13 +13,41 @@ export interface MajorForumStats {
   hotScore: number
 }
 
+export interface MajorRequirementCard {
+  major: string
+  category: string
+  requiredSubjects: string[]
+  suggestedCombination: string
+  risk: string
+  source: string
+  sourceUrl?: string
+  noteType: '已复核要求' | '需逐校核对'
+  coverageStatus: RealDataRecord['coverageStatus']
+  methodology: string
+}
+
 export function majorForumPath(major: string) {
   return `/requirements/${encodeURIComponent(major)}`
 }
 
-export function findMajorRequirement(major: string): MajorRequirement | undefined {
+export function findMajorRequirement(major: string, requirements: MajorRequirementCard[] = []): MajorRequirementCard | undefined {
   const decoded = decodeURIComponent(major)
-  return majorRequirements.find((item) => normalizeText(item.major) === normalizeText(decoded))
+  return requirements.find((item) => normalizeText(item.major) === normalizeText(decoded))
+}
+
+export function toMajorRequirementCard(record: RealDataRecord): MajorRequirementCard {
+  return {
+    major: record.title,
+    category: String(record.tags?.[record.tags.length - 1] || record.type || '专业要求'),
+    requiredSubjects: record.requiredSubjects?.length ? record.requiredSubjects : ['以官方目录为准'],
+    suggestedCombination: record.requiredSubjects?.length ? record.requiredSubjects.join(' + ') : '按官方目录逐校核对',
+    risk: record.summary || record.methodology || '暂无摘要，请打开官方来源逐项核对。',
+    source: record.source?.name || '官方来源',
+    sourceUrl: record.source?.url || record.url,
+    noteType: record.coverageStatus === 'verified' ? '已复核要求' : '需逐校核对',
+    coverageStatus: record.coverageStatus,
+    methodology: record.methodology,
+  }
 }
 
 export function getRelatedMajorPosts(major: string, posts: Post[] = []): Post[] {
@@ -50,7 +78,7 @@ export function getMajorForumStats(major: string, forumStore: ForumStoreLike, po
     likesCount,
     commentsCount,
     favoritesCount,
-    hotScore: likesCount + commentsCount * 4 + favoritesCount * 2,
+    hotScore: likesCount + commentsCount + favoritesCount,
   }
 }
 

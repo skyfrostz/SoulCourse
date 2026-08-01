@@ -1,0 +1,27 @@
+[Unit]
+Description=SoulCourse web application (%i slot)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=soulcourse
+Group=soulcourse
+WorkingDirectory=/opt/soulcourse/%i
+EnvironmentFile=/etc/soulcourse/soulcourse.env
+EnvironmentFile=/etc/soulcourse/slot-%i.env
+ExecStart=/opt/soulcourse/%i/deploy/run-production.sh
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/soulcourse
+
+[Install]
+WantedBy=multi-user.target

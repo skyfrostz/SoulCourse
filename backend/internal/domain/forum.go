@@ -76,12 +76,19 @@ type FeedFilter struct {
 	Sort     FeedSort
 	Limit    int
 	Offset   int
+	Cursor   string
+}
+
+type PostPage struct {
+	Items      []Post
+	NextCursor string
+	HasMore    bool
 }
 
 type CreatePostInput struct {
 	Title     string       `json:"title" binding:"required,min=4,max=80"`
 	Content   string       `json:"content" binding:"required,min=10,max=4000"`
-	ImageURLs []string     `json:"imageUrls" binding:"omitempty,max=9,dive,max=2000000"`
+	ImageURLs []string     `json:"imageUrls" binding:"omitempty,max=9,dive,max=512"`
 	Tags      []string     `json:"tags" binding:"omitempty,max=8,dive,max=20"`
 	Track     SubjectTrack `json:"track" binding:"required,oneof=physics history"`
 	Electives []Subject    `json:"electives" binding:"required,len=2,dive,oneof=chemistry biology politics geography"`
@@ -90,8 +97,39 @@ type CreatePostInput struct {
 	Province  string       `json:"province" binding:"required,max=30"`
 }
 
+type UpdatePostInput struct {
+	Title     string       `json:"title" binding:"required,min=4,max=80"`
+	Content   string       `json:"content" binding:"required,min=10,max=4000"`
+	Tags      []string     `json:"tags" binding:"omitempty,max=8,dive,max=20"`
+	Track     SubjectTrack `json:"track" binding:"required,oneof=physics history"`
+	Electives []Subject    `json:"electives" binding:"required,len=2,dive,oneof=chemistry biology politics geography"`
+	Category  PostCategory `json:"category" binding:"required,oneof=experience question data"`
+}
+
 type CreateCommentInput struct {
 	Content string `json:"content" binding:"required,min=2,max=1000"`
+}
+
+type ReportPostInput struct {
+	Reason string `json:"reason" binding:"required,max=80"`
+	Detail string `json:"detail" binding:"omitempty,max=1200"`
+}
+
+type ContentReport struct {
+	ID             int64      `json:"id"`
+	ReporterID     int64      `json:"reporterId"`
+	ReporterName   string     `json:"reporterName"`
+	TargetType     string     `json:"targetType"`
+	TargetID       int64      `json:"targetId"`
+	TargetTitle    string     `json:"targetTitle"`
+	TargetAuthor   string     `json:"targetAuthor"`
+	Reason         string     `json:"reason"`
+	Detail         string     `json:"detail"`
+	Status         string     `json:"status"`
+	ResolutionNote string     `json:"resolutionNote"`
+	ResolvedAt     *time.Time `json:"resolvedAt,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 type SubjectInsight struct {
@@ -168,13 +206,59 @@ type ProfileComment struct {
 }
 
 type AccountProfile struct {
-	User          User             `json:"user"`
-	Bio           string           `json:"bio"`
-	ChoiceProfile ChoiceProfile    `json:"choiceProfile"`
-	Stats         ProfileStats     `json:"stats"`
-	Posts         []Post           `json:"posts"`
-	Comments      []ProfileComment `json:"comments"`
-	Favorites     []Post           `json:"favorites"`
+	User            User             `json:"user"`
+	Bio             string           `json:"bio"`
+	ChoiceProfile   ChoiceProfile    `json:"choiceProfile"`
+	Stats           ProfileStats     `json:"stats"`
+	Posts           []Post           `json:"posts"`
+	Comments        []ProfileComment `json:"comments"`
+	Favorites       []Post           `json:"favorites"`
+	ViewerFollowing bool             `json:"viewerFollowing"`
+	Following       []FollowProfile  `json:"following"`
+	Followers       []FollowProfile  `json:"followers"`
+}
+
+type FollowProfile struct {
+	Name       string    `json:"name"`
+	Role       string    `json:"role"`
+	Province   string    `json:"province"`
+	Grade      string    `json:"grade"`
+	FollowedAt time.Time `json:"followedAt"`
+}
+
+type DirectMessage struct {
+	ID            int64      `json:"id"`
+	SenderID      int64      `json:"senderId"`
+	SenderName    string     `json:"senderName"`
+	RecipientID   int64      `json:"recipientId"`
+	RecipientName string     `json:"recipientName"`
+	Content       string     `json:"content"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	ReadAt        *time.Time `json:"readAt,omitempty"`
+}
+
+type DirectMessagePage struct {
+	Items      []DirectMessage
+	NextCursor string
+	HasMore    bool
+}
+
+type Conversation struct {
+	User          User      `json:"user"`
+	LastMessage   string    `json:"lastMessage"`
+	LastMessageAt time.Time `json:"lastMessageAt"`
+	UnreadCount   int       `json:"unreadCount"`
+}
+
+type ConversationPage struct {
+	Items      []Conversation
+	NextCursor string
+	HasMore    bool
+}
+
+type SendMessageInput struct {
+	RecipientName string `json:"recipientName" binding:"required,max=40"`
+	Content       string `json:"content" binding:"required,max=2000"`
 }
 
 type Notification struct {
@@ -186,6 +270,12 @@ type Notification struct {
 	ActorName string     `json:"actorName,omitempty"`
 	CreatedAt time.Time  `json:"createdAt"`
 	ReadAt    *time.Time `json:"readAt,omitempty"`
+}
+
+type NotificationPage struct {
+	Items      []Notification
+	NextCursor string
+	HasMore    bool
 }
 
 type RegisterInput struct {
@@ -201,6 +291,60 @@ type RegisterInput struct {
 type LoginInput struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+type ResetPasswordInput struct {
+	Email            string `json:"email" binding:"required,email,max=120"`
+	VerificationCode string `json:"verificationCode" binding:"required,len=6,numeric"`
+	Password         string `json:"password" binding:"required,min=6,max=72"`
+}
+
+type DeleteAccountInput struct {
+	Password string `json:"password" binding:"required,min=1,max=72"`
+}
+
+type PresignImageUploadInput struct {
+	FileName    string `json:"fileName" binding:"required,max=180"`
+	ContentType string `json:"contentType" binding:"required,max=80"`
+	SizeBytes   int64  `json:"sizeBytes" binding:"required,min=1,max=8388608"`
+	Width       int    `json:"width" binding:"required,min=1,max=12000"`
+	Height      int    `json:"height" binding:"required,min=1,max=12000"`
+}
+
+type PresignedImageUpload struct {
+	ID          string    `json:"id"`
+	AssetKey    string    `json:"assetKey"`
+	UploadURL   string    `json:"uploadUrl"`
+	Method      string    `json:"method"`
+	ContentType string    `json:"contentType"`
+	MaxBytes    int64     `json:"maxBytes"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
+type CompleteImageUploadResult struct {
+	ID          string `json:"id"`
+	AssetKey    string `json:"assetKey"`
+	URL         string `json:"url"`
+	ContentType string `json:"contentType"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+}
+
+type ImageUploadRecord struct {
+	ID          string
+	UserID      int64
+	AssetKey    string
+	FileName    string
+	ContentType string
+	Ext         string
+	SizeBytes   int64
+	Width       int
+	Height      int
+	Status      string
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	CompletedAt *time.Time
 }
 
 type EmailVerificationCodeInput struct {
@@ -226,8 +370,26 @@ type EmailVerificationCodeResult struct {
 }
 
 type AuthSession struct {
-	User  User   `json:"user"`
-	Token string `json:"token"`
+	User      User      `json:"user"`
+	Token     string    `json:"-"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+type StoredAuthSession struct {
+	ID        int64
+	UserID    int64
+	TokenHash string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+}
+
+type AccountSession struct {
+	ID        int64      `json:"id"`
+	CreatedAt time.Time  `json:"createdAt"`
+	ExpiresAt time.Time  `json:"expiresAt"`
+	RevokedAt *time.Time `json:"revokedAt,omitempty"`
+	Current   bool       `json:"current"`
 }
 
 type Topic struct {

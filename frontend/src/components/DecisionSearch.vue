@@ -1,10 +1,10 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import { Sparkles } from '@lucide/vue'
 import { computed } from 'vue'
 import { useGlobalSearch } from '../composables/useGlobalSearch'
-import { provinceKnowledge } from '../lib/knowledgeBase'
-import { majorForumPath } from '../lib/majorForum'
-import { majorRequirements } from '../lib/majorRequirements'
+import { fetchProvinceCoverage, fetchPublishedRequirements } from '../lib/api'
+import { majorForumPath, toMajorRequirementCard } from '../lib/majorForum'
 import { useForumStore } from '../stores/forum'
 import type { Post, Topic } from '../types/forum'
 
@@ -18,8 +18,20 @@ const emit = defineEmits<{
   searched: []
 }>()
 const { runSearch } = useGlobalSearch()
+const requirementsQuery = useQuery({
+  queryKey: ['real-data', 'requirements', 'decision-search'],
+  queryFn: fetchPublishedRequirements,
+})
+const provincesQuery = useQuery({
+  queryKey: ['real-data', 'provinces', 'decision-search'],
+  queryFn: fetchProvinceCoverage,
+})
 const keyword = computed(() => forumStore.filter.keyword.trim())
 const normalizedKeyword = computed(() => keyword.value.toLowerCase())
+const requirementCards = computed(() => (requirementsQuery.data.value ?? []).map(toMajorRequirementCard))
+const provinceCoverage = computed(() => provincesQuery.data.value ?? [])
+const dataSourcesSettled = computed(() => !requirementsQuery.isPending.value && !provincesQuery.isPending.value)
+const dataSourcesHealthy = computed(() => !requirementsQuery.isError.value && !provincesQuery.isError.value)
 const hasMatches = computed(() =>
   matchedMajors.value.length > 0 ||
   matchedTopics.value.length > 0 ||
@@ -28,12 +40,12 @@ const hasMatches = computed(() =>
 )
 const matchedMajors = computed(() =>
   normalizedKeyword.value
-    ? majorRequirements.filter((item) =>
+    ? requirementCards.value.filter((item) =>
         [item.major, item.category, item.suggestedCombination, item.requiredSubjects.join('')].some((value) =>
           value.toLowerCase().includes(normalizedKeyword.value),
         ),
       ).slice(0, 3)
-    : majorRequirements.slice(0, 3),
+    : requirementCards.value.slice(0, 3),
 )
 const matchedTopics = computed(() =>
   props.topics.filter((topic) => !normalizedKeyword.value || topic.title.toLowerCase().includes(normalizedKeyword.value)).slice(0, 3),
@@ -45,10 +57,10 @@ const matchedPosts = computed(() =>
   ).slice(0, 3),
 )
 const matchedPolicies = computed(() =>
-  provinceKnowledge.filter((item) => {
+  provinceCoverage.value.filter((item) => {
     if (!normalizedKeyword.value) return true
     const compactKeyword = normalizedKeyword.value.replace(/政策|招生|考试|选科|省份|信息|入口/g, '')
-    const fields = [item.province, item.authority, item.status, item.focus.join(''), item.checklist.join('')]
+    const fields = [item.province, item.coverageStatus, String(item.dataYear), item.methodology]
     return fields.some((value) => {
       const normalizedValue = value.toLowerCase()
       return normalizedValue.includes(normalizedKeyword.value) || (!!compactKeyword && normalizedValue.includes(compactKeyword))
@@ -98,13 +110,74 @@ async function searchQuickQuery(query: string) {
       </RouterLink>
       <RouterLink v-for="item in matchedPolicies" :key="item.province" :to="provincePath(item.province)" @click="emit('searched')">
         <small>省份政策</small>
-        <strong>{{ item.province }} · {{ item.reformMode }}</strong>
-        <span>{{ item.authority }}</span>
+        <strong>{{ item.province }} · {{ item.coverageStatus === 'verified' ? '已复核' : '暂无已复核数据' }}</strong>
+        <span>{{ item.dataYear }} · {{ item.methodology }}</span>
       </RouterLink>
     </div>
-    <div v-if="keyword && !hasMatches" class="decision-empty">
+    <div v-if="requirementsQuery.isPending.value" class="decision-source-state" role="status">
+      正在加载专业要求…
+    </div>
+    <div v-else-if="requirementsQuery.isError.value" class="decision-source-state decision-source-error" role="alert">
+      <span>专业要求暂时加载失败，其他搜索结果仍可使用。</span>
+      <button type="button" :disabled="requirementsQuery.isFetching.value" @click="requirementsQuery.refetch()">
+        {{ requirementsQuery.isFetching.value ? '正在重试…' : '重试专业要求' }}
+      </button>
+    </div>
+    <div v-if="provincesQuery.isPending.value" class="decision-source-state" role="status">
+      正在加载省份政策…
+    </div>
+    <div v-else-if="provincesQuery.isError.value" class="decision-source-state decision-source-error" role="alert">
+      <span>省份政策暂时加载失败，其他搜索结果仍可使用。</span>
+      <button type="button" :disabled="provincesQuery.isFetching.value" @click="provincesQuery.refetch()">
+        {{ provincesQuery.isFetching.value ? '正在重试…' : '重试省份政策' }}
+      </button>
+    </div>
+    <div v-if="keyword && !hasMatches && dataSourcesSettled && dataSourcesHealthy" class="decision-empty">
       <strong>暂时没有匹配建议</strong>
       <button type="button" @click="searchQuickQuery('')">清除搜索</button>
     </div>
   </section>
 </template>
+
+<style scoped>
+.decision-source-state {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #d8dee8);
+  border-radius: 6px;
+  color: var(--text-secondary, #586174);
+  font-size: 14px;
+}
+
+.decision-source-error {
+  border-color: var(--warning-border, #d99b35);
+  color: var(--text-primary, #202534);
+}
+
+.decision-source-state button {
+  min-height: 36px;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--accent-color, #2367d1);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.decision-source-state button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+@media (max-width: 480px) {
+  .decision-source-state {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>

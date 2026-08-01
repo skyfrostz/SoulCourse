@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +16,11 @@ import (
 )
 
 var ErrAIDisabled = errors.New("ai service is not configured")
+
+var (
+	emailPattern = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`)
+	phonePattern = regexp.MustCompile(`(?:\+?86[-\s]?)?1[3-9]\d{9}`)
+)
 
 type AIService struct {
 	apiKey  string
@@ -37,18 +43,22 @@ func (s *AIService) ChoiceAdvice(ctx context.Context, input domain.ChoiceAdviceI
 		return fallbackAdvice(input), ErrAIDisabled
 	}
 
-	profileJSON, _ := json.Marshal(input.Profile)
-	prompt := fmt.Sprintf(`用户画像 JSON：%s
+	safeInput := sanitizeChoiceAdviceInput(input)
+	profileJSON, _ := json.Marshal(safeInput.Profile)
+	prompt := fmt.Sprintf(`已清洗用户画像 JSON：%s
 补充问题：%s
 
 请作为中国新高考选科顾问，基于用户画像给出克制、可执行的建议。要求：
 1. 不承诺录取结果，不替代官方政策与学校老师意见。
 2. 优先提醒需要核对的省份政策、专业组选科要求、成绩稳定性和压力风险。
-3. 只返回 JSON，不要 Markdown。
+3. 用户画像可能已移除姓名、联系方式、学校等非必要个人信息，不要推断或索要这些信息。
+4. 只返回 JSON，不要 Markdown。
 JSON 结构：
-{"summary":"一句话判断，40字以内","risks":["风险或提醒1","风险或提醒2","风险或提醒3"],"actions":["下一步1","下一步2","下一步3"],"querySuggestions":["可搜索关键词1","可搜索关键词2","可搜索关键词3"]}`, string(profileJSON), input.Question)
+{"summary":"一句话判断，40字以内","risks":["风险或提醒1","风险或提醒2","风险或提醒3"],"actions":["下一步1","下一步2","下一步3"],"querySuggestions":["可搜索关键词1","可搜索关键词2","可搜索关键词3"]}`, string(profileJSON), safeInput.Question)
 
-	content, err := s.complete(ctx, []chatMessage{
+	adviceContext, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	content, err := s.complete(adviceContext, []chatMessage{
 		{Role: "system", Content: "你是严谨的中国高中选科决策助手，回答必须短、稳、可核对。"},
 		{Role: "user", Content: prompt},
 	}, 0.3)
@@ -62,6 +72,89 @@ JSON 结构：
 	}
 	advice.Source = "ai"
 	return limitAdvice(advice), nil
+}
+
+func sanitizeChoiceAdviceInput(input domain.ChoiceAdviceInput) domain.ChoiceAdviceInput {
+	allowed := map[string]struct{}{
+		"preferredTrack":      {},
+		"preferredSubjects":   {},
+		"targetMajors":        {},
+		"targetCities":        {},
+		"gradeRank":           {},
+		"mbti":                {},
+		"physicsScore":        {},
+		"historyScore":        {},
+		"chemistryScore":      {},
+		"biologyScore":        {},
+		"politicsScore":       {},
+		"geographyScore":      {},
+		"subjectStability":    {},
+		"learningStyle":       {},
+		"pressureTolerance":   {},
+		"recommendationFocus": {},
+		"city":                {},
+	}
+	safeProfile := make(map[string]any, len(allowed))
+	for key, value := range input.Profile {
+		if _, ok := allowed[key]; !ok {
+			continue
+		}
+		if sanitized, ok := sanitizeProfileValue(value); ok {
+			safeProfile[key] = sanitized
+		}
+	}
+	return domain.ChoiceAdviceInput{
+		Profile:  safeProfile,
+		Question: sanitizeQuestion(input.Question),
+	}
+}
+
+func sanitizeProfileValue(value any) (any, bool) {
+	switch typed := value.(type) {
+	case string:
+		trimmed := truncateRunes(maskSensitiveText(strings.TrimSpace(typed)), 80)
+		if trimmed == "" {
+			return nil, false
+		}
+		return trimmed, true
+	case []any:
+		items := make([]any, 0, len(typed))
+		for _, item := range typed {
+			if sanitized, ok := sanitizeProfileValue(item); ok {
+				items = append(items, sanitized)
+			}
+			if len(items) == 8 {
+				break
+			}
+		}
+		return items, len(items) > 0
+	case []string:
+		items := make([]string, 0, len(typed))
+		for _, item := range typed {
+			trimmed := truncateRunes(maskSensitiveText(strings.TrimSpace(item)), 80)
+			if trimmed != "" {
+				items = append(items, trimmed)
+			}
+			if len(items) == 8 {
+				break
+			}
+		}
+		return items, len(items) > 0
+	case float64, bool:
+		return typed, true
+	default:
+		return nil, false
+	}
+}
+
+func sanitizeQuestion(question string) string {
+	return truncateRunes(maskSensitiveText(strings.TrimSpace(question)), 500)
+}
+
+func maskSensitiveText(value string) string {
+	value = emailPattern.ReplaceAllString(value, "[邮箱已移除]")
+	value = phonePattern.ReplaceAllString(value, "[手机号已移除]")
+	return value
 }
 
 func (s *AIService) TagPost(ctx context.Context, title string, content string) ([]string, error) {

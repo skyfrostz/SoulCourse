@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ImagePlus, Tag, Trash2, X } from '@lucide/vue'
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createPost, fetchTaxonomy } from '../lib/api'
+import { createPost, fetchTaxonomy, uploadImage } from '../lib/api'
 import { subjectLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
 import type { Category, Subject, Track } from '../types/forum'
@@ -16,12 +16,18 @@ const category = ref<Category>(forumStore.publishCategory)
 const title = ref('')
 const content = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
-const imagePreviews = ref<string[]>([])
+type UploadedImage = { previewUrl: string; url: string; fileKey: string }
+
+const imagePreviews = ref<UploadedImage[]>([])
+const failedImageFiles = ref<File[]>([])
 const tagInput = ref('')
 const tags = ref<string[]>([])
+const imageUploading = ref(false)
 const track = ref<Track>(forumStore.filter.track === 'all' ? 'physics' : forumStore.filter.track)
 const electives = ref<Subject[]>(forumStore.filter.subjects.length === 2 ? [...forumStore.filter.subjects] : ['chemistry', 'biology'])
 const error = ref('')
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 const taxonomyQuery = useQuery({ queryKey: ['taxonomy'], queryFn: fetchTaxonomy, staleTime: 10 * 60 * 1000 })
 
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']
@@ -31,7 +37,7 @@ const publishMutation = useMutation({
     const payload = {
       title: title.value,
       content: content.value,
-      imageUrls: imagePreviews.value.slice(0, 9),
+      imageUrls: imagePreviews.value.map((item) => item.url).slice(0, 9),
       tags: tags.value.slice(0, 8),
       track: track.value,
       electives: electives.value,
@@ -43,6 +49,9 @@ const publishMutation = useMutation({
   },
   onSuccess: (post) => {
     queryClient.invalidateQueries({ queryKey: ['posts'] })
+    imagePreviews.value.forEach((image) => URL.revokeObjectURL(image.previewUrl))
+    imagePreviews.value = []
+    failedImageFiles.value = []
     forumStore.publishOpen = false
     router.push(`/posts/${post.id}`)
   },
@@ -63,37 +72,130 @@ function openFilePicker() {
   fileInput.value?.click()
 }
 
+function imageFileKey(file: File) {
+  return [file.name, file.size, file.lastModified, file.type].join(':')
+}
+
+function setUploadFailureMessage() {
+  const failedCount = failedImageFiles.value.length
+  error.value = failedCount
+    ? `${failedCount} 张图片上传失败，已保留上传成功的图片。可重新选择图片或重试失败项。`
+    : ''
+}
+
+function discardFailedImages() {
+  failedImageFiles.value = []
+  error.value = ''
+}
+
+async function uploadFiles(files: File[]) {
+  if (!files.length) return
+
+  imageUploading.value = true
+  const results = await Promise.allSettled(files.map(uploadPreviewImage))
+  const uploaded: UploadedImage[] = []
+  const failed: File[] = []
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      uploaded.push(result.value)
+    } else {
+      failed.push(files[index])
+    }
+  })
+
+  imagePreviews.value = [...imagePreviews.value, ...uploaded]
+  const failedByKey = new Map(failedImageFiles.value.map((file) => [imageFileKey(file), file]))
+  failed.forEach((file) => failedByKey.set(imageFileKey(file), file))
+  failedImageFiles.value = [...failedByKey.values()]
+  setUploadFailureMessage()
+  imageUploading.value = false
+}
+
 async function handleFiles(event: Event) {
+  if (imageUploading.value) return
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files ?? [])
   if (!files.length) return
 
   error.value = ''
-  const remaining = Math.max(0, 9 - imagePreviews.value.length)
-  const imageFiles = files.filter((file) => file.type.startsWith('image/')).slice(0, remaining)
-  const oversized = imageFiles.find((file) => file.size > 6 * 1024 * 1024)
+  const remaining = Math.max(0, 9 - imagePreviews.value.length - failedImageFiles.value.length)
+  if (remaining <= 0) {
+    error.value = '最多只能上传 9 张图片。'
+    input.value = ''
+    return
+  }
+
+  const invalidFile = files.find((file) => !ALLOWED_IMAGE_TYPES.has(file.type))
+  if (invalidFile) {
+    error.value = '图片格式仅支持 JPG、PNG、GIF 或 WebP。'
+    input.value = ''
+    return
+  }
+
+  const imageFiles = files.slice(0, remaining)
+  if (files.length > remaining) {
+    error.value = `最多只能再上传 ${remaining} 张图片，已先处理前 ${remaining} 张。`
+  }
+  const oversized = imageFiles.find((file) => file.size > MAX_IMAGE_BYTES)
   if (oversized) {
     error.value = '单张图片建议不超过 6MB。'
     input.value = ''
     return
   }
 
-  const previews = await Promise.all(imageFiles.map(readImageAsDataURL))
-  imagePreviews.value = [...imagePreviews.value, ...previews]
+  const uploadedKeys = new Set(imagePreviews.value.map((image) => image.fileKey))
+  const selectedByKey = new Map(imageFiles.map((file) => [imageFileKey(file), file]))
+  const filesToUpload = [...selectedByKey.values()].filter((file) => !uploadedKeys.has(imageFileKey(file)))
+  const selectedKeys = new Set(filesToUpload.map(imageFileKey))
+  failedImageFiles.value = failedImageFiles.value.filter((file) => !selectedKeys.has(imageFileKey(file)))
+
+  await uploadFiles(filesToUpload)
   input.value = ''
 }
 
-function readImageAsDataURL(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
+async function retryFailedImages() {
+  if (imageUploading.value || !failedImageFiles.value.length) return
+  const files = failedImageFiles.value
+  failedImageFiles.value = []
+  error.value = ''
+  await uploadFiles(files)
+}
+
+async function uploadPreviewImage(file: File) {
+  const dimensions = await readImageDimensions(file)
+  const result = await uploadImage(file, dimensions)
+  return { previewUrl: URL.createObjectURL(file), url: result.url, fileKey: imageFileKey(file) }
+}
+
+function readImageDimensions(file: File) {
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const image = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve({ width: image.naturalWidth, height: image.naturalHeight })
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('invalid image'))
+    }
+    image.src = objectUrl
   })
 }
 
 function removeImage(index: number) {
+  const removed = imagePreviews.value[index]
+  if (removed) URL.revokeObjectURL(removed.previewUrl)
   imagePreviews.value = imagePreviews.value.filter((_, itemIndex) => itemIndex !== index)
+}
+
+function closePublishModal() {
+  if (publishMutation.isPending.value || imageUploading.value) return
+  imagePreviews.value.forEach((image) => URL.revokeObjectURL(image.previewUrl))
+  imagePreviews.value = []
+  failedImageFiles.value = []
+  forumStore.publishOpen = false
 }
 
 function addTag() {
@@ -124,7 +226,28 @@ function toggleControlledTag(tag: string) {
 }
 
 function submit() {
+  if (publishMutation.isPending.value) return
   error.value = ''
+  if (!forumStore.isAuthed) {
+    forumStore.openAuth()
+    return
+  }
+  if (imageUploading.value) {
+    error.value = '图片仍在上传，请稍候。'
+    return
+  }
+  if (failedImageFiles.value.length) {
+    error.value = '仍有图片上传失败，请先重试，或移除失败图片后再发布。'
+    return
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    error.value = '当前网络不可用，内容已保留，请恢复网络后再发布。'
+    return
+  }
+  if (!title.value.trim() || !content.value.trim()) {
+    error.value = '请填写标题和正文后再发布。'
+    return
+  }
   if (electives.value.length !== 2) {
     error.value = '请选择两个再选科目。'
     return
@@ -132,6 +255,10 @@ function submit() {
   addTag()
   publishMutation.mutate()
 }
+
+onBeforeUnmount(() => {
+  imagePreviews.value.forEach((image) => URL.revokeObjectURL(image.previewUrl))
+})
 </script>
 
 <template>
@@ -139,7 +266,7 @@ function submit() {
     <section class="auth-modal publish-modal">
       <div class="modal-title-row">
         <h2>发布内容</h2>
-        <button class="icon-button" type="button" @click="forumStore.publishOpen = false"><X :size="18" /></button>
+        <button class="icon-button" type="button" :disabled="publishMutation.isPending.value || imageUploading" @click="closePublishModal"><X :size="18" /></button>
       </div>
 
       <div class="auth-tabs">
@@ -163,16 +290,25 @@ function submit() {
             <small>支持从手机相册或电脑照片中选择，最多 9 张。</small>
           </div>
           <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="handleFiles" />
-          <button type="button" @click="openFilePicker">
-            <ImagePlus :size="16" /> 上传/选择照片
+          <button type="button" :disabled="imageUploading || imagePreviews.length + failedImageFiles.length >= 9" @click="openFilePicker">
+            <ImagePlus :size="16" /> {{ imageUploading ? '上传中...' : imagePreviews.length + failedImageFiles.length >= 9 ? '已达 9 张上限' : '上传/选择照片' }}
           </button>
           <div v-if="imagePreviews.length" class="image-preview-grid">
-            <figure v-for="(image, index) in imagePreviews" :key="image">
-              <img :src="image" alt="待发布图片预览" />
+            <figure v-for="(image, index) in imagePreviews" :key="image.url">
+              <img :src="image.previewUrl" alt="待发布图片预览" />
               <button type="button" aria-label="删除图片" @click="removeImage(index)">
                 <Trash2 :size="14" />
               </button>
             </figure>
+          </div>
+          <div v-if="failedImageFiles.length" class="upload-failure-actions" role="status">
+            <span>{{ failedImageFiles.length }} 张图片待重试</span>
+            <button type="button" :disabled="imageUploading" @click="retryFailedImages">
+              重试失败图片
+            </button>
+            <button type="button" :disabled="imageUploading" @click="discardFailedImages">
+              移除失败图片
+            </button>
           </div>
         </div>
         <div class="tag-editor">
@@ -231,7 +367,9 @@ function submit() {
           </button>
         </div>
         <p v-if="error" class="form-error">{{ error }}</p>
-        <button class="primary-wide" :disabled="publishMutation.isPending.value" type="submit">发布</button>
+        <button class="primary-wide" :disabled="publishMutation.isPending.value || imageUploading" type="submit" :aria-busy="publishMutation.isPending.value || imageUploading">
+          {{ imageUploading ? '图片上传中...' : publishMutation.isPending.value ? '发布中...' : '发布' }}
+        </button>
       </form>
     </section>
   </div>

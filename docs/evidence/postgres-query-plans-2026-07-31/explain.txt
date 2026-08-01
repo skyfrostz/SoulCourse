@@ -1,0 +1,57 @@
+                                                               QUERY PLAN
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.14..15.38 rows=20 width=65) (actual time=0.005..0.014 rows=20 loops=1)
+   Buffers: shared hit=6
+   ->  Index Scan using idx_posts_latest_cursor on posts  (cost=0.14..63.40 rows=83 width=65) (actual time=0.005..0.012 rows=20 loops=1)
+         Buffers: shared hit=6
+ Planning:
+   Buffers: shared hit=237
+ Planning Time: 0.248 ms
+ Execution Time: 0.023 ms
+(8 rows)
+
+                                                 QUERY PLAN
+-------------------------------------------------------------------------------------------------------------
+ Limit  (cost=16.17..16.19 rows=8 width=65) (actual time=0.084..0.085 rows=8 loops=1)
+   Buffers: shared hit=95
+   ->  Sort  (cost=16.17..16.19 rows=8 width=65) (actual time=0.083..0.084 rows=8 loops=1)
+         Sort Key: created_at DESC, id DESC
+         Sort Method: quicksort  Memory: 26kB
+         Buffers: shared hit=95
+         ->  Seq Scan on posts  (cost=0.00..16.05 rows=8 width=65) (actual time=0.007..0.072 rows=8 loops=1)
+               Filter: ((deleted_at IS NULL) AND (search_vector @@ '''选科'''::tsquery))
+               Rows Removed by Filter: 76
+               Buffers: shared hit=89
+ Planning:
+   Buffers: shared hit=29
+ Planning Time: 0.144 ms
+ Execution Time: 0.091 ms
+(14 rows)
+
+                                                                  QUERY PLAN
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.01..0.02 rows=1 width=48) (actual time=0.004..0.004 rows=0 loops=1)
+   ->  Sort  (cost=0.01..0.02 rows=1 width=48) (actual time=0.004..0.004 rows=0 loops=1)
+         Sort Key: created_at DESC, id DESC
+         Sort Method: quicksort  Memory: 25kB
+         ->  Seq Scan on notifications  (cost=0.00..0.00 rows=1 width=48) (actual time=0.001..0.001 rows=0 loops=1)
+               Filter: ((recipient_user_id = 1) AND ((created_at < now()) OR ((created_at = now()) AND (id < '9223372036854775807'::bigint))))
+ Planning:
+   Buffers: shared hit=72
+ Planning Time: 0.078 ms
+ Execution Time: 0.008 ms
+(10 rows)
+
+                                                            QUERY PLAN
+----------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.01..0.02 rows=1 width=48) (actual time=0.001..0.002 rows=0 loops=1)
+   ->  Sort  (cost=0.01..0.02 rows=1 width=48) (actual time=0.001..0.001 rows=0 loops=1)
+         Sort Key: created_at DESC, id DESC
+         Sort Method: quicksort  Memory: 25kB
+         ->  Seq Scan on direct_messages  (cost=0.00..0.00 rows=1 width=48) (actual time=0.001..0.001 rows=0 loops=1)
+               Filter: (((sender_user_id = 1) AND (recipient_user_id = 2)) OR ((sender_user_id = 2) AND (recipient_user_id = 1)))
+ Planning:
+   Buffers: shared hit=92
+ Planning Time: 0.061 ms
+ Execution Time: 0.004 ms
+(10 rows)

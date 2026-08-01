@@ -6,9 +6,11 @@ import { useRouter } from 'vue-router'
 import PostCard from '../components/PostCard.vue'
 import { fetchPostCollection, fetchTaxonomy } from '../lib/api'
 import { useForumStore } from '../stores/forum'
+import { useOnlineState } from '../composables/useOnlineState'
 
 const router = useRouter()
 const forumStore = useForumStore()
+const { isOffline } = useOnlineState()
 const keyword = ref('')
 const activeTag = ref('')
 
@@ -18,6 +20,8 @@ const postsQuery = useQuery({
   queryFn: () => fetchPostCollection({ tag: activeTag.value || undefined, sort: 'latest', limit: 50 }),
 })
 const subjectTags = computed(() => taxonomyQuery.data.value?.subjectTags ?? [])
+const isLoading = computed(() => taxonomyQuery.isLoading.value || postsQuery.isLoading.value)
+const hasError = computed(() => taxonomyQuery.isError.value || postsQuery.isError.value)
 const advicePosts = computed(() => {
   const controlled = new Set(subjectTags.value.map((item) => item.value))
   const query = keyword.value.trim().toLowerCase()
@@ -26,6 +30,11 @@ const advicePosts = computed(() => {
     (!query || [post.title, post.content, post.authorName, post.province, post.tags.join(' ')].some((value) => value.toLowerCase().includes(query))),
   )
 })
+
+function retry() {
+  void taxonomyQuery.refetch()
+  void postsQuery.refetch()
+}
 </script>
 
 <template>
@@ -53,7 +62,7 @@ const advicePosts = computed(() => {
       </div>
     </section>
 
-    <nav class="content-lens-tabs" aria-label="组合筛选">
+    <nav v-if="!taxonomyQuery.isError.value" class="content-lens-tabs" aria-label="组合筛选">
       <button type="button" :class="{ active: !activeTag }" @click="activeTag = ''">全部组合</button>
       <button
         v-for="tag in subjectTags"
@@ -67,12 +76,20 @@ const advicePosts = computed(() => {
     </nav>
 
     <section class="feed-panel topic-feed-panel">
-      <div v-if="advicePosts.length" class="feed-grid">
+      <div v-if="hasError || isOffline" class="empty-state compact-empty">
+        <h2>{{ isOffline ? '当前网络不可用' : '选科建议暂时无法加载' }}</h2>
+        <p>{{ isOffline ? '恢复网络后再刷新，真实建议帖子不会被替换成模拟内容。' : '帖子或标签数据没有同步成功，请检查网络后重试。' }}</p>
+        <button class="primary-wide compact" type="button" @click="retry">重新加载</button>
+      </div>
+      <div v-else-if="isLoading" class="empty-state compact-empty" aria-live="polite">
+        <p>正在加载真实建议帖子...</p>
+      </div>
+      <div v-else-if="advicePosts.length" class="feed-grid">
         <PostCard v-for="post in advicePosts" :key="post.id" :post="post" />
       </div>
-      <div v-else-if="!postsQuery.isLoading.value" class="empty-state compact-empty">
-        <h2>暂无匹配帖子</h2>
-        <p>发布后，手动标签和 AI 标签会决定帖子是否进入这里。</p>
+      <div v-else class="empty-state compact-empty">
+        <h2>{{ keyword.trim() || activeTag ? '没有匹配的建议帖子' : '暂时没有已归类建议' }}</h2>
+        <p>{{ keyword.trim() || activeTag ? '换个组合、专业或省份关键词试试。' : '发布后，受控标签会决定帖子是否进入这里。' }}</p>
       </div>
     </section>
   </main>

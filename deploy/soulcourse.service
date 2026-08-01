@@ -1,21 +1,26 @@
 [Unit]
 Description=SoulCourse web application
-After=network.target
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/www/wwwroot/Soulcourse
-Environment=APP_ENV=production
-Environment=HTTP_PORT=1309
-Environment=SQLITE_PATH=data/soulcourse.db
-Environment=MEDIA_UPLOAD_DIR=data/uploads
-Environment=CORS_ALLOWED_ORIGINS=https://soulcourse.cn,https://www.soulcourse.cn
-Environment=GOMEMLIMIT=1536MiB
-ExecStart=/www/wwwroot/Soulcourse/deploy/run-production.sh
+User=soulcourse
+Group=soulcourse
+WorkingDirectory=/opt/soulcourse/current
+EnvironmentFile=/etc/soulcourse/soulcourse.env
+ExecStart=/opt/soulcourse/current/deploy/run-production.sh
 Restart=on-failure
-RestartSec=3
+RestartSec=10
+TimeoutStopSec=15
 UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/soulcourse
 
 [Install]
 WantedBy=multi-user.target

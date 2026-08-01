@@ -6,6 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "check:bundle-budget": "node scripts/check-bundle-budget.mjs",
+    "lint": "vue-tsc -b --pretty false",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:real-backend": "playwright test --config playwright.real-backend.config.ts",
+    "openapi:generate": "go -C ../backend run ./cmd/openapi-types",
+    "openapi:check": "bash ../scripts/check_openapi_types.sh",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -17,14 +25,22 @@
     "pinia": "^3.0.4",
     "vue": "^3.5.38",
     "vue-echarts": "^8.0.1",
-    "vue-router": "^5.1.0"
+    "vue-router": "^5.1.0",
+    "web-vitals": "^6.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/vue": "^8.1.0",
     "@types/node": "^24.13.2",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/tsconfig": "^0.9.1",
+    "axe-playwright": "^2.2.2",
+    "jsdom": "^30.0.1",
+    "msw": "^2.15.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.0",
+    "vitest": "^4.1.10",
     "vue-tsc": "^3.3.5"
   }
 }

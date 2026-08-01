@@ -1,0 +1,25 @@
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:GetBucketInfo"
+      ],
+      "Resource": [
+        "acs:oss:*:*:soulcourse-prod-2026"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:GetObject",
+        "oss:PutObject",
+        "oss:DeleteObject"
+      ],
+      "Resource": [
+        "acs:oss:*:*:soulcourse-prod-2026/images/*"
+      ]
+    }
+  ]
+}

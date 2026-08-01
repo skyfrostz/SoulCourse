@@ -46,6 +46,8 @@ sudo --preserve-env=MIGRATION_DATABASE_URL \
 
 The script serializes deployments, applies migrations and the Guangdong data gate, starts the inactive slot, polls its direct `/readyz`, atomically switches the Nginx upstream, validates/reloads Nginx, verifies `SOULCOURSE_PUBLIC_HEALTH_URL` through the public HTTPS path, and drains the old slot. A direct readiness, Nginx, or public HTTPS failure leaves or restores the previous upstream. Keep the previous release directory until the next release has completed its observation window.
 
+Set `NGINX_BIN` when the host uses a non-system Nginx build (for example `/www/server/nginx/sbin/nginx`). The script validates and reloads through that same binary with `-t` and `-s reload`, so it cannot accidentally reload a different systemd-managed Nginx installation.
+
 Install and enable the cleanup timer once on the host:
 
 ```bash

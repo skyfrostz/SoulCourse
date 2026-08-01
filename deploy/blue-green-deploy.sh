@@ -147,10 +147,10 @@ upstream soulcourse_active {
 EOF
 
 install -m 0644 "$next_upstream" "$UPSTREAM_FILE"
-if ! "$NGINX_BIN" -t || ! "$SYSTEMCTL_BIN" reload nginx; then
-  if [[ -s "$previous_upstream" ]]; then
-    install -m 0644 "$previous_upstream" "$UPSTREAM_FILE"
-    "$NGINX_BIN" -t && "$SYSTEMCTL_BIN" reload nginx || true
+if ! "$NGINX_BIN" -t || ! "$NGINX_BIN" -s reload; then
+	if [[ -s "$previous_upstream" ]]; then
+		install -m 0644 "$previous_upstream" "$UPSTREAM_FILE"
+		"$NGINX_BIN" -t && "$NGINX_BIN" -s reload || true
   fi
   "$SYSTEMCTL_BIN" stop "soulcourse@$inactive_slot.service" || true
   printf 'nginx switch failed; previous upstream restored\n' >&2
@@ -158,9 +158,9 @@ if ! "$NGINX_BIN" -t || ! "$SYSTEMCTL_BIN" reload nginx; then
 fi
 
 if ! "$CURL_BIN" --fail --silent --show-error --max-time 10 "$SOULCOURSE_PUBLIC_HEALTH_URL" >/dev/null; then
-  if [[ -s "$previous_upstream" ]]; then
-    install -m 0644 "$previous_upstream" "$UPSTREAM_FILE"
-    "$NGINX_BIN" -t && "$SYSTEMCTL_BIN" reload nginx || true
+	if [[ -s "$previous_upstream" ]]; then
+		install -m 0644 "$previous_upstream" "$UPSTREAM_FILE"
+		"$NGINX_BIN" -t && "$NGINX_BIN" -s reload || true
   fi
   "$SYSTEMCTL_BIN" stop "soulcourse@$inactive_slot.service" || true
   printf 'external HTTPS readiness failed; previous upstream restored when available\n' >&2

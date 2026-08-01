@@ -381,3 +381,4 @@ export interface WebVitalInput {
   rating: string
   value: number
 }
+

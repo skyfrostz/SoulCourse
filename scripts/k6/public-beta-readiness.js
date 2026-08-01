@@ -85,7 +85,7 @@ export function readJourney() {
   const response = http.get(`${baseUrl}${path}`, { tags: { kind: 'read', endpoint: name } })
   const ok = check(response, {
     [`${name} returns 2xx`]: (res) => res.status >= 200 && res.status < 300,
-    [`${name} has bounded body`]: (res) => res.body.length < 2_000_000,
+    [`${name} has bounded body`]: (res) => typeof res.body === 'string' && res.body.length < 2_000_000,
   })
   errorRate.add(!ok)
   sleep(smoke ? 0 : pacingSeconds)

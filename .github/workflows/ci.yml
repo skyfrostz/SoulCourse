@@ -298,7 +298,8 @@ jobs:
         with:
           filename: scripts/k6/public-beta-readiness.js
         env:
-          BASE_URL: http://127.0.0.1:1309
+          # k6 runs in a Docker container; 127.0.0.1 is the k6 container itself.
+          BASE_URL: http://172.17.0.1:1309
           K6_SMOKE: '1'
 
       - name: Stop backend

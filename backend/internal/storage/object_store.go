@@ -164,7 +164,11 @@ func NewS3ObjectStore(ctx context.Context, cfg config.Config) (*S3ObjectStore, e
 	if cfg.S3Bucket == "" || cfg.S3Region == "" || cfg.S3Endpoint == "" {
 		return nil, errors.New("S3_BUCKET, S3_REGION and S3_ENDPOINT are required")
 	}
-	loadOpts := []func(*awsconfig.LoadOptions) error{awsconfig.WithRegion(cfg.S3Region)}
+	loadOpts := []func(*awsconfig.LoadOptions) error{
+		awsconfig.WithRegion(cfg.S3Region),
+		// Aliyun OSS does not accept AWS SDK's streaming checksum trailer.
+		awsconfig.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
+	}
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		return nil, err

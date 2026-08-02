@@ -1905,11 +1905,12 @@ textarea {
   width: 100%;
   margin: 0;
   color: #fff;
-  font-family: inherit;
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -2px;
+  font-family: "STZhongsong", "华文中宋", "Songti SC", serif;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {
@@ -1919,7 +1920,7 @@ textarea {
   }
 
   .not-found-content {
-    width: min(calc(100% - 40px), 360px);
+    width: min(calc(100% - 24px), 360px);
     gap: 28px;
   }
 
@@ -1936,8 +1937,13 @@ textarea {
   }
 
   .not-found-content p {
-    font-size: clamp(16px, 4.5vw, 20px);
-    letter-spacing: -1.3px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 340px) {
+  .not-found-content p {
+    font-size: 13px;
   }
 }
 

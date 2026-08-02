@@ -480,6 +480,13 @@ func migrate2026StructuredSources(db *sql.DB) error {
 }
 
 func migrateKnowledgeRecordsVerified(db *sql.DB) error {
+	var migrated int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM admin_content_records WHERE id = 'migration-knowledge-reviewed-20260802'`).Scan(&migrated); err != nil {
+		return err
+	}
+	if migrated > 0 {
+		return nil
+	}
 	rows, err := db.Query(`SELECT id, payload FROM admin_content_records WHERE deleted_at IS NULL AND module IN ('policies', 'requirements')`)
 	if err != nil {
 		return err
@@ -505,8 +512,13 @@ func migrateKnowledgeRecordsVerified(db *sql.DB) error {
 		if err := json.Unmarshal([]byte(item.payload), &payload); err != nil {
 			return fmt.Errorf("decode knowledge record %s: %w", item.id, err)
 		}
+		// The existing public-beta content was reviewed by the operator before
+		// this migration. Future records are not affected because the marker
+		// makes this a one-time migration rather than a startup auto-upgrade.
 		payload["coverageStatus"] = "verified"
-		payload["methodology"] = "已完成官方来源核对与结构化记录复核。"
+		if methodology, ok := payload["methodology"].(string); !ok || strings.TrimSpace(methodology) == "" {
+			payload["methodology"] = "已完成官方来源核对与结构化记录复核。"
+		}
 		encoded, err := json.Marshal(payload)
 		if err != nil {
 			return err
@@ -514,6 +526,11 @@ func migrateKnowledgeRecordsVerified(db *sql.DB) error {
 		if _, err := db.Exec(`UPDATE admin_content_records SET payload = ?, updated_at = ? WHERE id = ?`, string(encoded), sqliteNow(), item.id); err != nil {
 			return err
 		}
+	}
+	if _, err := db.Exec(`INSERT INTO admin_content_records
+		(id, module, title, content_type, status, scope, owner, tags, summary, url, priority, sort_order, payload, created_at, updated_at)
+		VALUES ('migration-knowledge-reviewed-20260802', 'system', '知识库复核迁移标记', 'system', '已完成', '全站', 'system', '[]', '当前公测知识库已由运营确认复核。', '', '常规', 0, '{"migration":"knowledge-reviewed-20260802"}', ?, ?)`, sqliteNow(), sqliteNow()); err != nil {
+		return err
 	}
 	return nil
 }

@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
       <button v-if="total > 1" class="carousel-arrow next" type="button" aria-label="下一张图片" @click="move(1)">
         <ChevronRight :size="24" />
       </button>
-      <span v-if="total > 1" class="carousel-counter" aria-live="polite" style="background-color: #111827; color: #ffffff">{{ currentIndex + 1 }} / {{ total }}</span>
+      <span v-if="total > 1" class="carousel-counter" aria-hidden="true" style="background-color: #000 !important; color: #fff !important">{{ currentIndex + 1 }} / {{ total }}</span>
       <div v-if="total > 1 && total <= 9" class="carousel-dots" role="tablist" aria-label="选择图片">
         <button
           v-for="index in visibleDots"
@@ -209,7 +209,7 @@ onBeforeUnmount(() => {
 .carousel-arrow:hover { background: rgba(0,0,0,.7); }
 .carousel-arrow.previous { left: 16px; }
 .carousel-arrow.next { right: 16px; }
-.carousel-counter { position: absolute; z-index: 2; right: 16px; bottom: 16px; padding: 6px 9px; border-radius: 5px; background: #111827 !important; color: #fff !important; font-size: 12px; font-weight: 800; isolation: isolate; }
+.carousel-counter { position: absolute; z-index: 2; right: 16px; bottom: 16px; padding: 6px 9px; border: 1px solid rgba(255,255,255,.28); border-radius: 5px; background: #000 !important; color: #fff !important; font-size: 18px; font-weight: 800; isolation: isolate; opacity: 1; }
 .carousel-dots { position: absolute; z-index: 3; right: 0; bottom: 16px; left: 0; display: flex; justify-content: center; gap: 7px; pointer-events: none; }
 .carousel-dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #777; }
 .carousel-dots button { pointer-events: auto; box-shadow: 0 1px 4px rgba(0,0,0,.45); }

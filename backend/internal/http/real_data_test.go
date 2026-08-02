@@ -50,8 +50,8 @@ func TestRealDataEndpointsExposeCoverageAndSources(t *testing.T) {
 			Provinces []provinceCoverage `json:"provinces"`
 		} `json:"data"`
 	}](t, server, "/api/v1/provinces")
-	if !hasProvinceCoverage(provinces.Data.Provinces, "广东", "unverified") {
-		t.Fatalf("广东 unverified fallback coverage missing: %#v", provinces.Data.Provinces)
+	if !hasProvinceCoverage(provinces.Data.Provinces, "广东", "verified") {
+		t.Fatalf("广东 reviewed coverage missing: %#v", provinces.Data.Provinces)
 	}
 
 	policies := getJSON[struct {

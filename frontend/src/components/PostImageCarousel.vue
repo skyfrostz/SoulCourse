@@ -15,6 +15,21 @@ const failedImages = ref(new Set<string>())
 const retryTokens = ref<Record<string, number>>({})
 const touchStartX = ref<number | null>(null)
 
+let previewScrollLockCount = 0
+let previewScrollLockOverflow = ''
+
+function lockPreviewScroll() {
+  if (previewScrollLockCount === 0) previewScrollLockOverflow = document.body.style.overflow
+  previewScrollLockCount += 1
+  document.body.style.overflow = 'hidden'
+}
+
+function unlockPreviewScroll() {
+  if (previewScrollLockCount === 0) return
+  previewScrollLockCount -= 1
+  if (previewScrollLockCount === 0) document.body.style.overflow = previewScrollLockOverflow
+}
+
 const total = computed(() => props.images.length)
 const currentUrl = computed(() => props.images[currentIndex.value] ?? '')
 const previewUrl = computed(() => previewIndex.value === null ? '' : props.images[previewIndex.value] ?? '')
@@ -103,13 +118,14 @@ watch(() => props.images, (images) => {
 })
 
 watch(previewIndex, (index) => {
-  document.body.style.overflow = index === null ? '' : 'hidden'
+  if (index === null) unlockPreviewScroll()
+  else lockPreviewScroll()
 })
 
 onMounted(() => window.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
-  document.body.style.overflow = ''
+  if (previewIndex.value !== null) unlockPreviewScroll()
 })
 </script>
 
@@ -140,7 +156,7 @@ onBeforeUnmount(() => {
       <button v-if="total > 1" class="carousel-arrow next" type="button" aria-label="下一张图片" @click="move(1)">
         <ChevronRight :size="24" />
       </button>
-      <span v-if="total > 1" class="carousel-counter" aria-live="polite">{{ currentIndex + 1 }} / {{ total }}</span>
+      <span v-if="total > 1" class="carousel-counter" aria-live="polite" style="background-color: #111827; color: #ffffff">{{ currentIndex + 1 }} / {{ total }}</span>
     </div>
     <div v-if="total > 1 && total <= 9" class="carousel-dots" role="tablist" aria-label="选择图片">
       <button
@@ -180,13 +196,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .post-image-carousel { min-width: 0; }
 .carousel-stage { position: relative; display: grid; min-height: 360px; height: min(78vh, 760px); place-items: center; overflow: hidden; background: #202124; }
-.carousel-image-button { display: grid; width: 100%; height: 100%; min-width: 0; min-height: 0; place-items: center; padding: 0; border: 0; background: transparent; }
-.carousel-image-button img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.carousel-image-button { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; }
+.carousel-image-button img { display: block; flex: 0 1 auto; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
 .carousel-arrow { position: absolute; z-index: 1; top: 50%; display: grid; width: 48px; height: 48px; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,.24); border-radius: 50%; background: rgba(0,0,0,.46); color: #fff; transform: translateY(-50%); }
 .carousel-arrow:hover { background: rgba(0,0,0,.7); }
 .carousel-arrow.previous { left: 16px; }
 .carousel-arrow.next { right: 16px; }
-.carousel-counter { position: absolute; right: 16px; bottom: 16px; padding: 6px 9px; border-radius: 5px; background: rgba(0,0,0,.58); color: #fff; font-size: 12px; font-weight: 800; }
+.carousel-counter { position: absolute; z-index: 2; right: 16px; bottom: 16px; padding: 6px 9px; border-radius: 5px; background: #111827 !important; color: #fff !important; font-size: 12px; font-weight: 800; isolation: isolate; }
 .carousel-dots { display: flex; justify-content: center; gap: 7px; padding: 12px; background: #202124; }
 .carousel-dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #777; }
 .carousel-dots button.active { background: #fff; transform: scale(1.25); }

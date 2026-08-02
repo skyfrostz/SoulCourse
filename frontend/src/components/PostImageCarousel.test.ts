@@ -54,4 +54,35 @@ describe('PostImageCarousel', () => {
     expect(screen.getByText('图片加载失败')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
+
+  it('keeps the foreground image proportional inside the stable stage', () => {
+    render(PostImageCarousel, {
+      props: {
+        images: ['data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="1200"/>'],
+        title: '纵向图片',
+      },
+    })
+
+    const image = screen.getByRole('img') as HTMLImageElement
+    const stage = screen.getByRole('group')
+    Object.defineProperties(image, {
+      naturalWidth: { configurable: true, value: 600 },
+      naturalHeight: { configurable: true, value: 1200 },
+    })
+
+    expect(stage).toHaveClass('carousel-stage')
+    expect(getComputedStyle(image).width).toBe('auto')
+    expect(getComputedStyle(image).height).toBe('auto')
+    expect(image.naturalWidth / image.naturalHeight).toBe(0.5)
+  })
+
+  it('restores an existing body scroll state after preview closes', async () => {
+    document.body.style.overflow = 'auto'
+    render(PostImageCarousel, { props: { images: images(1), title: '测试帖子' } })
+
+    await fireEvent.click(screen.getByRole('button', { name: '点击放大当前图片' }))
+    expect(document.body.style.overflow).toBe('hidden')
+    await fireEvent.keyDown(window, { key: 'Escape' })
+    expect(document.body.style.overflow).toBe('auto')
+  })
 })

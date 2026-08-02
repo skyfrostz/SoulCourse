@@ -13,6 +13,7 @@ const forumStore = useForumStore()
 const { source } = useForumData()
 const route = useRoute()
 const isAdminLayout = computed(() => route.meta.layout === 'admin')
+const viewKey = computed(() => route.name === 'home' ? 'home' : route.fullPath)
 
 onMounted(() => {
   if (forumStore.isAuthed) void forumStore.hydrateAccount()
@@ -43,9 +44,9 @@ function reloadPage() {
         </div>
       </section>
     </main>
-    <RouterView v-else v-slot="{ Component, route }">
+    <RouterView v-else v-slot="{ Component }">
       <Transition name="page-flow" mode="out-in">
-        <component :is="Component" :key="route.fullPath" />
+        <component :is="Component" :key="viewKey" />
       </Transition>
     </RouterView>
     <MobileBottomNav v-if="!isAdminLayout" />

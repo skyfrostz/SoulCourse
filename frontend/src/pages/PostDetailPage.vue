@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Bookmark, ChevronLeft, ExternalLink, Flag, MessageSquare, Pencil, Save, Send, ThumbsUp, Trash2, UserPlus, WifiOff } from '@lucide/vue'
+import { Bookmark, ChevronLeft, ExternalLink, Flag, MessageSquare, Pencil, Save, Send, Share2, ThumbsUp, Trash2, UserPlus, WifiOff } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, createComment, deletePost, fetchPostDetail, reportPost, toggleFollowAuthor, togglePostFavorite, togglePostLike, updatePost } from '../lib/api'
@@ -14,6 +14,7 @@ const route = useRoute()
 const router = useRouter()
 const queryClient = useQueryClient()
 const forumStore = useForumStore()
+const props = defineProps<{ postId?: number; mode?: 'modal' | 'page' }>()
 const draft = ref('')
 const commentError = ref('')
 const reportMessage = ref('')
@@ -23,7 +24,7 @@ const editing = ref(false)
 const commentInput = ref<HTMLInputElement | null>(null)
 const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
 
-const postId = computed(() => Number(route.params.id))
+const postId = computed(() => props.postId ?? Number(route.params.id))
 const postDetailQueryKey = computed(() => ['post-detail', postId.value, forumStore.session?.user.id ?? 'guest'] as const)
 const detailQuery = useQuery({
   queryKey: postDetailQueryKey,
@@ -285,6 +286,21 @@ function focusComments() {
   window.setTimeout(() => commentInput.value?.focus(), 250)
 }
 
+async function sharePost() {
+  if (!post.value) return
+  const url = `${window.location.origin}/posts/${post.value.id}`
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: post.value.title, url })
+      return
+    }
+    await navigator.clipboard.writeText(url)
+    postActionMessage.value = '帖子链接已复制。'
+  } catch {
+    postActionMessage.value = '分享已取消。'
+  }
+}
+
 function askCertifiedUser() {
   if (!forumStore.requireAuth()) return
   draft.value = '想请认证老师/规划师帮我看：'
@@ -318,10 +334,11 @@ onBeforeUnmount(() => {
   <main class="detail-page">
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
 
-    <section v-if="post" class="article-layout" :class="{ 'has-images': post.imageUrls?.length }">
+    <section v-if="post" class="article-layout" :class="{ 'has-images': post.imageUrls?.length, 'is-modal-layout': props.mode === 'modal' }">
       <div v-if="post.imageUrls?.length" class="article-media-column">
         <PostImageCarousel :images="post.imageUrls" :title="post.title" />
       </div>
+      <div class="article-content-column">
       <article class="article-main">
         <div class="breadcrumb">首页 / 帖子详情 / {{ categoryLabels[post.category] }}</div>
         <h1 v-if="!editing">{{ post.title }}</h1>
@@ -413,15 +430,13 @@ onBeforeUnmount(() => {
           <small>{{ post.electives.map((item) => subjectLabels[item]).join(' · ') }}</small>
         </div>
 
-        <section v-if="dataEvidence" class="post-data-evidence">
-          <div>
-            <small>真实数据来源</small>
-            <h2>{{ dataEvidence.title }}</h2>
-            <p>{{ dataEvidence.content }}</p>
-            <a :href="dataEvidence.url" target="_blank" rel="noreferrer">
-              {{ dataEvidence.publisher }}：查看原始来源
-            </a>
+        <section v-if="dataEvidence" class="post-data-evidence" aria-label="真实数据来源">
+          <span class="source-proof-mark"><ExternalLink :size="15" /></span>
+          <div class="source-proof-copy">
+            <small>真实数据来源 · {{ dataEvidence.publisher }}</small>
+            <strong>{{ dataEvidence.title }}</strong>
           </div>
+          <a :href="dataEvidence.url" target="_blank" rel="noreferrer">查看原始来源 <ExternalLink :size="14" /></a>
         </section>
 
         <div class="article-actions">
@@ -432,6 +447,7 @@ onBeforeUnmount(() => {
             <Bookmark :size="17" /> {{ favoriteMutation.isPending.value ? '处理中...' : post.viewerFavorited ? '已收藏' : '收藏' }}
           </button>
           <button type="button" @click="focusComments"><MessageSquare :size="17" /> {{ displayedCommentCount }} 评论</button>
+          <button type="button" @click="sharePost"><Share2 :size="17" /> 分享</button>
           <button type="button" :disabled="isOffline || reportMutation.isPending.value" @click="submitReport"><Flag :size="17" /> 举报</button>
           <button v-if="viewerOwnsPost" type="button" :disabled="isOffline || updateMutation.isPending.value" @click="startEditingPost">
             <Pencil :size="17" /> 编辑帖子
@@ -488,6 +504,7 @@ onBeforeUnmount(() => {
           </div>
         </section>
       </aside>
+      </div>
     </section>
 
     <section v-else-if="!detailQuery.isLoading.value" class="empty-state detail-empty-state public-page-state">

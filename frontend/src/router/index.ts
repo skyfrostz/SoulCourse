@@ -6,6 +6,7 @@ export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: HomePage, meta: { title: '选科π' } },
+    { path: '/community', name: 'community', component: HomePage, meta: { title: '选科社区 - 选科π' } },
     { path: '/posts/:id', name: 'post-detail', component: () => import('../pages/PostDetailPage.vue'), meta: { title: '帖子详情 - 选科π' } },
     { path: '/users/:name', name: 'user-profile', component: () => import('../pages/UserProfilePage.vue'), meta: { title: '用户主页 - 选科π' } },
     { path: '/topics', name: 'topics-overview', component: () => import('../pages/TopicsOverviewPage.vue'), meta: { title: '话题 - 选科π' } },

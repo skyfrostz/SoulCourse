@@ -49,6 +49,10 @@ func registerSPA(router *gin.Engine, logger *logx.Logger, distDir string, basePa
 			c.Status(http.StatusNotFound)
 			return
 		}
+		if appPath == "/" {
+			c.Redirect(http.StatusFound, "/welcome")
+			return
+		}
 		if strings.HasPrefix(appPath, "/welcome/") {
 			candidate := strings.TrimPrefix(appPath, "/")
 			if existsInFS(assets.filesystem, candidate) {
@@ -64,11 +68,6 @@ func registerSPA(router *gin.Engine, logger *logx.Logger, distDir string, basePa
 				return
 			}
 			c.Status(http.StatusNotFound)
-			return
-		}
-
-		if appPath == "/" {
-			serveFSFile(c, assets.filesystem, "index.html")
 			return
 		}
 

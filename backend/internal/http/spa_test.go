@@ -33,7 +33,7 @@ func TestSPAFallsBackToIndexAndRejectsMissingAssets(t *testing.T) {
 		body               string
 		cache              string
 	}{
-		{"root", http.MethodGet, "/app/", 200, "spa", "no-cache"},
+		{"root", http.MethodGet, "/app/", 302, "", ""},
 		{"deep link", http.MethodGet, "/app/requirements", 200, "spa", "no-cache"},
 		{"asset", http.MethodGet, "/app/assets/app.js", 200, "console.log", "public, max-age=31536000, immutable"},
 		{"missing asset", http.MethodGet, "/app/assets/missing.js", 404, "", ""},
@@ -53,6 +53,9 @@ func TestSPAFallsBackToIndexAndRejectsMissingAssets(t *testing.T) {
 			}
 			if tc.cache != "" && rec.Header().Get("Cache-Control") != tc.cache {
 				t.Fatalf("cache=%q want=%q", rec.Header().Get("Cache-Control"), tc.cache)
+			}
+			if tc.name == "root" && rec.Header().Get("Location") != "/welcome" {
+				t.Fatalf("location=%q want /welcome", rec.Header().Get("Location"))
 			}
 		})
 	}
@@ -83,7 +86,7 @@ func TestSPAWelcomeUsesItsOwnEntryAndAssets(t *testing.T) {
 		{"/welcome/", "welcome", "no-cache", 200},
 		{"/welcome/assets/app.js", "welcome", "public, max-age=31536000, immutable", 200},
 		{"/welcome/assets/missing.js", "", "", 404},
-		{"/", "forum", "no-cache", 200},
+		{"/", "", "", 302},
 	}
 	for _, tc := range cases {
 		t.Run(tc.path, func(t *testing.T) {
@@ -91,6 +94,9 @@ func TestSPAWelcomeUsesItsOwnEntryAndAssets(t *testing.T) {
 			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
 			if rec.Code != tc.status || (tc.body != "" && !strings.Contains(rec.Body.String(), tc.body)) {
 				t.Fatalf("status=%d body=%q", rec.Code, rec.Body.String())
+			}
+			if tc.path == "/" && rec.Header().Get("Location") != "/welcome" {
+				t.Fatalf("location=%q want /welcome", rec.Header().Get("Location"))
 			}
 			if tc.cache != "" && rec.Header().Get("Cache-Control") != tc.cache {
 				t.Fatalf("cache=%q want=%q", rec.Header().Get("Cache-Control"), tc.cache)

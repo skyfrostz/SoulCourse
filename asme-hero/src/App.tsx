@@ -7,7 +7,7 @@ const VIDEO_FALLBACK_URL =
   'https://soulcourse-prod-2026.oss-cn-shenzhen.aliyuncs.com/welcome/hero.mp4'
 
 const navItems = [
-  { label: '选科社区', href: '/' },
+  { label: '选科社区', href: '/community' },
   { label: '选科查询', href: '/requirements' },
   { label: '政策库', href: '/knowledge' },
 ]
@@ -99,13 +99,13 @@ function App() {
         </div>
 
         <header className="welcome-header">
-          <a className="welcome-brand" href="/" aria-label="SoulCourse，进入选科社区">
+          <a className="welcome-brand" href="/welcome" aria-label="SoulCourse，欢迎页">
             <img className="welcome-brand-logo" src="/welcome/soulcourse-logo.jpeg" alt="SoulCourse 开源在线教育系统" />
           </a>
           <nav className="welcome-nav" aria-label="欢迎页导航">
             {navItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
           </nav>
-          <a className="button button-dark header-cta" href="/">进入社区 <ArrowUpRight size={15} /></a>
+          <a className="button button-dark header-cta" href="/community">进入社区 <ArrowUpRight size={15} /></a>
           <button className="menu-button" type="button" aria-label={menuOpen ? '关闭菜单' : '打开菜单'} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
             {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -120,7 +120,7 @@ function App() {
           <h1>选科知谈</h1>
           <p className="hero-statement">穿过信息迷雾，找到有据可依的选择。</p>
           <div className="hero-actions">
-            <a className="button button-dark" href="/">进入选科社区 <ArrowUpRight size={16} /></a>
+            <a className="button button-dark" href="/community">进入选科社区 <ArrowUpRight size={16} /></a>
             <a className="text-link" href="/requirements">查询专业要求 <ArrowUpRight size={15} /></a>
           </div>
         </div>
@@ -143,7 +143,7 @@ function App() {
               <span className="section-index">{item.index}</span>
               <h2>{item.title}</h2>
               <p>{item.body}</p>
-              <a className="text-link" href={item.href}>{item.link} <ArrowUpRight size={15} /></a>
+              <a className="text-link" href={item.type === 'feed' ? '/community' : item.href}>{item.link} <ArrowUpRight size={15} /></a>
             </div>
             <CapabilityVisual type={item.type} />
           </article>
@@ -165,7 +165,7 @@ function App() {
       </section>
 
       <section className="posts-section section-shell" id="community">
-        <div className="section-kicker"><span>社区正在讨论</span><a href="/">浏览全部 <ArrowUpRight size={15} /></a></div>
+        <div className="section-kicker"><span>社区正在讨论</span><a href="/community">浏览全部 <ArrowUpRight size={15} /></a></div>
         <div className="posts-heading"><h2>先从一个真实问题开始。</h2><p>没有被包装成答案的经验，往往更接近你真正想问的事。</p></div>
         <div className="post-grid">
           {posts.map((post) => <PostPreview key={post.id} post={post} />)}
@@ -177,7 +177,7 @@ function App() {
         <div className="trust-list"><div><strong>官方来源</strong><span>教育考试院 · 阳光高考</span></div><div><strong>结构化整理</strong><span>政策、专业与科目要求</span></div><div><strong>复核状态</strong><span className="status"><i /> 已完成来源核对</span></div><a className="text-link" href="/knowledge">打开政策资料库 <ArrowUpRight size={15} /></a></div>
       </section>
 
-      <section className="final-section section-shell"><p className="eyebrow">选择开始之前</p><h2>把依据看清楚，<br />再走自己的路。</h2><a className="button button-dark" href="/">进入选科社区 <ArrowUpRight size={16} /></a></section>
+      <section className="final-section section-shell"><p className="eyebrow">选择开始之前</p><h2>把依据看清楚，<br />再走自己的路。</h2><a className="button button-dark" href="/community">进入选科社区 <ArrowUpRight size={16} /></a></section>
 
       <footer className="welcome-footer section-shell"><a className="welcome-brand" href="/" aria-label="SoulCourse 首页"><img className="welcome-brand-logo" src="/welcome/soulcourse-logo.jpeg" alt="SoulCourse 开源在线教育系统" /></a><span>广东选科社区</span><nav><a href="/requirements">选科查询</a><a href="/knowledge">政策库</a><a href="/insights">数据中心</a></nav><small>© 2026 SoulCourse</small></footer>
     </main>

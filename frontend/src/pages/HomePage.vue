@@ -37,7 +37,7 @@ watch(
 
 <template>
   <main class="workspace forum-home-workspace" :class="{ 'filter-collapsed': railCollapsed }">
-    <FilterRail :collapsed="railCollapsed" :insights="insights" @toggle-collapse="railCollapsed = !railCollapsed" />
+    <FilterRail :collapsed="railCollapsed" @toggle-collapse="railCollapsed = !railCollapsed" />
     <FeedGrid :posts="posts" :is-loading="isLoading" :has-more="hasMore" :has-error="hasError" :is-offline="isOffline" @retry="refetch" />
     <InsightPanel :insights="insights" :topics="topics" />
     <PostDetailModal v-if="postId" :post-id="postId" :target-section="targetSection" @close="closePostDetail" />

@@ -4,12 +4,12 @@ import { computed, ref } from 'vue'
 import { categoryLabels, subjectAccent, subjectLabels } from '../lib/labels'
 import { useGlobalSearch } from '../composables/useGlobalSearch'
 import { useForumStore } from '../stores/forum'
-import type { Category, Subject, SubjectInsight, Track } from '../types/forum'
+import type { Category, Subject, Track } from '../types/forum'
 
 const forumStore = useForumStore()
 const { runSearch } = useGlobalSearch()
 const filterExpanded = ref(false)
-const props = defineProps<{ collapsed: boolean; insights: SubjectInsight[] }>()
+defineProps<{ collapsed: boolean }>()
 defineEmits<{ toggleCollapse: [] }>()
 
 const tracks: Array<Track | 'all'> = ['all', 'physics', 'history']
@@ -37,9 +37,6 @@ const categoryLabel = computed(() =>
 const activeFilterCount = computed(() =>
   Number(forumStore.filter.track !== 'all') + forumStore.filter.subjects.length + Number(forumStore.filter.category !== 'all'),
 )
-
-const officialRequirements = computed(() => props.insights.slice(0, 6))
-const requirementColors = ['#0f9f7a', '#2563eb', '#38bdf8', '#ef4444', '#f97316', '#f59e0b']
 
 function resetActiveFilters() {
   if (forumStore.filter.keyword) {
@@ -144,16 +141,6 @@ function resetActiveFilters() {
       </div>
     </section>
 
-    <section class="filter-section hot-list">
-      <h3>官方计划要求</h3>
-      <RouterLink v-for="(insight, index) in officialRequirements" :key="insight.id" class="hot-row" :to="`/insights/${insight.id}`">
-        <span class="hot-dot" :style="{ background: requirementColors[index % requirementColors.length] }"></span>
-        <span>{{ insight.combination }}</span>
-        <strong>{{ insight.heat }}个</strong>
-      </RouterLink>
-    </section>
-
-    <RouterLink class="outline-wide" to="/insights">查看全部组合</RouterLink>
     <button class="filter-confirm-button" type="button" @click="filterExpanded = false">
       <CircleCheck :size="17" /> 确定并收起
     </button>

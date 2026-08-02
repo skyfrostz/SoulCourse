@@ -48,6 +48,7 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
+  const [videoReady, setVideoReady] = useState(false)
 
   useEffect(() => {
     const video = videoRef.current
@@ -72,14 +73,14 @@ function App() {
           {!videoFailed && (
             <video
               ref={videoRef}
-              className="hero-video"
+              className={`hero-video ${videoReady ? 'is-ready' : ''}`}
               src={VIDEO_URL}
-              poster="/welcome/hero-poster.jpeg"
               muted
               autoPlay
               loop
               playsInline
               preload="metadata"
+              onCanPlay={() => setVideoReady(true)}
               onError={() => setVideoFailed(true)}
             />
           )}
@@ -88,8 +89,8 @@ function App() {
         </div>
 
         <header className="welcome-header">
-          <a className="welcome-brand" href="/" aria-label="选科π，进入选科社区">
-            选科π<sup>®</sup>
+          <a className="welcome-brand" href="/" aria-label="SoulCourse，进入选科社区">
+            <img className="welcome-brand-logo" src="/welcome/soulcourse-logo.jpeg" alt="SoulCourse 开源在线教育系统" />
           </a>
           <nav className="welcome-nav" aria-label="欢迎页导航">
             {navItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
@@ -105,8 +106,8 @@ function App() {
         </div>
 
         <div className="hero-copy">
-          <p className="eyebrow">广东新高考 · 选科π</p>
-          <h1>选科π</h1>
+          <p className="eyebrow">广东新高考 · 选科知谈</p>
+          <h1>选科知谈</h1>
           <p className="hero-statement">穿过信息迷雾，找到有据可依的选择。</p>
           <div className="hero-actions">
             <a className="button button-dark" href="/">进入选科社区 <ArrowUpRight size={16} /></a>
@@ -168,7 +169,7 @@ function App() {
 
       <section className="final-section section-shell"><p className="eyebrow">选择开始之前</p><h2>把依据看清楚，<br />再走自己的路。</h2><a className="button button-dark" href="/">进入选科社区 <ArrowUpRight size={16} /></a></section>
 
-      <footer className="welcome-footer section-shell"><a className="welcome-brand" href="/">选科π<sup>®</sup></a><span>广东选科社区</span><nav><a href="/requirements">选科查询</a><a href="/knowledge">政策库</a><a href="/insights">数据中心</a></nav><small>© 2026 SoulCourse</small></footer>
+      <footer className="welcome-footer section-shell"><a className="welcome-brand" href="/" aria-label="SoulCourse 首页"><img className="welcome-brand-logo" src="/welcome/soulcourse-logo.jpeg" alt="SoulCourse 开源在线教育系统" /></a><span>广东选科社区</span><nav><a href="/requirements">选科查询</a><a href="/knowledge">政策库</a><a href="/insights">数据中心</a></nav><small>© 2026 SoulCourse</small></footer>
     </main>
   )
 }

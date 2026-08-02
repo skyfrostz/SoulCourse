@@ -1,5 +1,91 @@
 # SoulCourse
 
+> 选科知谈（SoulCourse）是面向广东新高考学生、家长与教师的证据型选科决策平台。
+
+## 项目状态
+
+| 项目 | 当前状态 |
+| --- | --- |
+| Web 主站 | 公测运行中 |
+| 欢迎页 | `/welcome` 已上线 |
+| Android App | v1 发布准备完成，支持内部测试 |
+| API 契约 | OpenAPI 管理并生成前端类型 |
+| 生产数据库 | PostgreSQL 16 为目标架构，SQLite 仅用于本地或明确授权的临时公测 |
+| 生产文件存储 | S3 兼容对象存储 / CDN；Android 安装包由官网服务器本地托管 |
+
+## 产品边界
+
+平台由四个相互衔接的业务域组成：
+
+- **选科社区**：帖子信息流、悬浮详情、评论、点赞、收藏、关注、私信和通知。
+- **专业要求**：按专业、科目、地区和年份查询结构化选科要求。
+- **政策资料**：保留官方来源、发布日期、适用范围和复核状态。
+- **数据中心**：展示招生计划、科目占比和可追溯的数据分析。
+
+管理后台、数据审核、来源复核和内容治理属于运营域，不面向普通用户开放。Android App 复用用户端业务，不打包管理后台和欢迎页视频。
+
+## 技术架构
+
+```text
+Browser / Android Capacitor App
+              |
+       HTTPS + OpenAPI
+              |
+       Go + Gin application
+        /       |        \
+ PostgreSQL  S3/OSS    SMTP
+              |
+       Nginx / HTTPS / CDN
+```
+
+- Web：Vue 3、Vite、Pinia、Vue Query、Naive UI、ECharts。
+- Android：Capacitor 7，包名 `cn.soulcourse.app`，最低 Android API 26。
+- Backend：Go、Gin、PostgreSQL repository、SQLite 本地开发 repository。
+- Contract：`docs/openapi/openapi.yaml` 是接口契约源，前端类型由工具生成。
+- Observability：健康检查、就绪检查、结构化日志、指标和受控匿名诊断事件。
+
+## 安全与发布原则
+
+- Web 使用 HttpOnly Cookie 与 CSRF；Android 使用短期可轮换的服务端 Bearer 会话。
+- Android 会话令牌保存在 Android Keystore，不进入 `localStorage`、URL、日志或遥测。
+- 所有生产连接使用 HTTPS；外部网页通过系统浏览器打开，不在 App WebView 中承载未知站点。
+- 正式 keystore、密码、`.env`、服务器凭据、APK/AAB 和数据库备份禁止提交 Git。
+- 生产发布必须经过构建、测试、健康检查、数据库就绪检查和回滚点确认。
+
+Android 发布边界和签名环境变量见 [docs/android-release.md](docs/android-release.md)。
+
+## 质量门禁
+
+提交前至少执行：
+
+```bash
+go test ./...
+cd frontend && pnpm lint && pnpm test:unit && pnpm build
+cd ../backend && go run ./cmd/release
+```
+
+Android 发布还需要：
+
+```bash
+cd frontend
+pnpm build:android
+pnpm exec cap sync android
+cd android
+./gradlew assembleRelease bundleRelease
+```
+
+公测前验收以 [docs/public-beta-readiness.md](docs/public-beta-readiness.md) 为准；任何 P0/P1 问题未关闭前，不得扩大公测范围。
+
+## 运营与变更管理
+
+- `main`：可发布主线，只接受经过审查的 Pull Request。
+- `codex/*`：功能、修复和发布准备分支，分支名称使用清晰的中文或英文语义。
+- 数据库迁移只允许向后兼容扩展；禁止直接删除生产字段或依赖不可逆回滚。
+- 每次发布必须记录版本号、Git 提交、构建产物 SHA-256、数据库迁移版本和回滚制品。
+- 线上变更前先备份数据库与当前二进制，变更后验证 `/healthz`、`/readyz` 和核心用户旅程。
+
+详细 Android 发布信息见 [docs/android-release.md](docs/android-release.md)，部署流程见 [docs/deploy/runbook.md](docs/deploy/runbook.md)。
+
 - 前端：Vue + Vite，开发端口 `5712`
 - 管理后台：并入 Vue 前端，开发时访问 `http://localhost:5712/admin/`
 - 后端：Go + Gin；生产 PostgreSQL、本地开发可用 SQLite，API 端口 `1309`

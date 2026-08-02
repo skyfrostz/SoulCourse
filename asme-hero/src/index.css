@@ -30,6 +30,7 @@ button { font: inherit; }
 .hero-video { opacity: 0; transition: opacity .35s ease; }
 .hero-video.is-ready { opacity: .94; }
 .hero-fallback { z-index: -2; background: linear-gradient(160deg, #f7f8f6 35%, #dce7e2 72%, #b9cdbf); }
+.is-quark-mobile .hero-fallback { background: url('/welcome/hero-poster.jpeg?v=20260803') center 68% / cover no-repeat; }
 .hero-wash { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(247,248,246,.96) 0%, rgba(247,248,246,.76) 30%, rgba(247,248,246,.08) 63%, rgba(247,248,246,.92) 100%); }
 .welcome-header { width: min(1320px, calc(100% - 64px)); margin: 0 auto; min-height: 88px; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 2; }
 .welcome-brand { display: inline-flex; align-items: center; width: 82px; height: 62px; line-height: 1; letter-spacing: 0; }

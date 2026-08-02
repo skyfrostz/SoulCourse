@@ -53,10 +53,14 @@ function App() {
   const [videoFailed, setVideoFailed] = useState(false)
   const [videoReady, setVideoReady] = useState(false)
   const [videoSrc, setVideoSrc] = useState(VIDEO_URL)
+  const [isQuarkMobile, setIsQuarkMobile] = useState(false)
 
   useEffect(() => {
+    const viewport = window.matchMedia('(max-width: 767px)')
+    const syncViewport = () => setIsQuarkMobile(viewport.matches && /Quark/i.test(navigator.userAgent || ''))
+    syncViewport()
     const video = videoRef.current
-    if (!video) return
+    if (!video) return () => viewport.removeEventListener('change', syncViewport)
     const mediaPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
     const syncMotion = () => {
       if (mediaPreference.matches) {
@@ -67,14 +71,17 @@ function App() {
     }
     syncMotion()
     mediaPreference.addEventListener('change', syncMotion)
-    return () => mediaPreference.removeEventListener('change', syncMotion)
-  }, [])
+    return () => {
+      viewport.removeEventListener('change', syncViewport)
+      mediaPreference.removeEventListener('change', syncMotion)
+    }
+  }, [isQuarkMobile])
 
   return (
-    <main className="welcome-page">
+    <main className={`welcome-page ${isQuarkMobile ? 'is-quark-mobile' : ''}`}>
       <section className="hero" id="home">
         <div className="hero-media" aria-hidden="true">
-          {!videoFailed && (
+          {!videoFailed && !isQuarkMobile && (
             <video
               ref={videoRef}
               className={`hero-video ${videoReady ? 'is-ready' : ''}`}

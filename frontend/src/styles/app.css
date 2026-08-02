@@ -8299,8 +8299,16 @@ textarea {
 }
 
 .source-original-link {
-  color: #d52b3f;
+  border-color: #ff2442;
+  background: #ff2442;
+  color: #fff;
   text-decoration: none;
+}
+
+.source-original-link:hover {
+  border-color: #e61e3a;
+  background: #e61e3a;
+  color: #fff;
 }
 
 @media (min-width: 1500px) {

@@ -105,6 +105,13 @@ func NewServerWithObjectStore(
 		}
 		router.GET("/", redirectToBasePath)
 		router.HEAD("/", redirectToBasePath)
+	} else {
+		router.GET("/", func(c *gin.Context) {
+			c.Redirect(http.StatusFound, "/welcome")
+		})
+		router.HEAD("/", func(c *gin.Context) {
+			c.Redirect(http.StatusFound, "/welcome")
+		})
 	}
 
 	baseRouter := router.Group(cfg.AppBasePath)

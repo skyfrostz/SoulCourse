@@ -157,18 +157,18 @@ onBeforeUnmount(() => {
         <ChevronRight :size="24" />
       </button>
       <span v-if="total > 1" class="carousel-counter" aria-live="polite" style="background-color: #111827; color: #ffffff">{{ currentIndex + 1 }} / {{ total }}</span>
-    </div>
-    <div v-if="total > 1 && total <= 9" class="carousel-dots" role="tablist" aria-label="选择图片">
-      <button
-        v-for="index in visibleDots"
-        :key="index"
-        type="button"
-        role="tab"
-        :aria-label="`查看第 ${index + 1} 张图片`"
-        :aria-selected="index === currentIndex"
-        :class="{ active: index === currentIndex }"
-        @click="currentIndex = index"
-      />
+      <div v-if="total > 1 && total <= 9" class="carousel-dots" role="tablist" aria-label="选择图片">
+        <button
+          v-for="index in visibleDots"
+          :key="index"
+          type="button"
+          role="tab"
+          :aria-label="`查看第 ${index + 1} 张图片`"
+          :aria-selected="index === currentIndex"
+          :class="{ active: index === currentIndex }"
+          @click="currentIndex = index"
+        />
+      </div>
     </div>
 
     <Teleport to="body">
@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.post-image-carousel { min-width: 0; }
+.post-image-carousel { position: relative; min-width: 0; height: 100%; }
 .carousel-stage { position: relative; display: grid; min-height: 360px; height: min(78vh, 760px); place-items: center; overflow: hidden; background: #202124; }
 .carousel-image-button { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; }
 .carousel-image-button img { display: block; flex: 0 1 auto; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
@@ -203,8 +203,9 @@ onBeforeUnmount(() => {
 .carousel-arrow.previous { left: 16px; }
 .carousel-arrow.next { right: 16px; }
 .carousel-counter { position: absolute; z-index: 2; right: 16px; bottom: 16px; padding: 6px 9px; border-radius: 5px; background: #111827 !important; color: #fff !important; font-size: 12px; font-weight: 800; isolation: isolate; }
-.carousel-dots { display: flex; justify-content: center; gap: 7px; padding: 12px; background: #202124; }
+.carousel-dots { position: absolute; z-index: 3; right: 0; bottom: 16px; left: 0; display: flex; justify-content: center; gap: 7px; pointer-events: none; }
 .carousel-dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #777; }
+.carousel-dots button { pointer-events: auto; box-shadow: 0 1px 4px rgba(0,0,0,.45); }
 .carousel-dots button.active { background: #fff; transform: scale(1.25); }
 .carousel-error { display: grid; gap: 12px; place-items: center; color: #d1d5db; }
 .carousel-error button { min-height: 40px; padding: 0 14px; border: 1px solid #6b7280; border-radius: 6px; background: #374151; color: #fff; }

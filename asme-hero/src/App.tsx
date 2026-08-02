@@ -11,10 +11,10 @@ const navItems = [
 ]
 
 const posts = [
-  { id: 89, title: '物化生适合目标不太明确的人吗？', author: '小周同学', tag: '物化生', meta: '128 赞 · 3 评论', tone: 'sage' },
-  { id: 39, title: '从最近三届学生看物化地的优劣势', author: '陈老师', tag: '物化地', meta: '212 赞 · 4 评论', tone: 'sky' },
-  { id: 14, title: '选科前做一张纸：专业、成绩、成本', author: '林妈妈', tag: '选科决策', meta: '96 赞 · 2 评论', tone: 'sand' },
-  { id: 11, title: '2026 拟在粤招生选科要求，应该怎么看', author: '选科研究所', tag: '政策核对', meta: '数据建议 · 已复核', tone: 'mint' },
+  { id: 89, title: '物化生适合目标不太明确的人吗？', author: '小周同学', tag: '物化生', meta: '128 赞 · 3 评论', tone: 'sage', image: '/welcome/post-images/subject-choice-student.jpg' },
+  { id: 39, title: '从最近三届学生看物化地的优劣势', author: '陈老师', tag: '物化地', meta: '212 赞 · 4 评论', tone: 'sky', image: '/welcome/post-images/subject-choice-desk.jpg' },
+  { id: 14, title: '选科前做一张纸：专业、成绩、成本', author: '林妈妈', tag: '选科决策', meta: '96 赞 · 2 评论', tone: 'sand', image: '/welcome/post-images/family-discussion.jpg' },
+  { id: 11, title: '2026 拟在粤招生选科要求，应该怎么看', author: '选科研究所', tag: '政策核对', meta: '数据建议 · 已复核', tone: 'mint', image: '/welcome/post-images/source-check.jpg' },
 ]
 
 const capabilities = [
@@ -175,13 +175,13 @@ function App() {
 }
 
 function CapabilityVisual({ type }: { type: string }) {
-  if (type === 'feed') return <div className="visual-frame visual-feed"><div className="visual-topline"><span>选科社区</span><span>推荐　经验　数据</span></div><div className="visual-feed-grid"><div className="mini-post mini-post-tall"><div className="mini-image image-sage" /><strong>物化生适合目标不太明确的人吗？</strong><small>小周同学　♡ 128</small></div><div className="mini-post"><div className="mini-image image-sky" /><strong>从最近三届学生看物化地的优劣势</strong><small>陈老师　♡ 212</small></div><div className="mini-post"><div className="mini-image image-sand" /><strong>选科前做一张纸</strong><small>林妈妈　♡ 96</small></div></div></div>
+  if (type === 'feed') return <div className="visual-frame visual-feed"><div className="visual-topline"><span>选科社区</span><span>推荐　经验　数据</span></div><div className="visual-feed-grid"><div className="mini-post mini-post-tall"><img className="mini-image" src="/welcome/post-images/subject-choice-student.jpg" alt="学生思考选科组合" /><strong>物化生适合目标不太明确的人吗？</strong><small>小周同学　♡ 128</small></div><div className="mini-post"><img className="mini-image" src="/welcome/post-images/subject-choice-desk.jpg" alt="学生整理选科资料" /><strong>从最近三届学生看物化地的优劣势</strong><small>陈老师　♡ 212</small></div><div className="mini-post"><img className="mini-image" src="/welcome/post-images/family-discussion.jpg" alt="家长和学生讨论选科" /><strong>选科前做一张纸</strong><small>林妈妈　♡ 96</small></div></div></div>
   if (type === 'requirements') return <div className="visual-frame visual-requirements"><div className="visual-search"><span>⌕</span><span>搜索专业名称</span></div><div className="visual-result"><div className="major-mark">临床<br />医学</div><div><small>医学与生命科学</small><strong>临床医学</strong><p><b>物理</b><b>化学</b></p></div><span className="verified-mark">已复核</span></div><div className="visual-result faded"><div className="major-mark">软件<br />工程</div><div><small>计算机与电子信息</small><strong>软件工程</strong><p><b>物理</b><b>化学</b></p></div></div><span className="visual-year">2026 / 专业目录</span></div>
   return <div className="visual-frame visual-source"><div className="source-title"><span>政策资料库</span><strong>2026</strong></div><div className="source-chart"><i style={{ height: '52%' }} /><i style={{ height: '78%' }} /><i style={{ height: '64%' }} /><i style={{ height: '91%' }} /><i style={{ height: '70%' }} /></div><div className="source-line"><span>广东省教育考试院</span><b>已复核</b></div><div className="source-line"><span>阳光高考专业目录</span><b>官方来源</b></div></div>
 }
 
 function PostPreview({ post }: { post: typeof posts[number] }) {
-  return <a className="post-preview" href={`/posts/${post.id}`}><div className={`post-cover ${post.tone}`}><span>#{post.tag}</span><Play size={17} fill="currentColor" /></div><div className="post-info"><strong>{post.title}</strong><small>{post.author}　{post.meta}</small></div></a>
+  return <a className="post-preview" href={`/posts/${post.id}`}><div className={`post-cover ${post.tone}`}><img src={post.image} alt="" /><span>#{post.tag}</span><Play size={17} fill="currentColor" /></div><div className="post-info"><strong>{post.title}</strong><small>{post.author}　{post.meta}</small></div></a>
 }
 
 export default App

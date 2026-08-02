@@ -41,6 +41,32 @@ func registerSPA(router *gin.Engine, logger *logx.Logger, distDir string, basePa
 			return
 		}
 
+		if appPath == "/welcome" {
+			if existsInFS(assets.filesystem, "welcome/index.html") {
+				serveFSFile(c, assets.filesystem, "welcome/index.html")
+				return
+			}
+			c.Status(http.StatusNotFound)
+			return
+		}
+		if strings.HasPrefix(appPath, "/welcome/") {
+			candidate := strings.TrimPrefix(appPath, "/")
+			if existsInFS(assets.filesystem, candidate) {
+				serveFSFile(c, assets.filesystem, candidate)
+				return
+			}
+			if filepath.Ext(candidate) != "" {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			if existsInFS(assets.filesystem, "welcome/index.html") {
+				serveFSFile(c, assets.filesystem, "welcome/index.html")
+				return
+			}
+			c.Status(http.StatusNotFound)
+			return
+		}
+
 		if appPath == "/" {
 			serveFSFile(c, assets.filesystem, "index.html")
 			return
@@ -135,9 +161,9 @@ func skipSPAPath(requestPath string) bool {
 }
 
 func serveFSFile(c *gin.Context, filesystem fs.FS, filePath string) {
-	if filePath == "index.html" {
+	if filePath == "index.html" || strings.HasSuffix(filePath, "/index.html") {
 		c.Header("Cache-Control", "no-cache")
-	} else if strings.HasPrefix(filePath, "assets/") {
+	} else if strings.HasPrefix(filePath, "assets/") || strings.Contains(filePath, "/assets/") {
 		c.Header("Cache-Control", "public, max-age=31536000, immutable")
 	} else {
 		c.Header("Cache-Control", "public, max-age=86400")

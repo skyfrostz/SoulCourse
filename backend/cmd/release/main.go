@@ -22,14 +22,19 @@ func main() {
 	}
 	repoRoot := filepath.Dir(backendDir)
 	frontendDir := filepath.Join(repoRoot, "frontend")
+	welcomeDir := filepath.Join(repoRoot, "asme-hero")
 	releaseDir := filepath.Join(repoRoot, "release")
 	embedDistDir := filepath.Join(backendDir, "internal", "http", "webdist", "dist")
 
 	fmt.Println("[打包] 开始构建前端静态资源")
 	run("pnpm", []string{"build"}, frontendDir)
 
+	fmt.Println("[打包] 构建独立欢迎页")
+	run("pnpm", []string{"build"}, welcomeDir)
+
 	fmt.Println("[打包] 同步前端产物到 Go 内嵌目录")
 	syncDir(filepath.Join(frontendDir, "dist"), embedDistDir)
+	syncDir(filepath.Join(welcomeDir, "dist"), filepath.Join(embedDistDir, "welcome"))
 
 	fmt.Println("[打包] 编译跨平台二进制文件")
 	if err := os.RemoveAll(releaseDir); err != nil {

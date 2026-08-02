@@ -58,6 +58,47 @@ func TestSPAFallsBackToIndexAndRejectsMissingAssets(t *testing.T) {
 	}
 }
 
+func TestSPAWelcomeUsesItsOwnEntryAndAssets(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<main>forum</main>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "welcome", "assets"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "welcome", "index.html"), []byte("<main>welcome</main>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "welcome", "assets", "app.js"), []byte("console.log('welcome')"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	router := gin.New()
+	registerSPA(router, logx.New(io.Discard, logx.LevelError), dir, "")
+	cases := []struct {
+		path, body, cache string
+		status             int
+	}{
+		{"/welcome", "welcome", "no-cache", 200},
+		{"/welcome/", "welcome", "no-cache", 200},
+		{"/welcome/assets/app.js", "welcome", "public, max-age=31536000, immutable", 200},
+		{"/welcome/assets/missing.js", "", "", 404},
+		{"/", "forum", "no-cache", 200},
+	}
+	for _, tc := range cases {
+		t.Run(tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if rec.Code != tc.status || (tc.body != "" && !strings.Contains(rec.Body.String(), tc.body)) {
+				t.Fatalf("status=%d body=%q", rec.Code, rec.Body.String())
+			}
+			if tc.cache != "" && rec.Header().Get("Cache-Control") != tc.cache {
+				t.Fatalf("cache=%q want=%q", rec.Header().Get("Cache-Control"), tc.cache)
+			}
+		})
+	}
+}
+
 func TestSPACleansAndStripsBasePath(t *testing.T) {
 	for _, tc := range []struct {
 		in, base, want string

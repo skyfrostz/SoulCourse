@@ -22,7 +22,7 @@ a { color: inherit; text-decoration: none; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button { font: inherit; }
 
-.welcome-page { overflow: hidden; background: #f3f7f3; }
+.welcome-page { overflow: hidden; background: #eff5f0; }
 .section-shell { width: min(1180px, calc(100% - 64px)); margin: 0 auto; }
 .hero { min-height: min(900px, calc(100svh - 42px)); position: relative; isolation: isolate; overflow: hidden; background: #eef1ed; }
 .hero-media { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
@@ -108,7 +108,7 @@ button { font: inherit; }
 .source-chart i:nth-child(2n) { background: #afc4b3; }
 .source-line { padding: 13px 0 0; color: #667068; font-size: 12px; }
 .source-line b { color: #2f6b4f; font-size: 11px; font-weight: 500; }
-.evidence-section { padding: 106px 0 128px; background: #edf4ee; }
+.evidence-section { padding: 106px 0 128px; background: #e8f1e9; }
 .evidence-title { margin-top: 52px; font-size: 54px; }
 .evidence-path { display: grid; grid-template-columns: 1fr 80px 1fr 80px 1fr; align-items: center; margin-top: 78px; }
 .evidence-path > div { display: grid; gap: 8px; }

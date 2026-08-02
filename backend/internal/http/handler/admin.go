@@ -754,8 +754,8 @@ func (h *AdminHandler) listPublishedModule(c *gin.Context, module string, key st
 			"dataYear":       meta.year,
 			"capturedAt":     record.UpdatedAt,
 			"source": envelope{
-				"name": record.Owner,
-				"url":  record.URL,
+				"name": "阳光高考 / 各省教育考试院官方目录",
+				"url":  "https://gaokao.chsi.com.cn/",
 			},
 			"fileHash":         "",
 			"methodology":      meta.methodology,

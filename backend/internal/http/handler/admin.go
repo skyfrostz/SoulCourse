@@ -734,6 +734,16 @@ func (h *AdminHandler) listPublishedModule(c *gin.Context, module string, key st
 	items := make([]envelope, 0, len(records))
 	for _, record := range records {
 		meta := recordMetadata(record)
+		var payload map[string]any
+		_ = json.Unmarshal(record.Payload, &payload)
+		requiredSubjects := []string{}
+		if values, ok := payload["requiredSubjects"].([]any); ok {
+			for _, value := range values {
+				if subject, ok := value.(string); ok && subject != "" {
+					requiredSubjects = append(requiredSubjects, subject)
+				}
+			}
+		}
 		scope := record.Scope
 		items = append(items, envelope{
 			"id":             record.ID,
@@ -747,11 +757,12 @@ func (h *AdminHandler) listPublishedModule(c *gin.Context, module string, key st
 				"name": record.Owner,
 				"url":  record.URL,
 			},
-			"fileHash":    "",
-			"methodology": meta.methodology,
-			"summary":     record.Summary,
-			"tags":        record.Tags,
-			"url":         record.URL,
+			"fileHash":         "",
+			"methodology":      meta.methodology,
+			"summary":          record.Summary,
+			"tags":             record.Tags,
+			"url":              record.URL,
+			"requiredSubjects": requiredSubjects,
 		})
 	}
 	ok(c, envelope{key: items})

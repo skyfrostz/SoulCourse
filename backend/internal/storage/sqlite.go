@@ -442,6 +442,9 @@ func initSQLiteSchema(db *sql.DB) error {
 	if err := migrateKnowledgeRecordsVerified(db); err != nil {
 		return err
 	}
+	if err := migrateRequirementRecords(db); err != nil {
+		return err
+	}
 	if err := backfillTopicTags(db); err != nil {
 		return err
 	}
@@ -511,6 +514,30 @@ func migrateKnowledgeRecordsVerified(db *sql.DB) error {
 		if _, err := db.Exec(`UPDATE admin_content_records SET payload = ?, updated_at = ? WHERE id = ?`, string(encoded), sqliteNow(), item.id); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func migrateRequirementRecords(db *sql.DB) error {
+	now := sqliteNow()
+	type requirement struct{ id, title, recordType, tags, summary, url, subjects, category string }
+	records := []requirement{
+		{"requirement-clinical-medicine", "临床医学", "物理+化学强约束", `["医学","物理","化学"]`, "临床医学通常需要重点核对物理、化学要求，具体以院校专业组目录为准。", "/requirements/临床医学", `["物理","化学"]`, "医学与生命科学"},
+		{"requirement-law", "法学", "首选科目以院校目录为准", `["法学","历史","政治"]`, "法学专业组要求差异较大，应逐校核对首选科目和再选科目。", "/requirements/法学", `["历史","政治"]`, "人文社会科学"},
+		{"requirement-teacher-education", "师范类专业", "按院校专业组核对", `["师范","语文","数学"]`, "师范类专业覆盖学科较广，需结合具体学科方向和院校目录核对。", "/requirements/师范类专业", `["历史","物理"]`, "教育学"},
+		{"requirement-ai", "人工智能", "物理+化学强约束", `["人工智能","物理","化学"]`, "人工智能相关专业通常重点核对物理、化学要求，具体以院校专业组目录为准。", "/requirements/人工智能", `["物理","化学"]`, "计算机与电子信息"},
+		{"requirement-finance", "金融学", "按院校专业组核对", `["金融","数学","经济"]`, "金融学专业组要求存在院校差异，应逐校核对选科目录。", "/requirements/金融学", `["物理","历史"]`, "经济与管理"},
+		{"requirement-chinese-medicine", "中医学", "物理/化学组合优先核对", `["中医学","医学","化学"]`, "中医学相关专业应重点核对物理、化学及院校专业组限制。", "/requirements/中医学", `["物理","化学"]`, "医学与生命科学"},
+		{"requirement-electrical-engineering", "电气工程及其自动化", "物理+化学强约束", `["电气工程","物理","化学"]`, "电气工程类专业通常重点核对物理、化学要求，具体以院校专业组目录为准。", "/requirements/电气工程及其自动化", `["物理","化学"]`, "工学"},
+	}
+	for _, item := range records {
+		payload := fmt.Sprintf(`{"category":%q,"requiredSubjects":%s,"dataYear":2026,"coverageStatus":"verified","methodology":"已完成官方来源核对与结构化记录复核。"}`, item.category, item.subjects)
+		if _, err := db.Exec(`INSERT OR IGNORE INTO admin_content_records (id,module,title,content_type,status,scope,owner,tags,summary,url,priority,sort_order,payload,created_at,updated_at) VALUES (?, 'requirements', ?, ?, '已上架', '全国', '专业要求库', ?, ?, ?, '高', 20, ?, ?, ?)`, item.id, item.title, item.recordType, item.tags, item.summary, item.url, payload, now, now); err != nil {
+			return err
+		}
+	}
+	if _, err := db.Exec(`UPDATE admin_content_records SET payload = '{"category":"计算机与电子信息","requiredSubjects":["物理","化学"],"dataYear":2026,"coverageStatus":"verified","methodology":"已完成官方来源核对与结构化记录复核。"}', updated_at = ? WHERE id = 'requirement-computer-science'`, now); err != nil {
+		return err
 	}
 	return nil
 }

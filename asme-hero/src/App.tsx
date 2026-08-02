@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, Menu, Play, X } from 'lucide-react'
 
 const VIDEO_URL =
+  'https://soulcourse-prod-2026.oss-cn-shenzhen.aliyuncs.com/welcome/hero.mp4'
+const VIDEO_FALLBACK_URL =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_083109_283f3553-e28f-428b-a723-d639c617eb2b.mp4'
 
 const navItems = [
@@ -49,6 +51,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
   const [videoReady, setVideoReady] = useState(false)
+  const [videoSrc, setVideoSrc] = useState(VIDEO_URL)
 
   useEffect(() => {
     const video = videoRef.current
@@ -74,14 +77,21 @@ function App() {
             <video
               ref={videoRef}
               className={`hero-video ${videoReady ? 'is-ready' : ''}`}
-              src={VIDEO_URL}
+              src={videoSrc}
               muted
               autoPlay
               loop
               playsInline
               preload="metadata"
               onCanPlay={() => setVideoReady(true)}
-              onError={() => setVideoFailed(true)}
+              onError={() => {
+                if (videoSrc !== VIDEO_FALLBACK_URL) {
+                  setVideoReady(false)
+                  setVideoSrc(VIDEO_FALLBACK_URL)
+                } else {
+                  setVideoFailed(true)
+                }
+              }}
             />
           )}
           <div className="hero-fallback" />

@@ -110,6 +110,31 @@ function refetchData() {
     </section>
 
     <template v-else>
+    <section class="insights-chart-panel" aria-labelledby="insights-chart-title">
+      <div class="insights-chart-heading">
+        <div>
+          <span>趋势图表</span>
+          <h2 id="insights-chart-title">选科组合{{ mode === 'count' ? '计划数' : '数据集占比' }}排行</h2>
+          <p>基于当前已复核的官方来源数据，点击组合可查看指标明细与来源。</p>
+        </div>
+        <BarChart3 :size="24" aria-hidden="true" />
+      </div>
+      <div class="insights-bar-chart" role="list" aria-label="选科组合排行图">
+        <RouterLink
+          v-for="insight in insightCards.slice(0, 8)"
+          :key="`chart-${insight.id}`"
+          :to="`/insights/${insight.id}`"
+          class="insight-bar-row"
+          role="listitem"
+        >
+          <span class="insight-bar-label">{{ insight.combination }}</span>
+          <span class="insight-bar-track">
+            <span class="insight-bar-fill" :style="{ width: `${Math.min(scoreFor(insight), 100)}%` }"></span>
+          </span>
+          <strong>{{ mode === 'count' ? `${insight.heat} ${insight.unit}` : `${insight.matchRate}%` }}</strong>
+        </RouterLink>
+      </div>
+    </section>
     <section id="trend-board" class="insight-feature-grid xhs-trend-grid">
       <article v-for="insight in insightCards" :key="insight.id" class="insight-feature-card">
         <RouterLink :to="`/insights/${insight.id}`">

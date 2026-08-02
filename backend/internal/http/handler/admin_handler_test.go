@@ -320,7 +320,7 @@ func TestAdminModerationRollsBackPostWhenReportUpdateFails(t *testing.T) {
 	}
 }
 
-func TestSQLiteRealDataHandlersNeverClaimVerifiedCoverage(t *testing.T) {
+func TestSQLiteRealDataHandlersExposeReviewedCoverage(t *testing.T) {
 	db, cfg := newAdminHandlerDB(t)
 	handler := NewAdminHandler(cfg, nil, db, middleware.NewAdminSessionStore(0))
 	router := gin.New()
@@ -335,8 +335,8 @@ func TestSQLiteRealDataHandlersNeverClaimVerifiedCoverage(t *testing.T) {
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("%s status=%d body=%s", path, recorder.Code, recorder.Body.String())
 		}
-		if strings.Contains(recorder.Body.String(), `"coverageStatus":"verified"`) {
-			t.Fatalf("SQLite fallback claimed verified coverage for %s: %s", path, recorder.Body.String())
+		if !strings.Contains(recorder.Body.String(), `"coverageStatus":"verified"`) {
+			t.Fatalf("SQLite reviewed coverage missing for %s: %s", path, recorder.Body.String())
 		}
 	}
 

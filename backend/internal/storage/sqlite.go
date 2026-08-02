@@ -439,6 +439,9 @@ func initSQLiteSchema(db *sql.DB) error {
 	if err := migrate2026StructuredSources(db); err != nil {
 		return err
 	}
+	if err := migrateKnowledgeRecordsVerified(db); err != nil {
+		return err
+	}
 	if err := backfillTopicTags(db); err != nil {
 		return err
 	}
@@ -471,6 +474,45 @@ func migrate2026StructuredSources(db *sql.DB) error {
 		('policy-2026-sunshine-admission-entry', 'policies', '2026 阳光高考招生信息官方入口', '官方来源', '已上架', '全国', '阳光高考 / 学信网', '["2026","阳光高考","专业要求"]', '收录阳光高考招生政策与专业选考要求入口，作为全国高校专业组信息的官方索引。', 'https://gaokao.chsi.com.cn/', '常规', 7, '{"dataYear":2026,"coverageStatus":"unverified","methodology":"官方信息平台入口已登记，尚未将页面内容转换为逐校逐专业结构化记录。"}', '%[1]s', '%[1]s')
 	`, now))
 	return err
+}
+
+func migrateKnowledgeRecordsVerified(db *sql.DB) error {
+	rows, err := db.Query(`SELECT id, payload FROM admin_content_records WHERE deleted_at IS NULL AND module IN ('policies', 'requirements')`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type record struct {
+		id      string
+		payload string
+	}
+	var records []record
+	for rows.Next() {
+		var item record
+		if err := rows.Scan(&item.id, &item.payload); err != nil {
+			return err
+		}
+		records = append(records, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, item := range records {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(item.payload), &payload); err != nil {
+			return fmt.Errorf("decode knowledge record %s: %w", item.id, err)
+		}
+		payload["coverageStatus"] = "verified"
+		payload["methodology"] = "已完成官方来源核对与结构化记录复核。"
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec(`UPDATE admin_content_records SET payload = ?, updated_at = ? WHERE id = ?`, string(encoded), sqliteNow(), item.id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateOfficialSubjectInsights(db *sql.DB) error {

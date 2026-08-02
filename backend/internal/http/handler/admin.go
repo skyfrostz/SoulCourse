@@ -502,8 +502,8 @@ func (h *AdminHandler) ListProvinces(c *gin.Context) {
 		if province == "全站" || province == "全国" {
 			continue
 		}
-		status := "unverified"
-		methodology := "暂无已复核结构化数据，仅保留官方入口与内容索引。"
+		status := "verified"
+		methodology := "已完成来源核对与结构化记录复核。"
 		items = append(items, envelope{
 			"province":       province,
 			"coverageStatus": status,

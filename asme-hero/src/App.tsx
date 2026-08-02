@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, Menu, Play, X } from 'lucide-react'
 
 const VIDEO_URL =
-  'https://soulcourse-prod-2026.oss-cn-shenzhen.aliyuncs.com/welcome/hero.mp4'
-const VIDEO_FALLBACK_URL =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_083109_283f3553-e28f-428b-a723-d639c617eb2b.mp4'
+const VIDEO_FALLBACK_URL =
+  'https://soulcourse-prod-2026.oss-cn-shenzhen.aliyuncs.com/welcome/hero.mp4'
 
 const navItems = [
   { label: '选科社区', href: '/' },

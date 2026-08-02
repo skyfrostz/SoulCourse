@@ -13,6 +13,7 @@ const forumStore = useForumStore()
 const { source } = useForumData()
 const route = useRoute()
 const isAdminLayout = computed(() => route.meta.layout === 'admin')
+const isImmersiveLayout = computed(() => route.meta.layout === 'immersive')
 const viewKey = computed(() => route.name === 'home' ? 'home' : route.fullPath)
 
 onMounted(() => {
@@ -32,8 +33,8 @@ function reloadPage() {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'is-home-route': route.path === '/', 'is-admin-route': isAdminLayout }">
-    <TopNav v-if="!isAdminLayout" :source="source" />
+  <div class="app-shell" :class="{ 'is-home-route': route.path === '/', 'is-admin-route': isAdminLayout, 'is-immersive-route': isImmersiveLayout }">
+    <TopNav v-if="!isAdminLayout && !isImmersiveLayout" :source="source" />
     <main v-if="appError" class="detail-page app-error-page">
       <section class="empty-state detail-empty-state public-page-state">
         <h1>{{ appError.title }}</h1>
@@ -49,9 +50,9 @@ function reloadPage() {
         <component :is="Component" :key="viewKey" />
       </Transition>
     </RouterView>
-    <MobileBottomNav v-if="!isAdminLayout" />
-    <AuthModal v-if="!isAdminLayout && forumStore.authOpen" />
-    <div v-if="!isAdminLayout && forumStore.publishOpen" v-show="!forumStore.authOpen">
+    <MobileBottomNav v-if="!isAdminLayout && !isImmersiveLayout" />
+    <AuthModal v-if="!isAdminLayout && !isImmersiveLayout && forumStore.authOpen" />
+    <div v-if="!isAdminLayout && !isImmersiveLayout && forumStore.publishOpen" v-show="!forumStore.authOpen">
       <PublishModal />
     </div>
   </div>

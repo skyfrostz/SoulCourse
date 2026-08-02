@@ -25,7 +25,7 @@ export const router = createRouter({
     { path: '/knowledge', name: 'knowledge-base', component: () => import('../pages/KnowledgeBasePage.vue'), meta: { title: '政策资料 - 选科π' } },
     { path: '/knowledge/:province/docs/:documentId', name: 'policy-document', component: () => import('../pages/PolicyDocumentPage.vue'), meta: { title: '政策文件 - 选科π' } },
     { path: '/knowledge/:province', name: 'province-detail', component: () => import('../pages/ProvinceDetailPage.vue'), meta: { title: '省份资料 - 选科π' } },
-    { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../pages/NotFoundPage.vue'), meta: { title: '页面不存在 - 选科π' } },
+    { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../pages/NotFoundPage.vue'), meta: { layout: 'immersive', title: '页面不存在 - SoulCourse' } },
   ],
   scrollBehavior() {
     return { top: 0 }

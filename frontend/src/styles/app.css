@@ -1803,88 +1803,142 @@ textarea {
   margin: 0;
 }
 
+@font-face {
+  font-family: "Geist Mono:SemiBold";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("https://static.figma.com/font/GeistMono_wght__1") format("woff2");
+}
+
+.is-immersive-route {
+  min-height: 100svh;
+  padding: 0;
+  background: #000;
+}
+
 .not-found-page {
-  display: grid;
-  min-height: calc(100vh - 96px);
-  place-items: center;
-  padding: 96px 20px 120px;
+  position: relative;
+  min-height: 100svh;
+  overflow-x: hidden;
+  background: #000;
+  color: #fff;
 }
 
-.not-found-panel {
-  display: grid;
-  width: min(100%, 560px);
-  justify-items: center;
-  gap: 12px;
-  padding: 40px 28px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 8px;
-  background: #fff;
-  color: #334155;
-  text-align: center;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+.not-found-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 1;
 }
 
-.not-found-panel svg {
-  color: #0f5f59;
-}
-
-.not-found-panel .eyebrow {
-  display: inline-block;
-  margin: 4px 0 0;
-  padding: 0 2px;
-  background: #fff;
-  color: #1f2937 !important;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.not-found-panel h1 {
-  margin: 0;
-  color: #0f172a !important;
-  font-size: 28px;
-}
-
-.not-found-panel p {
-  display: inline-block;
-  margin: 0;
-  padding: 0 2px;
-  background: #fff;
-  color: #1f2937 !important;
-  line-height: 1.7;
-}
-
-.not-found-actions {
+.not-found-brand {
+  position: absolute;
+  z-index: 1;
+  top: 80px;
+  left: 50%;
+  width: 233px;
+  height: 40px;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.not-found-actions a,
-.not-found-actions button {
-  display: inline-flex;
-  min-height: 44px;
   align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-  border-radius: 8px;
-  font: inherit;
-  font-weight: 700;
-  text-decoration: none;
-  cursor: pointer;
+  transform: translateX(-50%);
+  color: #fff;
 }
 
-.not-found-actions .primary-action {
-  border: 1px solid #111827;
-  background-color: #111827;
-  color: #fff !important;
+.not-found-brand-mark {
+  width: 54px;
+  height: 40px;
+  flex: 0 0 auto;
 }
 
-.not-found-actions .secondary-action {
-  border: 1px solid #475569;
-  background-color: #fff;
-  color: #111827 !important;
+.not-found-brand-name {
+  margin-left: 14px;
+  font-family: "Geist Mono:SemiBold", ui-monospace, monospace;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.not-found-content {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  width: 483px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 44px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  font-family: "Geist Mono:SemiBold", ui-monospace, monospace;
+}
+
+.not-found-content h1 {
+  margin: 0;
+  padding: 0 0 0.08em;
+  font-family: inherit;
+  font-size: 295.751px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -24.6459px;
+  text-align: center;
+  color: transparent;
+  background: linear-gradient(247.3282658084845deg, rgb(255, 255, 255) 2.5334%, rgba(255, 255, 255, 0.4) 93.612%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.not-found-divider {
+  width: 425px;
+  height: 1px;
+  flex: 0 0 auto;
+  background: #fff;
+}
+
+.not-found-content p {
+  width: 100%;
+  margin: 0;
+  color: #fff;
+  font-family: inherit;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -2px;
+}
+
+@media (max-width: 640px) {
+  .not-found-brand {
+    top: 32px;
+    transform: translateX(-50%) scale(0.75);
+  }
+
+  .not-found-content {
+    width: min(calc(100% - 40px), 360px);
+    gap: 28px;
+  }
+
+  .not-found-content h1 {
+    height: auto;
+    min-height: 0;
+    padding-bottom: 0.1em;
+    font-size: clamp(140px, 52vw, 200px);
+    letter-spacing: -0.09em;
+  }
+
+  .not-found-divider {
+    width: 100%;
+  }
+
+  .not-found-content p {
+    font-size: clamp(16px, 4.5vw, 20px);
+    letter-spacing: -1.3px;
+  }
 }
 
 .insight-panel {

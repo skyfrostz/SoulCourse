@@ -134,11 +134,11 @@ test.describe('insights overview and detail', () => {
     await page.goto('/insights')
 
     await expect(page.getByRole('heading', { name: '官方选科要求数据中心' })).toBeVisible()
-    await expect(page.getByRole('link', { name: /物理\+化学/ })).toBeVisible()
+    await expect(page.getByRole('link', { name: /物理\+化学/ }).first()).toBeVisible()
     await expect(page.getByText('已纳入复核范围')).toBeVisible()
     await expect(page.getByText('暂无官方公开数据')).toBeVisible()
 
-    await page.getByRole('link', { name: /物理\+化学/ }).click()
+    await page.getByRole('link', { name: /物理\+化学/ }).first().click()
 
     await expect(page).toHaveURL(/\/insights\/1$/)
     await expect(page.getByRole('heading', { name: '物理+化学' })).toBeVisible()

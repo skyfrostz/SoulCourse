@@ -7,7 +7,7 @@
       >
     </video>
 
-    <div class="not-found-brand" aria-label="SoulCourse">
+    <div class="not-found-brand" role="img" aria-label="SoulCourse">
       <svg class="not-found-brand-mark" viewBox="0 0 54 40" fill="none" aria-hidden="true">
         <path d="M38 0H26V12H38V0Z" fill="white" />
         <path d="M54 12H38V28H54V12Z" fill="white" />
@@ -21,9 +21,13 @@
     </div>
 
     <section class="not-found-content">
-      <h1 id="not-found-title">404</h1>
+      <h1 id="not-found-title">页面不存在</h1>
       <div class="not-found-divider" aria-hidden="true"></div>
       <p>这条选科路径暂时没有内容，回到首页继续探索。</p>
+      <div class="not-found-actions">
+        <a class="not-found-home" href="/welcome">回到首页</a>
+        <button class="not-found-back" type="button" @click="$router.back()">返回上一页</button>
+      </div>
     </section>
   </main>
 </template>

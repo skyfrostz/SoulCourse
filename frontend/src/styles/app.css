@@ -10319,6 +10319,15 @@ textarea {
   box-shadow: none;
 }
 
+@media (min-width: 1024px) {
+  .post-detail-modal .article-media-column,
+  .post-detail-modal .post-image-carousel,
+  .post-detail-modal .carousel-stage {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
 .post-detail-modal .article-content-column {
   grid-column: 2;
   grid-row: 1;

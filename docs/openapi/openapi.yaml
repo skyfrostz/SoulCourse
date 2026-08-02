@@ -121,6 +121,61 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '429':
           $ref: '#/components/responses/ErrorResponse'
+  /mobile/auth/register:
+    post:
+      tags: [Auth]
+      operationId: mobileRegister
+      summary: Android 客户端注册
+      description: 返回可撤销的不透明移动会话令牌；网页注册仍只设置 HttpOnly Cookie。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/MobileAuthSessionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /mobile/auth/login:
+    post:
+      tags: [Auth]
+      operationId: mobileLogin
+      summary: Android 客户端登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/MobileAuthSessionResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /mobile/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: mobileRefresh
+      summary: 刷新 Android 客户端会话
+      security:
+        - mobileBearer: []
+      responses:
+        '200':
+          $ref: '#/components/responses/MobileAuthSessionResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
   /auth/reset-password:
     post:
       tags: [Auth]
@@ -551,6 +606,24 @@ paths:
       responses:
         '204':
           description: 指标已记录
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/ErrorResponse'
+  /telemetry/mobile:
+    post:
+      tags: [Telemetry]
+      operationId: reportMobileTelemetry
+      summary: 在用户同意后匿名上报 Android 诊断事件
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTelemetryInput'
+      responses:
+        '204':
+          description: 诊断事件已记录
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '429':
@@ -1379,6 +1452,15 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/AuthSessionEnvelope'
+    MobileAuthSessionResponse:
+      description: Mobile bearer session
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MobileAuthSessionEnvelope'
     LogoutResponse:
       description: Sign-out result
       headers:
@@ -1701,6 +1783,11 @@ components:
       name: scf_admin_session
       in: cookie
       description: HttpOnly SameSite=Lax admin session cookie. Unsafe methods also require X-CSRF-Token with scf_admin_csrf.
+    mobileBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Android 客户端使用的可撤销不透明会话令牌。
   schemas:
     Meta:
       type: object
@@ -1766,6 +1853,19 @@ components:
       properties:
         user:
           $ref: '#/components/schemas/User'
+        expiresAt:
+          type: string
+          format: date-time
+    MobileAuthSession:
+      type: object
+      required: [user, accessToken, expiresAt]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        accessToken:
+          type: string
+          minLength: 32
+          description: 仅移动认证接口返回；服务端只保存哈希。
         expiresAt:
           type: string
           format: date-time
@@ -2088,6 +2188,31 @@ components:
         rating:
           type: string
           enum: [good, needs-improvement, poor]
+    MobileTelemetryInput:
+      type: object
+      additionalProperties: false
+      required: [event, appVersion, androidApi, webView, route]
+      properties:
+        event:
+          type: string
+          enum: [boot, network_error, js_error, native_error, upload_error]
+        appVersion:
+          type: string
+          maxLength: 40
+        androidApi:
+          type: integer
+          minimum: 26
+          maximum: 100
+        webView:
+          type: string
+          maxLength: 40
+        route:
+          type: string
+          maxLength: 120
+        durationMs:
+          type: integer
+          minimum: 0
+          maximum: 60000
     AdminLoginData:
       type: object
       required: [email, role, permissions, expiresAt]
@@ -2230,6 +2355,14 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/AuthSession'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    MobileAuthSessionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/MobileAuthSession'
         meta:
           $ref: '#/components/schemas/Meta'
     LogoutEnvelope:

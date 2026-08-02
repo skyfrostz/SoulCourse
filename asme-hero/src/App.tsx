@@ -5,6 +5,7 @@ const VIDEO_URL =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_083109_283f3553-e28f-428b-a723-d639c617eb2b.mp4'
 const VIDEO_FALLBACK_URL =
   'https://soulcourse-prod-2026.oss-cn-shenzhen.aliyuncs.com/welcome/hero.mp4'
+const ANDROID_DOWNLOAD_URL = '/downloads/android/1.0.0/subject-choice-1.0.0.apk'
 
 const navItems = [
   { label: '选科社区', href: '/community' },
@@ -105,6 +106,7 @@ function App() {
           <nav className="welcome-nav" aria-label="欢迎页导航">
             {navItems.map((item) => <a key={item.href} href={item.href}>{item.label}</a>)}
           </nav>
+          <a className="text-link header-download" href={ANDROID_DOWNLOAD_URL} download>下载 Android App <ArrowUpRight size={15} /></a>
           <a className="button button-dark header-cta" href="/community">进入社区 <ArrowUpRight size={15} /></a>
           <button className="menu-button" type="button" aria-label={menuOpen ? '关闭菜单' : '打开菜单'} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
             {menuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -177,7 +179,7 @@ function App() {
         <div className="trust-list"><div><strong>官方来源</strong><span>教育考试院 · 阳光高考</span></div><div><strong>结构化整理</strong><span>政策、专业与科目要求</span></div><div><strong>复核状态</strong><span className="status"><i /> 已完成来源核对</span></div><a className="text-link" href="/knowledge">打开政策资料库 <ArrowUpRight size={15} /></a></div>
       </section>
 
-      <section className="final-section section-shell"><p className="eyebrow">选择开始之前</p><h2>把依据看清楚，<br />再走自己的路。</h2><a className="button button-dark" href="/community">进入选科社区 <ArrowUpRight size={16} /></a></section>
+      <section className="final-section section-shell"><p className="eyebrow">选择开始之前</p><h2>把依据看清楚，<br />再走自己的路。</h2><div className="final-actions"><a className="button button-dark" href="/community">进入选科社区 <ArrowUpRight size={16} /></a><a className="text-link" href={ANDROID_DOWNLOAD_URL} download>下载 Android App <ArrowUpRight size={15} /></a></div></section>
 
       <footer className="welcome-footer section-shell"><a className="welcome-brand" href="/" aria-label="SoulCourse 首页"><img className="welcome-brand-logo" src="/welcome/soulcourse-logo.jpeg" alt="SoulCourse 开源在线教育系统" /></a><span>广东选科社区</span><nav><a href="/requirements">选科查询</a><a href="/knowledge">政策库</a><a href="/insights">数据中心</a></nav><small>© 2026 SoulCourse</small></footer>
     </main>

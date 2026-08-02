@@ -2,6 +2,9 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../pages/HomePage.vue'
 import { useForumStore } from '../stores/forum'
 
+const isAndroidBuild = import.meta.env.VITE_APP_TARGET === 'android'
+const adminRoute = { path: '/admin', alias: '/admin/', name: 'admin-console', component: () => import('../pages/AdminConsolePage.vue'), meta: { layout: 'admin', title: '管理后台 - 选科π' } }
+
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -15,7 +18,7 @@ export const router = createRouter({
     { path: '/insights/:id', name: 'insight-detail', component: () => import('../pages/InsightPage.vue'), meta: { title: '观察详情 - 选科π' } },
     { path: '/advice', name: 'advice-overview', component: () => import('../pages/AdviceOverviewPage.vue'), meta: { title: '建议 - 选科π' } },
     { path: '/advice/:id', name: 'advice-detail', component: () => import('../pages/AdviceDetailPage.vue'), meta: { title: '建议详情 - 选科π' } },
-    { path: '/admin', alias: '/admin/', name: 'admin-console', component: () => import('../pages/AdminConsolePage.vue'), meta: { layout: 'admin', title: '管理后台 - 选科π' } },
+    ...(!isAndroidBuild ? [adminRoute] : []),
     { path: '/following', name: 'following', component: () => import('../pages/FollowingPage.vue'), meta: { requiresAuth: true, title: '关注 - 选科π' } },
     { path: '/settings', name: 'settings', component: () => import('../pages/SettingsPage.vue'), meta: { requiresAuth: true, title: '设置 - 选科π' } },
     { path: '/messages', name: 'messages', component: () => import('../pages/MessagesPage.vue'), meta: { requiresAuth: true, title: '私信 - 选科π' } },

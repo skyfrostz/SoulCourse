@@ -44,6 +44,7 @@ button { font: inherit; }
 .button-dark { color: #fff; background: #111512; }
 .button-dark:hover { background: #2f6b4f; }
 .header-cta { min-height: 42px; padding: 0 17px; }
+.header-download { margin-left: auto; margin-right: 24px; white-space: nowrap; font-size: 13px; }
 .menu-button { display: none; border: 0; background: transparent; padding: 10px; color: #111512; cursor: pointer; }
 .mobile-menu { display: none; }
 .hero-copy { width: min(860px, calc(100% - 48px)); margin: 0 auto; padding: clamp(100px, 16vh, 170px) 0 190px; text-align: center; }
@@ -140,6 +141,7 @@ button { font: inherit; }
 .trust-list .text-link { margin-top: 23px; }
 .final-section { padding: 115px 0 140px; border-top: 1px solid #d7ded8; }
 .final-section h2 { margin: 18px 0 37px; font-size: 57px; }
+.final-actions { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
 .welcome-footer { display: grid; grid-template-columns: 1fr auto 1.5fr auto; align-items: center; gap: 30px; min-height: 95px; border-top: 1px solid #d7ded8; color: #667068; font-size: 12px; }
 .welcome-footer .welcome-brand { color: #111512; width: 72px; height: 52px; }
 .welcome-footer nav { display: flex; justify-content: center; gap: 26px; }
@@ -161,6 +163,7 @@ button { font: inherit; }
   .welcome-header { min-height: 74px; }
   .welcome-brand { width: 70px; height: 54px; }
   .welcome-nav, .header-cta { display: none; }
+  .header-download { margin-left: auto; margin-right: 8px; font-size: 12px; }
   .menu-button { display: block; }
   .mobile-menu { position: absolute; top: 74px; right: 20px; left: 20px; z-index: 5; display: grid; max-height: 0; overflow: hidden; padding: 0 18px; border: 1px solid transparent; background: rgba(247,248,246,.96); transition: max-height .25s ease, padding .25s ease, border-color .25s ease; }
   .mobile-menu.is-open { max-height: 220px; padding: 8px 18px; border-color: #d7ded8; }
@@ -207,6 +210,7 @@ button { font: inherit; }
   .trust-list > div { display: grid; gap: 7px; }
   .final-section { padding: 82px 0 98px; }
   .final-section h2 { font-size: 39px; }
+  .final-actions { gap: 20px; }
   .welcome-footer { grid-template-columns: 1fr auto; gap: 14px; padding: 25px 0; }
   .welcome-footer span, .welcome-footer small { display: none; }
   .welcome-footer nav { grid-column: 1 / -1; justify-content: flex-start; gap: 18px; }

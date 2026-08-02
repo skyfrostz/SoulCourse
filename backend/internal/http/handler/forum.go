@@ -201,6 +201,56 @@ func (h *ForumHandler) Login(c *gin.Context) {
 	ok(c, session)
 }
 
+func (h *ForumHandler) RegisterMobile(c *gin.Context) {
+	var input domain.RegisterInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		fail(c, http.StatusBadRequest, "invalid_payload", err.Error())
+		return
+	}
+	session, err := h.service.RegisterMobile(c.Request.Context(), input)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidEmailVerificationCode) {
+			fail(c, http.StatusBadRequest, "invalid_verification_code", "verification code is invalid or expired")
+			return
+		}
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			fail(c, http.StatusConflict, "email_exists", "email already registered")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "internal_error", "could not register")
+		return
+	}
+	created(c, session)
+}
+
+func (h *ForumHandler) LoginMobile(c *gin.Context) {
+	var input domain.LoginInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		fail(c, http.StatusBadRequest, "invalid_payload", err.Error())
+		return
+	}
+	session, err := h.service.LoginMobile(c.Request.Context(), input)
+	if err != nil {
+		fail(c, http.StatusUnauthorized, "invalid_credentials", "email or password is incorrect")
+		return
+	}
+	ok(c, session)
+}
+
+func (h *ForumHandler) RefreshMobile(c *gin.Context) {
+	token, hasToken := middleware.BearerToken(c)
+	if !hasToken {
+		fail(c, http.StatusUnauthorized, "unauthorized", "mobile bearer token is required")
+		return
+	}
+	session, err := h.service.RefreshMobile(c.Request.Context(), token)
+	if err != nil {
+		fail(c, http.StatusUnauthorized, "unauthorized", "mobile session is invalid or expired")
+		return
+	}
+	ok(c, session)
+}
+
 func (h *ForumHandler) ResetPassword(c *gin.Context) {
 	var input domain.ResetPasswordInput
 	if err := c.ShouldBindJSON(&input); err != nil {

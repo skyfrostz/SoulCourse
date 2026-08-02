@@ -314,6 +314,10 @@ func (s *ForumService) GetTopic(ctx context.Context, viewerID *int64, slug strin
 }
 
 func (s *ForumService) Register(ctx context.Context, input domain.RegisterInput) (domain.AuthSession, error) {
+	return s.registerWithTTL(ctx, input, s.sessionTTL)
+}
+
+func (s *ForumService) registerWithTTL(ctx context.Context, input domain.RegisterInput, ttl time.Duration) (domain.AuthSession, error) {
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
 	input.VerificationCode = strings.TrimSpace(input.VerificationCode)
 	if err := s.repo.ConsumeEmailVerificationCode(
@@ -332,7 +336,7 @@ func (s *ForumService) Register(ctx context.Context, input domain.RegisterInput)
 	if err != nil {
 		return domain.AuthSession{}, err
 	}
-	session, err := s.issueSession(ctx, user)
+	session, err := s.issueSessionWithTTL(ctx, user, ttl)
 	if err != nil {
 		return domain.AuthSession{}, err
 	}
@@ -400,6 +404,41 @@ func (s *ForumService) Login(ctx context.Context, input domain.LoginInput) (doma
 		return domain.AuthSession{}, err
 	}
 	return session, nil
+}
+
+func (s *ForumService) RegisterMobile(ctx context.Context, input domain.RegisterInput) (domain.MobileAuthSession, error) {
+	session, err := s.registerWithTTL(ctx, input, 30*24*time.Hour)
+	if err != nil {
+		return domain.MobileAuthSession{}, err
+	}
+	return domain.MobileAuthSession{User: session.User, AccessToken: session.Token, ExpiresAt: session.ExpiresAt}, nil
+}
+
+func (s *ForumService) LoginMobile(ctx context.Context, input domain.LoginInput) (domain.MobileAuthSession, error) {
+	user, passwordHash, err := s.repo.GetUserByEmail(ctx, strings.ToLower(strings.TrimSpace(input.Email)))
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(input.Password)) != nil {
+		return domain.MobileAuthSession{}, ErrInvalidCredentials
+	}
+	session, err := s.issueSessionWithTTL(ctx, user, 30*24*time.Hour)
+	if err != nil {
+		return domain.MobileAuthSession{}, err
+	}
+	return domain.MobileAuthSession{User: session.User, AccessToken: session.Token, ExpiresAt: session.ExpiresAt}, nil
+}
+
+func (s *ForumService) RefreshMobile(ctx context.Context, token string) (domain.MobileAuthSession, error) {
+	user, err := s.UserFromToken(ctx, token)
+	if err != nil {
+		return domain.MobileAuthSession{}, ErrInvalidCredentials
+	}
+	if err := s.Logout(ctx, token); err != nil {
+		return domain.MobileAuthSession{}, err
+	}
+	session, err := s.issueSessionWithTTL(ctx, user, 30*24*time.Hour)
+	if err != nil {
+		return domain.MobileAuthSession{}, err
+	}
+	return domain.MobileAuthSession{User: session.User, AccessToken: session.Token, ExpiresAt: session.ExpiresAt}, nil
 }
 
 func (s *ForumService) ResetPassword(ctx context.Context, input domain.ResetPasswordInput) error {
@@ -615,11 +654,15 @@ func (s *ForumService) SendDirectMessage(ctx context.Context, senderID int64, in
 }
 
 func (s *ForumService) issueSession(ctx context.Context, user domain.User) (domain.AuthSession, error) {
+	return s.issueSessionWithTTL(ctx, user, s.sessionTTL)
+}
+
+func (s *ForumService) issueSessionWithTTL(ctx context.Context, user domain.User, ttl time.Duration) (domain.AuthSession, error) {
 	token, err := generateSessionToken()
 	if err != nil {
 		return domain.AuthSession{}, err
 	}
-	expiresAt := time.Now().Add(s.sessionTTL).UTC()
+	expiresAt := time.Now().Add(ttl).UTC()
 	if err := s.repo.CreateAuthSession(ctx, user.ID, hashSessionToken(token), expiresAt); err != nil {
 		return domain.AuthSession{}, err
 	}

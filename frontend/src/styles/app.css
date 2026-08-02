@@ -11029,3 +11029,5 @@ textarea {
     margin-inline: -1px;
   }
 }
+.settings-toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: #2f6b4f; font-size: 13px; font-weight: 700; }
+.settings-toggle input { width: 20px; height: 20px; accent-color: #2f6b4f; }

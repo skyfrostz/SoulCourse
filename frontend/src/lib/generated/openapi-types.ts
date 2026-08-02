@@ -283,6 +283,26 @@ export interface Meta {
   requestId?: string
 }
 
+export interface MobileAuthSession {
+  accessToken: string
+  expiresAt: string
+  user: User
+}
+
+export interface MobileAuthSessionEnvelope {
+  data: MobileAuthSession
+  meta?: Meta
+}
+
+export interface MobileTelemetryInput {
+  androidApi: number
+  appVersion: string
+  durationMs?: number
+  event: string
+  route: string
+  webView: string
+}
+
 export type Notification = Record<string, unknown>
 
 export interface NotificationsEnvelope {

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">选科π</string>
+    <string name="title_activity_main">选科π</string>
+    <string name="package_name">cn.soulcourse.app</string>
+    <string name="custom_url_scheme">cn.soulcourse.app</string>
+</resources>

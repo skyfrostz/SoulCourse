@@ -20,11 +20,13 @@ type MetricsRecorder struct {
 	mu        sync.Mutex
 	routes    map[metricKey]*routeMetrics
 	webVitals map[webVitalKey]*webVitalMetrics
+	mobile    map[mobileTelemetryKey]uint64
 	buckets   []float64
 	started   time.Time
 }
 
 type webVitalKey struct{ Name, Rating string }
+type mobileTelemetryKey struct{ Event, AppVersion string }
 type webVitalMetrics struct {
 	Count   uint64
 	Sum     float64
@@ -50,9 +52,30 @@ func NewMetricsRecorder() *MetricsRecorder {
 	return &MetricsRecorder{
 		routes:    make(map[metricKey]*routeMetrics),
 		webVitals: make(map[webVitalKey]*webVitalMetrics),
+		mobile:    make(map[mobileTelemetryKey]uint64),
 		buckets:   buckets,
 		started:   time.Now().UTC(),
 	}
+}
+
+func (m *MetricsRecorder) MobileTelemetryHandler(c *gin.Context) {
+	var input struct {
+		Event      string `json:"event" binding:"required"`
+		AppVersion string `json:"appVersion" binding:"required"`
+		AndroidAPI int    `json:"androidApi" binding:"required"`
+		WebView    string `json:"webView" binding:"required"`
+		Route      string `json:"route" binding:"required"`
+		DurationMS int    `json:"durationMs"`
+	}
+	allowedEvents := map[string]bool{"boot": true, "network_error": true, "js_error": true, "native_error": true, "upload_error": true}
+	if err := c.ShouldBindJSON(&input); err != nil || !allowedEvents[input.Event] || len(input.AppVersion) > 40 || len(input.WebView) > 40 || len(input.Route) > 120 || input.AndroidAPI < 26 || input.AndroidAPI > 100 || input.DurationMS < 0 || input.DurationMS > 60000 {
+		AbortWithError(c, http.StatusBadRequest, "invalid_mobile_telemetry", "mobile telemetry payload is invalid")
+		return
+	}
+	m.mu.Lock()
+	m.mobile[mobileTelemetryKey{Event: input.Event, AppVersion: input.AppVersion}]++
+	m.mu.Unlock()
+	c.Status(http.StatusNoContent)
 }
 
 func (m *MetricsRecorder) WebVitalsHandler(c *gin.Context) {

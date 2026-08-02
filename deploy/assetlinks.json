@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "cn.soulcourse.app",
+      "sha256_cert_fingerprints": [
+        "50:5D:37:12:50:99:4E:17:1E:5A:2A:CA:96:A1:AF:8D:42:50:75:0F:61:7E:DE:AE:9E:74:6A:B6:F0:B4:9F:D4"
+      ]
+    }
+  }
+]

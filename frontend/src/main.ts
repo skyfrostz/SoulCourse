@@ -4,8 +4,13 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import { showAppError } from './lib/appError'
 import { reportWebVitals } from './lib/webVitals'
+import { hydrateMobileSession } from './lib/mobile'
+import { installMobileTelemetry, loadMobileTelemetryConsent } from './lib/mobileTelemetry'
 import { router } from './router'
 import './styles/app.css'
+
+await hydrateMobileSession()
+await loadMobileTelemetryConsent()
 
 const app = createApp(App)
 
@@ -33,3 +38,4 @@ router.onError((error) => {
 
 app.mount('#app')
 reportWebVitals()
+installMobileTelemetry()

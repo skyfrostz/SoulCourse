@@ -376,6 +376,14 @@ type AuthSession struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+// MobileAuthSession is returned only by the mobile authentication endpoints.
+// Web authentication continues to use HttpOnly cookies and never exposes Token.
+type MobileAuthSession struct {
+	User        User      `json:"user"`
+	AccessToken string    `json:"accessToken"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
 type StoredAuthSession struct {
 	ID        int64
 	UserID    int64

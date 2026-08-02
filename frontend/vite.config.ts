@@ -1,4 +1,5 @@
 import path from 'node:path'
+import fs from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
@@ -16,13 +17,25 @@ export default defineConfig(({ mode }) => {
   const devProxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://localhost:1309'
   const devServerPort = Number.parseInt(env.FRONTEND_HOST_PORT || '5712', 10)
   const base = normalizeBasePath(env.VITE_APP_BASE_PATH || env.APP_BASE_PATH)
+  const isAndroidTarget = env.VITE_APP_TARGET === 'android'
   const apiProxyPrefix = `${base}api`
   const uploadsProxyPrefix = `${base}uploads`
 
   return {
     base,
+    build: {
+      outDir: isAndroidTarget ? 'dist-android' : 'dist',
+    },
     envDir: path.resolve(process.cwd(), '..'),
-    plugins: [vue()],
+    plugins: [
+      vue(),
+      ...(isAndroidTarget ? [{
+        name: 'exclude-admin-static-assets-from-android',
+        closeBundle() {
+          fs.rmSync(path.resolve('dist-android/admin'), { recursive: true, force: true })
+        },
+      }] : []),
+    ],
     server: {
       host: '0.0.0.0',
       port: Number.isNaN(devServerPort) ? 5712 : devServerPort,

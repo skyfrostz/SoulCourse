@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { defaultApiBasePath } from './runtime'
+import { isNativeApp, mobileAccessToken } from './mobile'
 import { type ApiEnvelope, normalizeApiError } from './api-contract'
 import type {
   AccountProfile,
@@ -46,6 +47,11 @@ api.interceptors.request.use((config) => {
   const method = config.method?.toUpperCase() ?? 'GET'
   if (csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
     config.headers['X-CSRF-Token'] = csrfToken
+  }
+  const token = mobileAccessToken()
+  if (isNativeApp && token) {
+    config.headers.Authorization = `Bearer ${token}`
+    config.withCredentials = false
   }
   return config
 })
@@ -144,6 +150,9 @@ export async function register(payload: {
   province: string
   grade: string
 }): Promise<AuthSession> {
+  if (isNativeApp) {
+    return requestData(api.post<ApiEnvelope<AuthSession>>('/mobile/auth/register', payload))
+  }
   return requestData(api.post<ApiEnvelope<AuthSession>>('/auth/register', payload))
 }
 
@@ -156,7 +165,25 @@ export async function forgotPassword(email: string): Promise<EmailVerificationCo
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {
+  if (isNativeApp) {
+    return requestData(api.post<ApiEnvelope<AuthSession>>('/mobile/auth/login', { email, password }))
+  }
   return requestData(api.post<ApiEnvelope<AuthSession>>('/auth/login', { email, password }))
+}
+
+export async function refreshMobileSession(): Promise<AuthSession> {
+  return requestData(api.post<ApiEnvelope<AuthSession>>('/mobile/auth/refresh'))
+}
+
+export async function reportMobileTelemetry(payload: {
+  event: 'boot' | 'network_error' | 'js_error' | 'native_error' | 'upload_error'
+  appVersion: string
+  androidApi: number
+  webView: string
+  route: string
+  durationMs?: number
+}): Promise<void> {
+  await api.post('/telemetry/mobile', payload)
 }
 
 export async function resetPassword(payload: { email: string; verificationCode: string; password: string }): Promise<void> {

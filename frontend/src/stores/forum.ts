@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { authStorageKey, fetchMyProfile, fetchNotifications, logout as apiLogout, markAllNotificationsRead, markNotificationRead, registerUnauthorizedHandler } from '../lib/api'
+import { clearMobileAccessToken, isNativeApp, storeMobileAccessToken } from '../lib/mobile'
 import type {
   AppNotification,
   AuthSession,
@@ -154,7 +155,11 @@ export const useForumStore = defineStore('forum', {
     },
     setSession(session: AuthSession) {
       this.session = session
-      localStorage.setItem(authStorageKey, JSON.stringify(session))
+      if (isNativeApp && session.accessToken) {
+        void storeMobileAccessToken(session.accessToken)
+      }
+      const persistedSession = { user: session.user, expiresAt: session.expiresAt }
+      localStorage.setItem(authStorageKey, JSON.stringify(persistedSession))
       this.authOpen = false
       this.authMessage = ''
       void this.hydrateAccount()
@@ -165,6 +170,7 @@ export const useForumStore = defineStore('forum', {
       localStorage.removeItem(choiceProfileStorageKey)
       this.choiceProfile = readStoredChoiceProfile(true)
       localStorage.removeItem(authStorageKey)
+      await clearMobileAccessToken()
       this.authRedirect = ''
       try {
         await apiLogout()

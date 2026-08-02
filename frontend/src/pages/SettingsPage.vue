@@ -6,6 +6,8 @@ import { useGlobalSearch } from '../composables/useGlobalSearch'
 import { deleteMyAccount, fetchMyProfile, fetchMySessions, requestChoiceAdvice, revokeMySession, updateMyProfile } from '../lib/api'
 import { subjectLabels, trackLabels } from '../lib/labels'
 import { useForumStore } from '../stores/forum'
+import { isNativeApp } from '../lib/mobile'
+import { loadMobileTelemetryConsent, setMobileTelemetryConsent } from '../lib/mobileTelemetry'
 import type { AccountSession, ChoiceAdvice, ChoiceProfile, Subject, Track } from '../types/forum'
 
 const router = useRouter()
@@ -30,6 +32,7 @@ const deleteConfirmation = ref('')
 const deleteLoading = ref(false)
 const deleteError = ref('')
 const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
+const diagnosticsConsent = ref(false)
 const form = reactive<ChoiceProfile>({ ...forumStore.choiceProfile })
 const subjects: Subject[] = ['chemistry', 'biology', 'politics', 'geography']
 const tracks: Track[] = ['physics', 'history']
@@ -167,7 +170,19 @@ onMounted(() => {
   window.addEventListener('offline', updateOnlineState)
   void loadProfile()
   void loadSessions()
+  if (isNativeApp) {
+    void loadMobileTelemetryConsent().then(async () => {
+      const { Preferences } = await import('@capacitor/preferences')
+      const result = await Preferences.get({ key: 'mobile_diagnostics_consent' })
+      diagnosticsConsent.value = result.value === 'true'
+    })
+  }
 })
+
+async function updateDiagnosticsConsent(value: boolean) {
+  diagnosticsConsent.value = value
+  await setMobileTelemetryConsent(value)
+}
 
 onBeforeUnmount(() => {
   window.removeEventListener('online', updateOnlineState)
@@ -329,6 +344,17 @@ function searchSuggestion(keyword: string) {
             </button>
           </article>
         </div>
+      </section>
+
+      <section v-if="isNativeApp" class="settings-card settings-card-wide diagnostics-card">
+        <div>
+          <h2><ShieldCheck :size="18" /> 匿名诊断</h2>
+          <p>只帮助我们定位崩溃和网络问题，不上传帖子、私信、搜索词或设备标识。</p>
+        </div>
+        <label class="settings-toggle">
+          <input :checked="diagnosticsConsent" type="checkbox" @change="updateDiagnosticsConsent(($event.target as HTMLInputElement).checked)" />
+          <span>{{ diagnosticsConsent ? '已开启' : '未开启' }}</span>
+        </label>
       </section>
 
       <section class="settings-card settings-card-wide danger-zone-card">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { Bookmark, ChevronLeft, ChevronRight, ExternalLink, Flag, MessageSquare, Pencil, RotateCcw, Save, Send, ThumbsUp, Trash2, UserPlus, WifiOff, X, ZoomIn, ZoomOut } from '@lucide/vue'
+import { Bookmark, ChevronLeft, ExternalLink, Flag, MessageSquare, Pencil, Save, Send, ThumbsUp, Trash2, UserPlus, WifiOff } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiDataEnabled, createComment, deletePost, fetchPostDetail, reportPost, toggleFollowAuthor, togglePostFavorite, togglePostLike, updatePost } from '../lib/api'
@@ -8,6 +8,7 @@ import { categoryLabels, roleLabels, subjectLabels, trackLabels } from '../lib/l
 import { appAssetUrl } from '../lib/runtime'
 import { useForumStore } from '../stores/forum'
 import type { Category, Subject, Track } from '../types/forum'
+import PostImageCarousel from '../components/PostImageCarousel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,8 +21,6 @@ const postActionMessage = ref('')
 const editError = ref('')
 const editing = ref(false)
 const commentInput = ref<HTMLInputElement | null>(null)
-const activeImageIndex = ref<number | null>(null)
-const zoom = ref(1)
 const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
 
 const postId = computed(() => Number(route.params.id))
@@ -37,7 +36,6 @@ const postPatch = ref<Partial<NonNullable<typeof rawPost.value>>>({})
 const post = computed(() => rawPost.value ? forumStore.hydratePost({ ...rawPost.value, ...postPatch.value }) : undefined)
 const comments = computed(() => detailQuery.data.value?.comments ?? [])
 const displayedCommentCount = computed(() => comments.value.length)
-const lightboxUrl = computed(() => activeImageIndex.value === null ? '' : post.value?.imageUrls?.[activeImageIndex.value] ?? '')
 const dataEvidence = computed(() => {
   if (post.value?.category !== 'data' || !post.value.sourceUrl) return null
   return {
@@ -303,58 +301,16 @@ function updateOnlineState() {
   isOffline.value = typeof navigator !== 'undefined' ? !navigator.onLine : false
 }
 
-function openLightbox(index: number) {
-  activeImageIndex.value = index
-  zoom.value = 1
-}
-
-function closeLightbox() {
-  activeImageIndex.value = null
-  zoom.value = 1
-}
-
-function moveImage(offset: number) {
-  const total = post.value?.imageUrls?.length ?? 0
-  if (!total || activeImageIndex.value === null) return
-  activeImageIndex.value = (activeImageIndex.value + offset + total) % total
-  zoom.value = 1
-}
-
-function setZoom(nextZoom: number) {
-  zoom.value = Math.min(4, Math.max(0.5, Number(nextZoom.toFixed(2))))
-}
-
-function handleImageWheel(event: WheelEvent) {
-  setZoom(zoom.value + (event.deltaY < 0 ? 0.2 : -0.2))
-}
-
-function handleLightboxKeydown(event: KeyboardEvent) {
-  if (activeImageIndex.value === null) return
-  if (event.key === 'Escape') closeLightbox()
-  else if (event.key === 'ArrowLeft') moveImage(-1)
-  else if (event.key === 'ArrowRight') moveImage(1)
-  else if (event.key === '+' || event.key === '=') setZoom(zoom.value + 0.2)
-  else if (event.key === '-') setZoom(zoom.value - 0.2)
-  else if (event.key === '0') setZoom(1)
-}
-
-watch(activeImageIndex, (index) => {
-  document.body.style.overflow = index === null ? '' : 'hidden'
-})
 watch(post, () => {
   if (!editing.value) syncEditForm()
 })
-watch(postId, closeLightbox)
 onMounted(() => {
-  window.addEventListener('keydown', handleLightboxKeydown)
   window.addEventListener('online', updateOnlineState)
   window.addEventListener('offline', updateOnlineState)
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleLightboxKeydown)
   window.removeEventListener('online', updateOnlineState)
   window.removeEventListener('offline', updateOnlineState)
-  document.body.style.overflow = ''
 })
 </script>
 
@@ -362,7 +318,10 @@ onBeforeUnmount(() => {
   <main class="detail-page">
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
 
-    <section v-if="post" class="article-layout">
+    <section v-if="post" class="article-layout" :class="{ 'has-images': post.imageUrls?.length }">
+      <div v-if="post.imageUrls?.length" class="article-media-column">
+        <PostImageCarousel :images="post.imageUrls" :title="post.title" />
+      </div>
       <article class="article-main">
         <div class="breadcrumb">首页 / 帖子详情 / {{ categoryLabels[post.category] }}</div>
         <h1 v-if="!editing">{{ post.title }}</h1>
@@ -448,18 +407,7 @@ onBeforeUnmount(() => {
         </div>
         <p v-if="!editing" class="article-body">{{ post.content }}</p>
 
-        <div v-if="!editing && post.imageUrls?.length" class="article-gallery">
-          <button class="article-gallery-main" type="button" aria-label="查看大图" @click="openLightbox(0)">
-            <img :src="appAssetUrl(post.imageUrls[0])" :alt="post.title" />
-            <span>查看大图 · {{ post.imageUrls.length }} 张</span>
-          </button>
-          <div v-if="post.imageUrls.length > 1" class="article-gallery-thumbs">
-            <button v-for="(url, index) in post.imageUrls.slice(1)" :key="url" type="button" :aria-label="`查看第 ${index + 2} 张图片`" @click="openLightbox(index + 1)">
-              <img :src="appAssetUrl(url)" :alt="`${post.title} 第 ${index + 2} 张图片`" />
-            </button>
-          </div>
-        </div>
-        <div v-else-if="!editing" class="article-title-cover" :class="`cover-${post.track}`">
+        <div v-if="!editing && !post.imageUrls?.length" class="article-title-cover" :class="`cover-${post.track}`">
           <span>{{ trackLabels[post.track] }}</span>
           <strong>{{ post.title }}</strong>
           <small>{{ post.electives.map((item) => subjectLabels[item]).join(' · ') }}</small>
@@ -506,6 +454,39 @@ onBeforeUnmount(() => {
           <p>整理成绩、兴趣、目标专业和本省政策后，由认证规划师给出组合风险清单。</p>
           <button type="button" @click="router.push('/settings')">先完善画像</button>
         </div>
+        <section v-if="post.imageUrls?.length" id="post-comments" class="comment-board image-comment-board">
+          <div class="comment-title-row">
+            <h2>全部评论 {{ comments.length }}</h2>
+            <button @click="askCertifiedUser">向认证用户提问</button>
+          </div>
+          <div class="comment-guide">
+            评论区会沉淀为后续搜索结果。补充省份、成绩稳定性、目标专业，认证老师/规划师更容易给出可执行建议。
+          </div>
+          <form class="comment-form detail-comment-form" @submit.prevent="submitComment">
+            <input ref="commentInput" v-model="draft" :placeholder="forumStore.isAuthed ? '写下你的看法，帮助更多正在选科的人' : '登录后发表评论'" />
+            <button :disabled="isOffline || (forumStore.isAuthed && (!draft.trim() || commentMutation.isPending.value))" type="submit">
+              <Send :size="16" /> {{ commentMutation.isPending.value ? '发布中...' : forumStore.isAuthed ? '发表评论' : '登录评论' }}
+            </button>
+          </form>
+          <p v-if="commentError" class="form-error">{{ commentError }}</p>
+          <div class="comment-list">
+            <article v-for="comment in comments" :key="comment.id" class="comment-item">
+              <RouterLink class="small-avatar user-link-avatar" :to="`/users/${encodeURIComponent(comment.author)}`">{{ comment.author.slice(0, 1) }}</RouterLink>
+              <div>
+                <div class="comment-meta">
+                  <RouterLink :to="`/users/${encodeURIComponent(comment.author)}`"><strong>{{ comment.author }}</strong></RouterLink>
+                  <span>{{ roleLabels[comment.role] }}</span>
+                  <em v-if="['teacher', 'counselor'].includes(comment.role)" class="verified-badge">认证解答</em>
+                </div>
+                <p>{{ comment.content }}</p>
+                <div class="comment-actions"><span>{{ new Date(comment.createdAt).toLocaleString('zh-CN') }}</span><button @click="replyTo(comment.author)">回复</button></div>
+              </div>
+            </article>
+            <div v-if="!comments.length" class="empty-state compact-empty comment-empty-state">
+              <MessageSquare :size="28" /><h2>还没有评论</h2><p>{{ forumStore.isAuthed ? '你可以成为第一个补充经验的人。' : '登录后可以参与讨论。' }}</p>
+            </div>
+          </div>
+        </section>
       </aside>
     </section>
 
@@ -520,7 +501,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="post" id="post-comments" class="comment-board">
+    <section v-if="post && !post.imageUrls?.length" id="post-comments" class="comment-board">
       <div class="comment-title-row">
         <h2>全部评论 {{ comments.length }}</h2>
         <button @click="askCertifiedUser">向认证用户提问</button>
@@ -568,24 +549,5 @@ onBeforeUnmount(() => {
       <p>如果长时间没有出现，请返回论坛重新选择帖子。</p>
     </section>
 
-    <Teleport to="body">
-      <div v-if="activeImageIndex !== null && lightboxUrl" class="image-lightbox" role="dialog" aria-modal="true" aria-label="帖子图片预览" @click.self="closeLightbox">
-        <div class="lightbox-topbar">
-          <span>{{ activeImageIndex + 1 }} / {{ post?.imageUrls?.length }}</span>
-          <div class="lightbox-tools">
-            <button type="button" aria-label="缩小图片" title="缩小" @click="setZoom(zoom - 0.2)"><ZoomOut :size="20" /></button>
-            <strong>{{ Math.round(zoom * 100) }}%</strong>
-            <button type="button" aria-label="放大图片" title="放大" @click="setZoom(zoom + 0.2)"><ZoomIn :size="20" /></button>
-            <button type="button" aria-label="重置缩放" title="重置缩放" @click="setZoom(1)"><RotateCcw :size="19" /></button>
-            <button type="button" aria-label="关闭图片预览" title="关闭" @click="closeLightbox"><X :size="22" /></button>
-          </div>
-        </div>
-        <button v-if="(post?.imageUrls?.length ?? 0) > 1" class="lightbox-nav previous" type="button" aria-label="上一张" @click="moveImage(-1)"><ChevronLeft :size="30" /></button>
-        <div class="lightbox-stage" @wheel.prevent="handleImageWheel">
-          <img :src="appAssetUrl(lightboxUrl)" :alt="post?.title" :style="{ transform: `scale(${zoom})` }" />
-        </div>
-        <button v-if="(post?.imageUrls?.length ?? 0) > 1" class="lightbox-nav next" type="button" aria-label="下一张" @click="moveImage(1)"><ChevronRight :size="30" /></button>
-      </div>
-    </Teleport>
   </main>
 </template>

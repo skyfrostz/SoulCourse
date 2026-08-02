@@ -2602,21 +2602,6 @@ textarea {
   font-weight: 800;
 }
 
-.article-gallery {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin: 18px 0 22px;
-}
-
-.article-gallery img {
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  border-radius: 8px;
-  background: #f1f5f9;
-}
-
 .article-body,
 .article-lead {
   color: #334155;
@@ -5540,8 +5525,7 @@ textarea {
   .requirements-hero,
   .knowledge-hero,
   .requirement-results,
-  .article-gallery,
-  .decision-result-grid,
+    .decision-result-grid,
   .feed-grid {
     grid-template-columns: 1fr;
   }
@@ -8334,145 +8318,6 @@ textarea {
   }
 }
 
-.article-gallery {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-}
-
-.article-gallery button {
-  padding: 0;
-  border: 0;
-  background: #f2f2f4;
-}
-
-.article-gallery-main {
-  position: relative;
-  display: block;
-  width: 100%;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-.article-gallery-main img {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: auto;
-  object-fit: contain;
-}
-
-.article-gallery-main span {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  padding: 6px 9px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.68);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.article-gallery-thumbs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.article-gallery-thumbs button {
-  display: grid;
-  min-width: 0;
-  aspect-ratio: 1;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid #dedee3;
-  border-radius: 7px;
-}
-
-.article-gallery-thumbs img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-  object-fit: contain;
-}
-
-.image-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 72px;
-  grid-template-rows: 64px minmax(0, 1fr);
-  background: rgba(0, 0, 0, 0.94);
-  color: #fff;
-}
-
-.lightbox-topbar {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.lightbox-tools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.lightbox-tools button,
-.lightbox-nav {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.lightbox-tools button:hover,
-.lightbox-nav:hover {
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.lightbox-tools strong {
-  min-width: 48px;
-  text-align: center;
-  font-size: 12px;
-}
-
-.lightbox-stage {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  place-items: center;
-  overflow: hidden;
-}
-
-.lightbox-stage img {
-  display: block;
-  max-width: calc(100vw - 160px);
-  max-height: calc(100vh - 88px);
-  object-fit: contain;
-  transform-origin: center;
-  transition: transform 120ms ease;
-  user-select: none;
-}
-
-.lightbox-nav {
-  align-self: center;
-  justify-self: center;
-}
-
 @media (max-width: 1180px) {
   .forum-home-workspace {
     grid-template-columns: 210px minmax(0, 1fr);
@@ -8626,39 +8471,6 @@ textarea {
     font-size: 11px;
   }
 
-  .article-gallery-thumbs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .image-lightbox {
-    grid-template-columns: 52px minmax(0, 1fr) 52px;
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .lightbox-topbar {
-    min-height: 56px;
-    padding: 8px 10px;
-  }
-
-  .lightbox-tools {
-    gap: 3px;
-  }
-
-  .lightbox-tools button,
-  .lightbox-nav {
-    width: 36px;
-    height: 36px;
-  }
-
-  .lightbox-tools strong,
-  .lightbox-tools button:nth-of-type(3) {
-    display: none;
-  }
-
-  .lightbox-stage img {
-    max-width: calc(100vw - 108px);
-    max-height: calc(100vh - 76px);
-  }
 }
 
 .mobile-bottom-nav {
@@ -10437,5 +10249,95 @@ textarea {
   .publish-modal .tag-chip-row button,
   .publish-modal .publish-subjects button {
     transition-property: color, background-color, border-color;
+  }
+}
+
+/* Image posts use a stable media column while text and comments remain usable. */
+.detail-page:has(.article-layout.has-images) {
+  max-width: 1360px;
+}
+
+.article-layout.has-images {
+  grid-template-columns: minmax(0, 58fr) minmax(360px, 42fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.article-layout.has-images > .article-media-column {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 8px;
+  background: #202124;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.04);
+}
+
+.article-layout.has-images > .article-main {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  max-height: min(78vh, 760px);
+  overflow-y: auto;
+}
+
+.article-layout.has-images > .article-side {
+  grid-column: 2;
+  grid-row: 2;
+  position: static;
+  min-width: 0;
+  max-height: min(78vh, 760px);
+  overflow-y: auto;
+}
+
+.article-layout.has-images .image-comment-board {
+  margin-top: 18px;
+  padding: 18px 0 0;
+  border-top: 1px solid #e2e8f0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.article-layout.has-images .image-comment-board .comment-title-row h2 {
+  font-size: 17px;
+}
+
+@media (max-width: 1023px) {
+  .detail-page:has(.article-layout.has-images) {
+    max-width: 100%;
+  }
+
+  .article-layout.has-images {
+    display: block;
+  }
+
+  .article-layout.has-images > .article-media-column,
+  .article-layout.has-images > .article-main,
+  .article-layout.has-images > .article-side {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .article-layout.has-images > .article-media-column {
+    margin-bottom: 12px;
+  }
+
+  .article-layout.has-images > .article-side {
+    margin-top: 12px;
+  }
+}
+
+@media (max-width: 760px) {
+  .detail-page:has(.article-layout.has-images) {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .article-layout.has-images > .article-media-column {
+    margin-inline: -1px;
   }
 }

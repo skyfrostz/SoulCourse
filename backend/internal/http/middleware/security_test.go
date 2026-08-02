@@ -55,6 +55,8 @@ func TestSecurityHeadersRestrictBrowserCapabilities(t *testing.T) {
 	csp := response.Header().Get("Content-Security-Policy")
 	for _, directive := range []string{
 		"connect-src 'self'",
+		"font-src 'self' data: https://static.figma.com",
+		"media-src 'self' https://d8j0ntlcm91z4.cloudfront.net",
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 		"upgrade-insecure-requests",

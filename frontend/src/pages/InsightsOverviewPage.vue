@@ -47,6 +47,22 @@ const insightCards = computed(() => {
   return source.sort((a, b) => b.heat - a.heat)
 })
 
+const chartPalette = ['#10b981', '#2563eb', '#38bdf8', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b', '#ec4899']
+const planTotal = computed(() => (insightsQuery.data.value ?? []).reduce((sum, item) => sum + item.heat, 0) || 1)
+const planDonutStyle = computed(() => {
+  let cursor = 0
+  const slices = (insightsQuery.data.value ?? []).map((insight, index) => {
+    const start = cursor
+    cursor += insight.heat / planTotal.value * 100
+    return `${chartPalette[index % chartPalette.length]} ${start}% ${cursor}%`
+  })
+  return { background: `conic-gradient(${slices.join(', ')})` }
+})
+
+function planShare(insight: SubjectInsight) {
+  return insight.heat / planTotal.value * 100
+}
+
 watch(
   () => route.query.mode,
   (value) => {
@@ -118,6 +134,18 @@ function refetchData() {
           <p>基于当前已复核的官方来源数据，点击组合可查看指标明细与来源。</p>
         </div>
         <BarChart3 :size="24" aria-hidden="true" />
+      </div>
+      <div class="insights-donut-layout">
+        <div class="insights-plan-donut" :style="planDonutStyle" role="img" aria-label="各选科组合招生计划占比">
+          <span><strong>{{ planTotal.toLocaleString('zh-CN') }}</strong>招生计划</span>
+        </div>
+        <div class="insights-donut-legend">
+          <RouterLink v-for="(insight, index) in insightsQuery.data.value ?? []" :key="`share-${insight.id}`" :to="`/insights/${insight.id}`">
+            <i :style="{ background: chartPalette[index % chartPalette.length] }"></i>
+            <span>{{ insight.combination }}</span>
+            <strong>{{ insight.heat.toLocaleString('zh-CN') }} · {{ planShare(insight).toFixed(1) }}%</strong>
+          </RouterLink>
+        </div>
       </div>
       <div class="insights-bar-chart" role="list" aria-label="选科组合排行图">
         <RouterLink

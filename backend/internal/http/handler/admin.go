@@ -491,6 +491,7 @@ func (h *AdminHandler) ListProvinces(c *gin.Context) {
 	}
 	defer rows.Close()
 	items := make([]envelope, 0)
+	seen := make(map[string]int)
 	for rows.Next() {
 		var province, updatedAt string
 		var count int
@@ -511,10 +512,33 @@ func (h *AdminHandler) ListProvinces(c *gin.Context) {
 			"capturedAt":     parseSQLiteTime(updatedAt),
 			"methodology":    methodology,
 		})
+		seen[province] = len(items) - 1
 	}
 	if err := rows.Err(); err != nil {
 		fail(c, http.StatusInternalServerError, "provinces_scan_failed", "could not read provinces")
 		return
+	}
+	// SQLite deployments also expose structured 2026 source records. Keep
+	// province coverage honest while allowing the knowledge page to show the
+	// newest captured year and its review state.
+	records, recordsErr := h.listContentRecords(c.Request.Context(), true)
+	if recordsErr == nil {
+		for _, record := range records {
+			if record.Module != "policies" && record.Module != "requirements" || record.Scope == "" || record.Scope == "全国" {
+				continue
+			}
+			meta := recordMetadata(record)
+			item := envelope{"province": record.Scope, "coverageStatus": meta.status, "recordsCount": 1, "dataYear": meta.year, "capturedAt": record.UpdatedAt, "methodology": meta.methodology}
+			if index, ok := seen[record.Scope]; ok {
+				currentYear, _ := items[index]["dataYear"].(int)
+				if meta.year > currentYear {
+					items[index] = item
+				}
+				continue
+			}
+			items = append(items, item)
+			seen[record.Scope] = len(items) - 1
+		}
 	}
 	ok(c, envelope{"provinces": items})
 }
@@ -709,29 +733,51 @@ func (h *AdminHandler) listPublishedModule(c *gin.Context, module string, key st
 	records = filterAdminRecords(records, module, "", strings.TrimSpace(c.Query("q")))
 	items := make([]envelope, 0, len(records))
 	for _, record := range records {
+		meta := recordMetadata(record)
 		scope := record.Scope
-		status := "unverified"
-		methodology := "官方入口已收录，结构化结论待复核。"
 		items = append(items, envelope{
 			"id":             record.ID,
 			"title":          record.Title,
 			"type":           record.Type,
 			"scope":          scope,
-			"coverageStatus": status,
-			"dataYear":       2025,
+			"coverageStatus": meta.status,
+			"dataYear":       meta.year,
 			"capturedAt":     record.UpdatedAt,
 			"source": envelope{
 				"name": record.Owner,
 				"url":  record.URL,
 			},
 			"fileHash":    "",
-			"methodology": methodology,
+			"methodology": meta.methodology,
 			"summary":     record.Summary,
 			"tags":        record.Tags,
 			"url":         record.URL,
 		})
 	}
 	ok(c, envelope{key: items})
+}
+
+type contentMetadata struct {
+	year        int
+	status      string
+	methodology string
+}
+
+func recordMetadata(record AdminContentRecord) contentMetadata {
+	meta := contentMetadata{year: 2025, status: "unverified", methodology: "官方入口已收录，结构化结论待复核。"}
+	var payload map[string]any
+	if json.Unmarshal(record.Payload, &payload) == nil {
+		if year, ok := payload["dataYear"].(float64); ok && int(year) > 0 {
+			meta.year = int(year)
+		}
+		if status, ok := payload["coverageStatus"].(string); ok && (status == "verified" || status == "unverified") {
+			meta.status = status
+		}
+		if methodology, ok := payload["methodology"].(string); ok && strings.TrimSpace(methodology) != "" {
+			meta.methodology = methodology
+		}
+	}
+	return meta
 }
 
 func (h *AdminHandler) ContentSummary(c *gin.Context) {

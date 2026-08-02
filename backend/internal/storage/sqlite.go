@@ -436,6 +436,9 @@ func initSQLiteSchema(db *sql.DB) error {
 	if err := migrateOfficialSubjectInsights(db); err != nil {
 		return err
 	}
+	if err := migrate2026StructuredSources(db); err != nil {
+		return err
+	}
 	if err := backfillTopicTags(db); err != nil {
 		return err
 	}
@@ -452,6 +455,22 @@ func initSQLiteSchema(db *sql.DB) error {
 		return err
 	}
 	return nil
+}
+
+// migrate2026StructuredSources records official 2026 entry points without
+// implying that their underlying admission tables have already been parsed.
+// The explicit metadata is consumed by the public knowledge API.
+func migrate2026StructuredSources(db *sql.DB) error {
+	now := sqliteNow()
+	_, err := db.Exec(fmt.Sprintf(`
+		INSERT OR IGNORE INTO admin_content_records
+		(id, module, title, content_type, status, scope, owner, tags, summary, url, priority, sort_order, payload, created_at, updated_at)
+		VALUES
+		('policy-2026-national-admission-entry', 'policies', '2026 年普通高校招生政策官方入口', '官方来源', '已上架', '全国', '教育部政府门户 / 阳光高考', '["2026","招生政策","官方来源"]', '收录 2026 年普通高校招生政策发布入口；具体省份计划和专业组要求以正式文件为准，当前仅作为结构化来源索引。', 'https://www.moe.gov.cn/jyb_xxgk/', '高', 5, '{"dataYear":2026,"coverageStatus":"unverified","methodology":"官方发布入口已登记，2026 具体招生政策尚未在本站完成逐项核验。"}', '%[1]s', '%[1]s'),
+		('policy-2026-guangdong-admission-entry', 'policies', '广东 2026 招生考试信息官方入口', '官方来源', '已上架', '广东', '广东省教育考试院', '["2026","广东","招生计划"]', '收录广东省教育考试院官方发布入口，用于后续核对 2026 年招生计划、志愿填报和选科要求。', 'https://eeagd.edu.cn/', '高', 6, '{"dataYear":2026,"coverageStatus":"unverified","methodology":"广东省教育考试院官方入口已登记，具体公告与计划表待逐项抓取、留存和复核。"}', '%[1]s', '%[1]s'),
+		('policy-2026-sunshine-admission-entry', 'policies', '2026 阳光高考招生信息官方入口', '官方来源', '已上架', '全国', '阳光高考 / 学信网', '["2026","阳光高考","专业要求"]', '收录阳光高考招生政策与专业选考要求入口，作为全国高校专业组信息的官方索引。', 'https://gaokao.chsi.com.cn/', '常规', 7, '{"dataYear":2026,"coverageStatus":"unverified","methodology":"官方信息平台入口已登记，尚未将页面内容转换为逐校逐专业结构化记录。"}', '%[1]s', '%[1]s')
+	`, now))
+	return err
 }
 
 func migrateOfficialSubjectInsights(db *sql.DB) error {

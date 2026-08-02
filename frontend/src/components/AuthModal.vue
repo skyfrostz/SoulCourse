@@ -317,7 +317,6 @@ onUnmounted(() => {
         <div class="auth-tabs" aria-label="登录方式">
           <button :class="{ active: mode === 'login' }" type="button" :disabled="loading || codeLoading" @click="switchMode('login')">登录</button>
           <button :class="{ active: mode === 'register' }" type="button" :disabled="loading || codeLoading" @click="switchMode('register')">注册</button>
-          <button :class="{ active: mode === 'reset' }" type="button" :disabled="loading || codeLoading" @click="switchMode('reset')">找回</button>
         </div>
 
         <form class="auth-form auth-premium-form" :aria-busy="loading || codeLoading" @submit.prevent="submit">

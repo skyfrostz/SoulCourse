@@ -34,6 +34,11 @@ const total = computed(() => props.images.length)
 const currentUrl = computed(() => props.images[currentIndex.value] ?? '')
 const previewUrl = computed(() => previewIndex.value === null ? '' : props.images[previewIndex.value] ?? '')
 const visibleDots = computed(() => total.value <= 9 ? props.images.map((_, index) => index) : [])
+const stageStyle = computed(() => ({
+  '--carousel-background': currentUrl.value && !failedImages.value.has(currentUrl.value)
+    ? `url("${appAssetUrl(currentUrl.value)}")`
+    : 'none',
+}))
 
 function normalizedIndex(index: number) {
   return total.value ? (index + total.value) % total.value : 0
@@ -133,6 +138,7 @@ onBeforeUnmount(() => {
   <section class="post-image-carousel" :aria-label="`${title} 图片轮播`">
     <div
       class="carousel-stage"
+      :style="stageStyle"
       role="group"
       :aria-label="`第 ${currentIndex + 1} 张，共 ${total} 张`"
       @touchstart.passive="handleTouchStart"
@@ -195,7 +201,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .post-image-carousel { position: relative; min-width: 0; height: 100%; }
-.carousel-stage { position: relative; display: grid; min-height: 360px; height: min(78vh, 760px); place-items: center; overflow: hidden; background: #202124; }
+.carousel-stage { position: relative; display: grid; min-height: 360px; height: min(78vh, 760px); place-items: center; overflow: hidden; isolation: isolate; background: #202124; }
+.carousel-stage::before { position: absolute; z-index: -1; inset: -28px; content: ''; background-image: var(--carousel-background); background-position: center; background-size: cover; filter: blur(24px); opacity: .34; transform: scale(1.08); }
 .carousel-image-button { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; }
 .carousel-image-button img { display: block; flex: 0 1 auto; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
 .carousel-arrow { position: absolute; z-index: 1; top: 50%; display: grid; width: 48px; height: 48px; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,.24); border-radius: 50%; background: rgba(0,0,0,.46); color: #fff; transform: translateY(-50%); }

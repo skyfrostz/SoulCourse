@@ -155,6 +155,7 @@ func NewServerWithObjectStore(
 		api.GET("/content", adminHandler.ListPublishedContent)
 		api.GET("/provinces", adminHandler.ListProvinces)
 		api.GET("/policies", adminHandler.ListPolicies)
+		api.GET("/policy-documents/:scope/:filename", adminHandler.DownloadPolicyDocument)
 		api.GET("/requirements", adminHandler.ListRequirements)
 		api.GET("/sources/:id", adminHandler.GetSource)
 		api.GET("/insights", forumHandler.ListInsights)
@@ -206,6 +207,7 @@ func NewServerWithObjectStore(
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 }
 

@@ -109,6 +109,14 @@ export interface RealDataRecord {
   tags: string[]
   url: string
   requiredSubjects?: string[]
+  localDocuments?: LocalPolicyDocument[]
+}
+
+export interface LocalPolicyDocument {
+  name: string
+  url: string
+  type: string
+  sizeBytes: number
 }
 
 export interface ProvinceCoverage {

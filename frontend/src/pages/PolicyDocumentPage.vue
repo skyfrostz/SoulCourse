@@ -56,6 +56,16 @@ function searchInForum(query: string) {
         <a :href="document.source.url || document.url" target="_blank" rel="noreferrer" class="primary-wide compact">
           官方来源 <ExternalLink :size="15" />
         </a>
+        <a
+          v-for="file in document.localDocuments ?? []"
+          :key="file.url"
+          :href="file.url"
+          target="_blank"
+          rel="noreferrer"
+          class="ghost-button compact"
+        >
+          <FileText :size="15" /> 下载{{ file.type }}
+        </a>
       </div>
     </section>
 
@@ -92,6 +102,17 @@ function searchInForum(query: string) {
             <li>适用范围：{{ document.scope }}</li>
             <li>采集时间：{{ document.capturedAt }}</li>
             <li>文件哈希：{{ document.fileHash }}</li>
+          </ul>
+        </section>
+
+        <section v-if="document.localDocuments?.length" class="policy-reader-section">
+          <h2>服务器本地文件</h2>
+          <p>文件来自官方站点公开附件，已保存在本站服务器；使用前请核对文件年份和发布单位。</p>
+          <ul class="policy-local-file-list">
+            <li v-for="file in document.localDocuments" :key="file.url">
+              <a :href="file.url" target="_blank" rel="noreferrer"><FileText :size="15" /> {{ file.name }}</a>
+              <small>{{ file.type }} · {{ Math.ceil(file.sizeBytes / 1024) }} KB</small>
+            </li>
           </ul>
         </section>
 

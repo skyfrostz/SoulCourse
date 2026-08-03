@@ -12,6 +12,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -133,6 +134,13 @@ type AdminContentSummary struct {
 	Published int    `json:"published"`
 	Pending   int    `json:"pending"`
 	Review    int    `json:"review"`
+}
+
+type LocalPolicyDocument struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	Type string `json:"type"`
+	Size int64  `json:"sizeBytes"`
 }
 
 const (
@@ -551,6 +559,30 @@ func (h *AdminHandler) ListPolicies(c *gin.Context) {
 	h.listPublishedModule(c, "policies", "policies")
 }
 
+func (h *AdminHandler) DownloadPolicyDocument(c *gin.Context) {
+	root := h.policyDocumentsRoot()
+	scope := strings.TrimSpace(c.Param("scope"))
+	name := filepath.Base(strings.TrimSpace(c.Param("filename")))
+	if scope == "" || name == "" || name == "." || name == ".." {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	target := filepath.Join(root, scope, name)
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	info, err := os.Stat(target)
+	if err != nil || !info.Mode().IsRegular() {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(name)))
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.File(target)
+}
+
 func (h *AdminHandler) ListRequirements(c *gin.Context) {
 	if h.cfg.DatabaseDriver == "postgres" {
 		h.listTypedRealData(c, "requirements")
@@ -763,9 +795,61 @@ func (h *AdminHandler) listPublishedModule(c *gin.Context, module string, key st
 			"tags":             record.Tags,
 			"url":              record.URL,
 			"requiredSubjects": requiredSubjects,
+			"localDocuments":   h.localPolicyDocuments(record.Scope),
 		})
 	}
 	ok(c, envelope{key: items})
+}
+
+func (h *AdminHandler) policyDocumentsRoot() string {
+	if h.cfg.SQLitePath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(h.cfg.SQLitePath), "policy_documents", "2026")
+}
+
+func (h *AdminHandler) localPolicyDocuments(scope string) []LocalPolicyDocument {
+	root := h.policyDocumentsRoot()
+	if root == "" || strings.TrimSpace(scope) == "" {
+		return []LocalPolicyDocument{}
+	}
+	directory := filepath.Join(root, scope)
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return []LocalPolicyDocument{}
+	}
+	documents := make([]LocalPolicyDocument, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == "manifest.json" || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		docType := "文件"
+		switch ext {
+		case ".pdf":
+			docType = "PDF"
+		case ".doc", ".docx":
+			docType = "Word"
+		case ".xls", ".xlsx":
+			docType = "Excel"
+		case ".zip", ".rar", ".7z":
+			docType = "压缩包"
+		case ".html", ".htm":
+			docType = "来源页"
+		}
+		documents = append(documents, LocalPolicyDocument{
+			Name: entry.Name(),
+			URL:  "/api/v1/policy-documents/" + url.PathEscape(scope) + "/" + url.PathEscape(entry.Name()),
+			Type: docType,
+			Size: info.Size(),
+		})
+	}
+	sort.Slice(documents, func(i, j int) bool { return documents[i].Name < documents[j].Name })
+	return documents
 }
 
 type contentMetadata struct {

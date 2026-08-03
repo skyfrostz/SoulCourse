@@ -151,6 +151,17 @@ function refetchKnowledge() {
         <a :href="record.source.url" target="_blank" rel="noreferrer">
           {{ record.source.name }} <ExternalLink :size="14" />
         </a>
+        <div v-if="record.localDocuments?.length" class="policy-local-files">
+          <a
+            v-for="file in record.localDocuments.slice(0, 3)"
+            :key="file.url"
+            :href="file.url"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <FileText :size="14" /> {{ file.type }} · {{ file.name }}
+          </a>
+        </div>
       </article>
     </section>
 

@@ -4717,6 +4717,57 @@ textarea {
   text-decoration: none;
 }
 
+.policy-local-files {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline, #d7ded8);
+}
+
+.policy-local-files a,
+.policy-local-file-list a {
+  min-width: 0;
+  overflow: hidden;
+  color: #2f6b4f;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.policy-local-files a {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.policy-local-file-list {
+  display: grid;
+  gap: 10px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.policy-local-file-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--hairline, #d7ded8);
+}
+
+.policy-local-file-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.policy-local-file-list small {
+  flex: 0 0 auto;
+  color: #667068;
+}
+
 .province-card-head {
   display: flex;
   align-items: center;

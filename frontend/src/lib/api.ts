@@ -133,6 +133,11 @@ export interface LocalPolicyDocument {
   sourceTitle?: string
   sourceUrl?: string
   verificationStatus?: string
+  snapshotUrl?: string
+  snapshotName?: string
+  snapshotCapturedAt?: string
+  snapshotWidth?: number
+  snapshotHeight?: number
   sizeBytes: number
 }
 

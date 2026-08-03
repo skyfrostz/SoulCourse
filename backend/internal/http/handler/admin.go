@@ -149,6 +149,11 @@ type LocalPolicyDocument struct {
 	SourceTitle        string `json:"sourceTitle,omitempty"`
 	SourceURL          string `json:"sourceUrl,omitempty"`
 	VerificationStatus string `json:"verificationStatus,omitempty"`
+	SnapshotURL        string `json:"snapshotUrl,omitempty"`
+	SnapshotName       string `json:"snapshotName,omitempty"`
+	SnapshotCapturedAt string `json:"snapshotCapturedAt,omitempty"`
+	SnapshotWidth      int    `json:"snapshotWidth,omitempty"`
+	SnapshotHeight     int    `json:"snapshotHeight,omitempty"`
 	Size               int64  `json:"sizeBytes"`
 }
 
@@ -587,6 +592,16 @@ func (h *AdminHandler) DownloadPolicyDocument(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
+	// Some official pages were saved with an .html name even though the
+	// response body is a PDF. Let browsers select the correct viewer.
+	if file, openErr := os.Open(target); openErr == nil {
+		var header [5]byte
+		_, _ = file.Read(header[:])
+		_ = file.Close()
+		if string(header[:]) == "%PDF-" {
+			c.Header("Content-Type", "application/pdf")
+		}
+	}
 	if c.Query("download") == "1" {
 		displayName := name
 		if metadata, ok := h.policyDocumentMetadata(scope, name); ok && strings.TrimSpace(metadata.DisplayName) != "" {
@@ -840,7 +855,7 @@ func (h *AdminHandler) localPolicyDocuments(scope string) []LocalPolicyDocument 
 	manifest := h.policyDocumentManifest(scope)
 	documents := make([]LocalPolicyDocument, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == "manifest.json" || strings.HasPrefix(entry.Name(), ".") {
+		if entry.IsDir() || entry.Name() == "manifest.json" || strings.HasPrefix(entry.Name(), ".") || isPolicySnapshotName(entry.Name()) {
 			continue
 		}
 		info, err := entry.Info()
@@ -864,6 +879,9 @@ func (h *AdminHandler) localPolicyDocuments(scope string) []LocalPolicyDocument 
 		item := manifest[entry.Name()]
 		item.Name = entry.Name()
 		item.URL = "/api/v1/policy-documents/" + url.PathEscape(scope) + "/" + url.PathEscape(entry.Name())
+		if item.SnapshotName != "" {
+			item.SnapshotURL = "/api/v1/policy-documents/" + url.PathEscape(scope) + "/" + url.PathEscape(item.SnapshotName) + "?preview=2"
+		}
 		item.Type = docType
 		item.Size = info.Size()
 		if item.DisplayName == "" {
@@ -901,6 +919,10 @@ type policyDocumentManifestEntry struct {
 	SourceTitle        string `json:"sourceTitle"`
 	SourceURL          string `json:"sourceUrl"`
 	VerificationStatus string `json:"verificationStatus"`
+	SnapshotName       string `json:"snapshotName"`
+	SnapshotCapturedAt string `json:"snapshotCapturedAt"`
+	SnapshotWidth      int    `json:"snapshotWidth"`
+	SnapshotHeight     int    `json:"snapshotHeight"`
 }
 
 type policyDocumentManifestFile struct {
@@ -940,9 +962,18 @@ func (h *AdminHandler) policyDocumentManifest(scope string) map[string]LocalPoli
 			SourceTitle:        strings.TrimSpace(entry.SourceTitle),
 			SourceURL:          strings.TrimSpace(entry.SourceURL),
 			VerificationStatus: strings.TrimSpace(entry.VerificationStatus),
+			SnapshotName:       strings.TrimSpace(entry.SnapshotName),
+			SnapshotCapturedAt: strings.TrimSpace(entry.SnapshotCapturedAt),
+			SnapshotWidth:      entry.SnapshotWidth,
+			SnapshotHeight:     entry.SnapshotHeight,
 		}
 	}
 	return result
+}
+
+func isPolicySnapshotName(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	return strings.HasPrefix(name, "snapshot-") && (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp")
 }
 
 func (h *AdminHandler) policyDocumentMetadata(scope, name string) (LocalPolicyDocument, bool) {

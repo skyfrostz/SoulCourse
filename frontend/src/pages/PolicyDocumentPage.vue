@@ -72,6 +72,7 @@ const selectedFileKind = computed(() => {
 const htmlPreview = ref('')
 const htmlPreviewLoading = ref(false)
 const htmlPreviewError = ref(false)
+const detectedPreviewKind = ref<'html' | 'pdf'>('html')
 const selectedFileURL = computed(() => {
   if (!selectedFile.value) return ''
   const url = new URL(selectedFile.value.url, window.location.origin)
@@ -86,16 +87,31 @@ const downloadFileURL = computed(() => {
   url.searchParams.set('download', '1')
   return url.toString()
 })
+const effectiveFileKind = computed(() => selectedFileKind.value === 'html' ? detectedPreviewKind.value : selectedFileKind.value)
+const snapshotURL = computed(() => selectedFile.value?.snapshotUrl || '')
 
 watch([selectedFileURL, selectedFileKind], async ([url, kind]) => {
   htmlPreview.value = ''
+  detectedPreviewKind.value = 'html'
   htmlPreviewError.value = false
   htmlPreviewLoading.value = kind === 'html' && Boolean(url)
   if (kind !== 'html' || !url) return
   try {
     const response = await fetch(url, { credentials: 'same-origin' })
     if (!response.ok) throw new Error(`policy html ${response.status}`)
-    htmlPreview.value = await response.text()
+    const bytes = await response.arrayBuffer()
+    const header = new TextDecoder().decode(bytes.slice(0, 12))
+    if (header.startsWith('%PDF-')) {
+      detectedPreviewKind.value = 'pdf'
+      return
+    }
+    let text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    // A few examination-office pages are GBK/GB18030. Preserve Chinese text
+    // instead of rendering replacement characters in the srcdoc iframe.
+    if ((text.match(/�/g)?.length ?? 0) > 3) {
+      text = new TextDecoder('gb18030', { fatal: false }).decode(bytes)
+    }
+    htmlPreview.value = text
   } catch {
     htmlPreviewError.value = true
   } finally {
@@ -184,9 +200,14 @@ function goBack() {
             <div v-if="htmlPreviewLoading" class="policy-file-loading">
               <RefreshCcw class="state-spin" :size="22" /> 正在载入文件
             </div>
-            <iframe v-else-if="selectedFileKind === 'pdf'" :src="selectedFileURL" :title="`${selectedFileDisplayName}在线预览`" class="policy-file-frame" />
+            <iframe v-else-if="effectiveFileKind === 'pdf'" :src="selectedFileURL" :title="`${selectedFileDisplayName}在线预览`" class="policy-file-frame" />
             <iframe v-else-if="selectedFileKind === 'office'" :src="officeViewerURL" :title="`${selectedFileDisplayName}在线预览`" class="policy-file-frame" />
-            <iframe v-else-if="selectedFileKind === 'html' && htmlPreview" :srcdoc="htmlPreview" :title="`${selectedFileDisplayName}在线预览`" class="policy-file-frame policy-html-frame" sandbox="allow-same-origin" />
+            <iframe v-else-if="effectiveFileKind === 'html' && htmlPreview" :srcdoc="htmlPreview" :title="`${selectedFileDisplayName}在线预览`" class="policy-file-frame policy-html-frame" sandbox="allow-same-origin" />
+            <div v-else-if="snapshotURL" class="policy-file-snapshot">
+              <img :src="snapshotURL" :alt="`${selectedFileDisplayName}官方页面快照`" loading="lazy" />
+              <p>官方页面快照 · {{ selectedFile.snapshotCapturedAt || '采集时间未记录' }}</p>
+              <div><a :href="document.source.url || document.url" target="_blank" rel="noreferrer">打开官方来源</a><a :href="downloadFileURL">下载原文件</a></div>
+            </div>
             <div v-else class="policy-file-unavailable">
               <FileText :size="22" />
               <p>{{ htmlPreviewError ? '网页内容载入失败，可打开官方来源或下载原文件。' : '该文件格式暂不支持网页内预览。' }}</p>

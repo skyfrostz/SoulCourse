@@ -582,6 +582,8 @@ func (h *AdminHandler) DownloadPolicyDocument(c *gin.Context) {
 		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(name)))
 	} else {
 		c.Header("Content-Disposition", "inline")
+		c.Header("X-Frame-Options", "SAMEORIGIN")
+		c.Header("Content-Security-Policy", "default-src 'none'; img-src data: https:; style-src 'unsafe-inline' https:; font-src data: https:; frame-ancestors 'self'")
 	}
 	c.Header("Cache-Control", "public, max-age=86400")
 	c.File(target)

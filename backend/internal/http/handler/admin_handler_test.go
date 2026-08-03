@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -55,6 +56,46 @@ func TestAdminLoginHandlerErrorAndSuccessBranches(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPolicyDocumentPreviewOverridesDefaultFrameRestrictions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	root := t.TempDir()
+	provinceDir := filepath.Join(root, "policy_documents", "2026", "广东")
+	if err := os.MkdirAll(provinceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(provinceDir, "policy.pdf"), []byte("policy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Config{SQLitePath: filepath.Join(root, "app.db")}
+	handler := NewAdminHandler(cfg, nil, nil, middleware.NewAdminSessionStore(0))
+	router := gin.New()
+	router.Use(middleware.SecurityHeaders(true))
+	router.GET("/api/v1/policy-documents/:scope/:filename", handler.DownloadPolicyDocument)
+
+	preview := performHandlerRequest(router, http.MethodGet, "/api/v1/policy-documents/广东/policy.pdf?preview=2", "")
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status=%d body=%s", preview.Code, preview.Body.String())
+	}
+	if got := preview.Header().Get("Content-Disposition"); got != "inline" {
+		t.Fatalf("preview Content-Disposition=%q", got)
+	}
+	if got := preview.Header().Get("X-Frame-Options"); got != "SAMEORIGIN" {
+		t.Fatalf("preview X-Frame-Options=%q", got)
+	}
+	if got := preview.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'self'") {
+		t.Fatalf("preview CSP=%q", got)
+	}
+
+	download := performHandlerRequest(router, http.MethodGet, "/api/v1/policy-documents/广东/policy.pdf?download=1", "")
+	if got := download.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "attachment;") {
+		t.Fatalf("download Content-Disposition=%q", got)
+	}
+	if got := download.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Fatalf("download X-Frame-Options=%q", got)
 	}
 }
 

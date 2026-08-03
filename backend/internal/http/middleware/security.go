@@ -7,7 +7,7 @@ func SecurityHeaders(production bool) gin.HandlerFunc {
 		if production || c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
 			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
-		contentSecurityPolicy := "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data: https://static.figma.com; media-src 'self' https://d8j0ntlcm91z4.cloudfront.net; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; manifest-src 'self'; worker-src 'self' blob:"
+		contentSecurityPolicy := "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data: https://static.figma.com; media-src 'self' https://d8j0ntlcm91z4.cloudfront.net; frame-src 'self' https://view.officeapps.live.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; manifest-src 'self'; worker-src 'self' blob:"
 		if production {
 			contentSecurityPolicy += "; upgrade-insecure-requests"
 		}

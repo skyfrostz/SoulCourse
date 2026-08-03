@@ -57,6 +57,7 @@ func TestSecurityHeadersRestrictBrowserCapabilities(t *testing.T) {
 		"connect-src 'self'",
 		"font-src 'self' data: https://static.figma.com",
 		"media-src 'self' https://d8j0ntlcm91z4.cloudfront.net",
+		"frame-src 'self' https://view.officeapps.live.com",
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 		"upgrade-insecure-requests",

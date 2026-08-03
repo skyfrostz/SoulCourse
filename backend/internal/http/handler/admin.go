@@ -578,7 +578,11 @@ func (h *AdminHandler) DownloadPolicyDocument(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(name)))
+	if c.Query("download") == "1" {
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(name)))
+	} else {
+		c.Header("Content-Disposition", "inline")
+	}
 	c.Header("Cache-Control", "public, max-age=86400")
 	c.File(target)
 }

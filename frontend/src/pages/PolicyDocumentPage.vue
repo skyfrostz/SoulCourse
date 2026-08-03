@@ -27,6 +27,21 @@ const documents = computed(() =>
 )
 const document = computed(() => documents.value.find((item) => item.id === documentId.value))
 const documentTags = computed(() => document.value?.tags.slice(0, 4) ?? [])
+const selectedFileName = computed(() => String(route.query.file ?? ''))
+const selectedFile = computed(() => document.value?.localDocuments?.find((file) => file.name === selectedFileName.value) ?? document.value?.localDocuments?.[0])
+const selectedFileKind = computed(() => {
+  const name = selectedFile.value?.name.toLowerCase() ?? ''
+  if (name.endsWith('.pdf')) return 'pdf'
+  if (/\.(doc|docx|xls|xlsx)$/.test(name)) return 'office'
+  return 'download'
+})
+const selectedFileURL = computed(() => {
+  if (!selectedFile.value) return ''
+  const url = new URL(selectedFile.value.url, window.location.origin)
+  url.searchParams.set('inline', '1')
+  return url.toString()
+})
+const officeViewerURL = computed(() => `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(selectedFileURL.value)}`)
 
 function goBack() {
   router.push(provinceName.value ? `/knowledge/${encodeURIComponent(provinceName.value)}` : '/knowledge')
@@ -56,16 +71,6 @@ function searchInForum(query: string) {
         <a :href="document.source.url || document.url" target="_blank" rel="noreferrer" class="primary-wide compact">
           官方来源 <ExternalLink :size="15" />
         </a>
-        <a
-          v-for="file in document.localDocuments ?? []"
-          :key="file.url"
-          :href="file.url"
-          target="_blank"
-          rel="noreferrer"
-          class="ghost-button compact"
-        >
-          <FileText :size="15" /> 下载{{ file.type }}
-        </a>
       </div>
     </section>
 
@@ -84,6 +89,32 @@ function searchInForum(query: string) {
       </aside>
 
       <article class="policy-document-reader">
+        <section v-if="selectedFile" class="policy-file-viewer">
+          <div class="policy-file-viewer-head">
+            <div>
+              <strong>{{ selectedFile.name }}</strong>
+              <small>{{ selectedFile.type }} · {{ Math.ceil(selectedFile.sizeBytes / 1024) }} KB</small>
+            </div>
+            <a :href="`${selectedFile.url}?download=1`" class="ghost-button compact"><FileText :size="15" /> 下载原文件</a>
+          </div>
+          <iframe v-if="selectedFileKind === 'pdf'" :src="selectedFileURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame" />
+          <iframe v-else-if="selectedFileKind === 'office'" :src="officeViewerURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame" />
+          <div v-else class="policy-file-unavailable">
+            <FileText :size="22" />
+            <p>该文件格式暂不支持网页内预览，请下载原文件查看。</p>
+          </div>
+          <div v-if="(document.localDocuments?.length ?? 0) > 1" class="policy-file-switcher" aria-label="选择政策文件">
+            <RouterLink
+              v-for="file in document.localDocuments"
+              :key="file.url"
+              :to="{ path: policyDocumentPath(provinceName, document.id), query: { file: file.name } }"
+              :class="{ active: file.name === selectedFile.name }"
+            >
+              {{ file.type }} · {{ file.name }}
+            </RouterLink>
+          </div>
+        </section>
+
         <section class="policy-reader-note">
           <FileText :size="20" />
           <div>
@@ -105,16 +136,6 @@ function searchInForum(query: string) {
           </ul>
         </section>
 
-        <section v-if="document.localDocuments?.length" class="policy-reader-section">
-          <h2>服务器本地文件</h2>
-          <p>文件来自官方站点公开附件，已保存在本站服务器；使用前请核对文件年份和发布单位。</p>
-          <ul class="policy-local-file-list">
-            <li v-for="file in document.localDocuments" :key="file.url">
-              <a :href="file.url" target="_blank" rel="noreferrer"><FileText :size="15" /> {{ file.name }}</a>
-              <small>{{ file.type }} · {{ Math.ceil(file.sizeBytes / 1024) }} KB</small>
-            </li>
-          </ul>
-        </section>
 
         <section class="policy-reader-section">
           <h2>方法说明</h2>

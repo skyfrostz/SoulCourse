@@ -33,6 +33,7 @@ const selectedFileKind = computed(() => {
   const name = selectedFile.value?.name.toLowerCase() ?? ''
   if (name.endsWith('.pdf')) return 'pdf'
   if (/\.(doc|docx|xls|xlsx)$/.test(name)) return 'office'
+  if (/\.(html|htm)$/.test(name)) return 'html'
   return 'download'
 })
 const selectedFileURL = computed(() => {
@@ -99,6 +100,7 @@ function searchInForum(query: string) {
           </div>
           <iframe v-if="selectedFileKind === 'pdf'" :src="selectedFileURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame" />
           <iframe v-else-if="selectedFileKind === 'office'" :src="officeViewerURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame" />
+          <iframe v-else-if="selectedFileKind === 'html'" :src="selectedFileURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame policy-html-frame" sandbox="allow-same-origin" />
           <div v-else class="policy-file-unavailable">
             <FileText :size="22" />
             <p>该文件格式暂不支持网页内预览，请下载原文件查看。</p>

@@ -334,9 +334,14 @@ onBeforeUnmount(() => {
   <main class="detail-page">
     <button class="back-link" @click="router.push('/')"><ChevronLeft :size="17" /> 返回论坛</button>
 
-    <section v-if="post" class="article-layout" :class="{ 'has-images': post.imageUrls?.length, 'is-modal-layout': props.mode === 'modal' }">
-      <div v-if="post.imageUrls?.length" class="article-media-column">
-        <PostImageCarousel :images="post.imageUrls" :title="post.title" />
+    <section v-if="post" class="article-layout" :class="{ 'has-images': post.imageUrls?.length || props.mode === 'modal', 'has-generated-cover': !post.imageUrls?.length && props.mode === 'modal', 'is-modal-layout': props.mode === 'modal' }">
+      <div v-if="post.imageUrls?.length || props.mode === 'modal'" class="article-media-column">
+        <PostImageCarousel v-if="post.imageUrls?.length" :images="post.imageUrls" :title="post.title" />
+        <div v-else class="article-title-cover article-generated-media-cover" :class="`cover-${post.track}`">
+          <span>{{ trackLabels[post.track] }}</span>
+          <strong>{{ post.title }}</strong>
+          <small>{{ post.electives.map((item) => subjectLabels[item]).join(' · ') }}</small>
+        </div>
       </div>
       <div class="article-content-column">
       <article class="article-main">
@@ -424,7 +429,7 @@ onBeforeUnmount(() => {
         </div>
         <p v-if="!editing" class="article-body">{{ post.content }}</p>
 
-        <div v-if="!editing && !post.imageUrls?.length" class="article-title-cover" :class="`cover-${post.track}`">
+        <div v-if="!editing && !post.imageUrls?.length && props.mode !== 'modal'" class="article-title-cover" :class="`cover-${post.track}`">
           <span>{{ trackLabels[post.track] }}</span>
           <strong>{{ post.title }}</strong>
           <small>{{ post.electives.map((item) => subjectLabels[item]).join(' · ') }}</small>
@@ -470,7 +475,7 @@ onBeforeUnmount(() => {
           <p>整理成绩、兴趣、目标专业和本省政策后，由认证规划师给出组合风险清单。</p>
           <button type="button" @click="router.push('/settings')">先完善画像</button>
         </div>
-        <section v-if="post.imageUrls?.length" id="post-comments" class="comment-board image-comment-board">
+        <section v-if="post.imageUrls?.length || props.mode === 'modal'" id="post-comments" class="comment-board image-comment-board">
           <div class="comment-title-row">
             <h2>全部评论 {{ comments.length }}</h2>
             <button @click="askCertifiedUser">向认证用户提问</button>
@@ -518,7 +523,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="post && !post.imageUrls?.length" id="post-comments" class="comment-board">
+    <section v-if="post && !post.imageUrls?.length && props.mode !== 'modal'" id="post-comments" class="comment-board">
       <div class="comment-title-row">
         <h2>全部评论 {{ comments.length }}</h2>
         <button @click="askCertifiedUser">向认证用户提问</button>

@@ -7355,6 +7355,45 @@ textarea {
   margin-bottom: 12px;
 }
 
+.province-file-groups {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+
+.province-file-group {
+  display: grid;
+  gap: 10px;
+}
+
+.province-file-group-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.province-file-group-heading h2 {
+  margin: 0;
+  color: #111512;
+  font-size: 20px;
+}
+
+.province-file-group-heading p {
+  margin: 3px 0 0;
+  color: #667068;
+  font-size: 13px;
+}
+
+.province-file-group-heading > span {
+  padding: 5px 9px;
+  border: 1px solid #b8d9c9;
+  border-radius: 999px;
+  color: #2f6b4f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .province-file-grid {
   grid-template-columns: repeat(4, 1fr);
 }
@@ -7374,6 +7413,41 @@ textarea {
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.04);
 }
 
+.province-file-card {
+  position: relative;
+  padding: 0;
+  transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-out-smooth);
+}
+
+.province-file-card:hover,
+.province-file-card:has(.province-file-card-link:focus-visible) {
+  border-color: #b8d9c9;
+  box-shadow: 0 18px 40px rgba(47, 107, 79, 0.11);
+  transform: translateY(-2px);
+}
+
+.province-file-card-link {
+  position: static;
+  display: grid;
+  gap: 11px;
+  padding: 18px 18px 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.province-file-card-link::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+}
+
+.province-file-card-link:focus-visible::after {
+  outline: 3px solid rgba(47, 107, 79, 0.45);
+  outline-offset: 2px;
+}
+
 .province-file-card small {
   display: inline-flex;
   align-items: center;
@@ -7383,10 +7457,18 @@ textarea {
 }
 
 .province-file-card h2,
+.province-file-card h3,
 .province-content-grid h2 {
   margin: 0;
   color: #0f172a;
   font-size: 18px;
+}
+
+.province-file-card h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.4;
 }
 
 .province-file-card p,
@@ -7400,8 +7482,19 @@ textarea {
 }
 
 .province-file-actions {
+  position: relative;
+  z-index: 2;
   display: grid;
   gap: 8px;
+  padding: 0 18px 18px;
+}
+
+.province-file-read-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f766e;
+  font-weight: 900;
 }
 
 .province-file-card a,
@@ -7412,6 +7505,13 @@ textarea {
   color: #2563eb;
   font-weight: 900;
   text-decoration: none;
+}
+
+.province-file-card .province-file-card-link {
+  display: grid;
+  align-items: stretch;
+  color: inherit;
+  font-weight: inherit;
 }
 
 .province-file-actions a:first-child {
@@ -7761,6 +7861,43 @@ textarea {
   border-color: transparent;
   border-radius: 6px;
   background: transparent;
+}
+
+.policy-document-page .policy-document-toc details {
+  display: grid;
+  gap: 4px;
+}
+
+.policy-document-page .policy-document-toc summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 3px 3px;
+  color: #667068;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  list-style: none;
+}
+
+.policy-document-page .policy-document-toc summary::-webkit-details-marker {
+  display: none;
+}
+
+.policy-document-page .policy-document-toc summary::after {
+  content: '+';
+  color: #2f6b4f;
+  font-size: 15px;
+}
+
+.policy-document-page .policy-document-toc details[open] summary::after {
+  content: '−';
+}
+
+.policy-document-page .policy-document-toc summary:focus-visible {
+  outline: 2px solid rgba(47, 107, 79, 0.45);
+  outline-offset: 2px;
 }
 
 .policy-document-page .policy-document-toc a:hover,

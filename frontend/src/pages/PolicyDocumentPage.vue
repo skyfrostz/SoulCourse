@@ -3,7 +3,15 @@ import { useQuery } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { BookOpenCheck, CheckCircle2, ChevronLeft, Download, ExternalLink, FileText, RefreshCcw } from '@lucide/vue'
-import { fetchPublishedPolicies } from '../lib/api'
+import {
+  fetchPublishedPolicies,
+  getPolicyExamGroup,
+  policyDisplayName,
+  policyExamGroupLabels,
+  sortPolicyRecords,
+  type LocalPolicyDocument,
+  type PolicyExamGroup,
+} from '../lib/api'
 import { policyDocumentPath } from '../lib/policyDocuments'
 import { useOnlineState } from '../composables/useOnlineState'
 
@@ -16,17 +24,44 @@ const policiesQuery = useQuery({
   queryKey: ['real-data', 'policies', provinceName],
   queryFn: fetchPublishedPolicies,
 })
-const documents = computed(() =>
+const documents = computed(() => sortPolicyRecords(
   (policiesQuery.data.value ?? [])
     .filter((record) =>
       record.coverageStatus === 'verified' &&
       (record.scope === provinceName.value || record.title.includes(provinceName.value)),
     ),
-)
+))
 const document = computed(() => documents.value.find((item) => item.id === documentId.value))
+const documentGroups = computed(() => {
+  const groups = new Map<PolicyExamGroup, typeof documents.value>()
+  for (const item of documents.value) {
+    const group = getPolicyExamGroup(item)
+    const items = groups.get(group) ?? []
+    items.push(item)
+    groups.set(group, items)
+  }
+  return (['ordinary', 'art', 'sports', 'adult', 'other'] as PolicyExamGroup[])
+    .filter((group) => groups.has(group))
+    .map((group) => ({ group, label: policyExamGroupLabels[group], items: groups.get(group) ?? [] }))
+})
 const documentTags = computed(() => document.value?.tags.slice(0, 4) ?? [])
+const localFileGroups = computed(() => {
+  const groups = new Map<PolicyExamGroup, LocalPolicyDocument[]>()
+  for (const file of sortPolicyRecords(document.value?.localDocuments ?? [])) {
+    const group = getPolicyExamGroup(file)
+    const items = groups.get(group) ?? []
+    items.push(file)
+    groups.set(group, items)
+  }
+  return (['ordinary', 'art', 'sports', 'adult', 'other'] as PolicyExamGroup[])
+    .filter((group) => groups.has(group))
+    .map((group) => ({ group, label: policyExamGroupLabels[group], items: groups.get(group) ?? [] }))
+})
 const selectedFileName = computed(() => String(route.query.file ?? ''))
-const selectedFile = computed(() => document.value?.localDocuments?.find((file) => file.name === selectedFileName.value) ?? document.value?.localDocuments?.[0])
+const selectedFile = computed(() => document.value?.localDocuments?.find((file) =>
+  file.name === selectedFileName.value || file.displayName === selectedFileName.value,
+) ?? document.value?.localDocuments?.[0])
+const selectedFileDisplayName = computed(() => selectedFile.value ? policyDisplayName(selectedFile.value) : '')
 const selectedFileKind = computed(() => {
   const name = selectedFile.value?.name.toLowerCase() ?? ''
   if (name.endsWith('.pdf')) return 'pdf'
@@ -83,7 +118,7 @@ function goBack() {
         </button>
         <div class="policy-toolbar-title">
           <small>政策库 / {{ provinceName }}</small>
-          <h1>{{ document.title }}</h1>
+          <h1>{{ policyDisplayName(document) }}</h1>
           <div class="policy-toolbar-meta">
             <span class="verified"><CheckCircle2 :size="14" /> 已复核</span>
             <span>{{ document.dataYear }} 年</span>
@@ -107,28 +142,34 @@ function goBack() {
             <small>{{ documents.length }} 条记录</small>
           </div>
           <nav aria-label="政策记录">
-            <RouterLink
-              v-for="item in documents"
-              :key="item.id"
-              :to="policyDocumentPath(provinceName, item.id)"
-              :class="{ active: item.id === document.id }"
-            >
-              <small>{{ item.type }}</small>
-              <span>{{ item.title }}</span>
-            </RouterLink>
+            <details v-for="group in documentGroups" :key="group.group" :open="group.group === 'ordinary' || group.items.some((item) => item.id === document?.id)">
+              <summary>{{ group.label }} <small>{{ group.items.length }}</small></summary>
+              <RouterLink
+                v-for="item in group.items"
+                :key="item.id"
+                :to="policyDocumentPath(provinceName, item.id)"
+                :class="{ active: item.id === document.id }"
+              >
+                <small>{{ item.stage || item.type }}</small>
+                <span>{{ policyDisplayName(item) }}</span>
+              </RouterLink>
+            </details>
           </nav>
-          <div v-if="document.localDocuments?.length" class="policy-toc-files">
+          <div v-if="localFileGroups.length" class="policy-toc-files">
             <strong>本地文件</strong>
-            <RouterLink
-              v-for="file in document.localDocuments"
-              :key="file.url"
-              :to="{ path: policyDocumentPath(provinceName, document.id), query: { file: file.name } }"
-              :class="{ active: file.name === selectedFile?.name }"
-            >
-              <FileText :size="14" />
-              <span>{{ file.name }}</span>
-              <small>{{ file.type }}</small>
-            </RouterLink>
+            <details v-for="group in localFileGroups" :key="group.group" :open="group.group === 'ordinary' || group.items.some((item) => item.name === selectedFile?.name)">
+              <summary>{{ group.label }} <small>{{ group.items.length }}</small></summary>
+              <RouterLink
+                v-for="file in group.items"
+                :key="file.url"
+                :to="{ path: policyDocumentPath(provinceName, document.id), query: { file: file.name } }"
+                :class="{ active: file.name === selectedFile?.name }"
+              >
+                <FileText :size="14" />
+                <span>{{ policyDisplayName(file) }}</span>
+                <small>{{ file.type }}</small>
+              </RouterLink>
+            </details>
           </div>
         </aside>
 
@@ -136,16 +177,16 @@ function goBack() {
           <section v-if="selectedFile" class="policy-file-viewer">
             <div class="policy-file-viewer-head">
               <div>
-                <strong>{{ selectedFile.name }}</strong>
-                <small>{{ selectedFile.type }} · {{ Math.ceil(selectedFile.sizeBytes / 1024) }} KB</small>
+                <strong>{{ selectedFileDisplayName }}</strong>
+                <small>{{ selectedFile.stage || selectedFile.type }} · {{ selectedFile.year || document.dataYear }} · {{ Math.ceil(selectedFile.sizeBytes / 1024) }} KB</small>
               </div>
             </div>
             <div v-if="htmlPreviewLoading" class="policy-file-loading">
               <RefreshCcw class="state-spin" :size="22" /> 正在载入文件
             </div>
-            <iframe v-else-if="selectedFileKind === 'pdf'" :src="selectedFileURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame" />
-            <iframe v-else-if="selectedFileKind === 'office'" :src="officeViewerURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame" />
-            <iframe v-else-if="selectedFileKind === 'html' && htmlPreview" :srcdoc="htmlPreview" :title="`${selectedFile.name}在线预览`" class="policy-file-frame policy-html-frame" sandbox="allow-same-origin" />
+            <iframe v-else-if="selectedFileKind === 'pdf'" :src="selectedFileURL" :title="`${selectedFileDisplayName}在线预览`" class="policy-file-frame" />
+            <iframe v-else-if="selectedFileKind === 'office'" :src="officeViewerURL" :title="`${selectedFileDisplayName}在线预览`" class="policy-file-frame" />
+            <iframe v-else-if="selectedFileKind === 'html' && htmlPreview" :srcdoc="htmlPreview" :title="`${selectedFileDisplayName}在线预览`" class="policy-file-frame policy-html-frame" sandbox="allow-same-origin" />
             <div v-else class="policy-file-unavailable">
               <FileText :size="22" />
               <p>{{ htmlPreviewError ? '网页内容载入失败，可打开官方来源或下载原文件。' : '该文件格式暂不支持网页内预览。' }}</p>

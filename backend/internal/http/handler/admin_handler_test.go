@@ -69,6 +69,10 @@ func TestPolicyDocumentPreviewOverridesDefaultFrameRestrictions(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(provinceDir, "policy.pdf"), []byte("policy"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	manifest := `{"files":[{"storedName":"policy.pdf","displayName":"2026-广东-普通高考-招生工作规定.pdf","examType":"ordinary","stage":"招生规定","year":2026,"sourceTitle":"广东省普通高校招生工作规定","sourceUrl":"https://example.gov.cn/policy","verificationStatus":"verified"}]}`
+	if err := os.WriteFile(filepath.Join(provinceDir, "manifest.json"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := config.Config{SQLitePath: filepath.Join(root, "app.db")}
 	handler := NewAdminHandler(cfg, nil, nil, middleware.NewAdminSessionStore(0))
@@ -89,10 +93,17 @@ func TestPolicyDocumentPreviewOverridesDefaultFrameRestrictions(t *testing.T) {
 	if got := preview.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'self'") {
 		t.Fatalf("preview CSP=%q", got)
 	}
+	listed := handler.localPolicyDocuments("广东")
+	if len(listed) != 1 || listed[0].DisplayName != "2026-广东-普通高考-招生工作规定.pdf" || listed[0].ExamType != "ordinary" {
+		t.Fatalf("manifest metadata not loaded: %#v", listed)
+	}
 
 	download := performHandlerRequest(router, http.MethodGet, "/api/v1/policy-documents/广东/policy.pdf?download=1", "")
 	if got := download.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "attachment;") {
 		t.Fatalf("download Content-Disposition=%q", got)
+	}
+	if !strings.Contains(download.Header().Get("Content-Disposition"), "2026-%E5%B9%BF%E4%B8%9C-%E6%99%AE%E9%80%9A%E9%AB%98%E8%80%83-%E6%8B%9B%E7%94%9F%E5%B7%A5%E4%BD%9C%E8%A7%84%E5%AE%9A.pdf") {
+		t.Fatalf("download display filename=%q", download.Header().Get("Content-Disposition"))
 	}
 	if got := download.Header().Get("X-Frame-Options"); got != "DENY" {
 		t.Fatalf("download X-Frame-Options=%q", got)

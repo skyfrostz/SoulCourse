@@ -109,14 +109,103 @@ export interface RealDataRecord {
   tags: string[]
   url: string
   requiredSubjects?: string[]
+  displayName?: string
+  examType?: string
+  stage?: string
+  year?: number
+  publishedAt?: string
+  sourceTitle?: string
+  sourceUrl?: string
+  verificationStatus?: string
   localDocuments?: LocalPolicyDocument[]
 }
 
 export interface LocalPolicyDocument {
   name: string
+  displayName?: string
+  originalName?: string
   url: string
   type: string
+  examType?: string
+  stage?: string
+  year?: number
+  publishedAt?: string
+  sourceTitle?: string
+  sourceUrl?: string
+  verificationStatus?: string
   sizeBytes: number
+}
+
+export type PolicyExamGroup = 'ordinary' | 'art' | 'sports' | 'adult' | 'other'
+
+export const policyExamGroupLabels: Record<PolicyExamGroup, string> = {
+  ordinary: '普通高考',
+  art: '艺术类高考',
+  sports: '体育类高考',
+  adult: '成人高考',
+  other: '其他考试',
+}
+
+const policyExamGroupOrder: PolicyExamGroup[] = ['ordinary', 'art', 'sports', 'adult', 'other']
+
+export function policyDisplayName(record: { displayName?: string; title?: string; name?: string }): string {
+  return record.displayName?.trim() || record.title?.trim() || record.name?.trim() || '未命名政策文件'
+}
+
+export function getPolicyExamGroup(record: {
+  examType?: string
+  type?: string
+  title?: string
+  displayName?: string
+  name?: string
+  tags?: string[]
+}): PolicyExamGroup {
+  const text = [record.examType, record.type, record.title, record.displayName, record.name, ...(record.tags ?? [])]
+    .filter(Boolean)
+    .join(' ')
+
+  if (/成人高考|成人招生|成人高校|成考|专升本/.test(text)) return 'adult'
+  if (/体育高考|体育类|体育专业|体育单招/.test(text)) return 'sports'
+  if (/艺术高考|艺术类|艺术专业|美术|音乐|舞蹈|播音|编导/.test(text)) return 'art'
+  if (/普通高考|普通高校招生|高考|招生考试|高等学校招生/.test(text)) return 'ordinary'
+  return 'other'
+}
+
+export function policyExamGroupIndex(group: PolicyExamGroup): number {
+  return policyExamGroupOrder.indexOf(group)
+}
+
+export function policyStageIndex(stage?: string): number {
+  const value = stage ?? ''
+  if (/报名|资格|体检/.test(value)) return 10
+  if (/考试|考务|准考证/.test(value)) return 20
+  if (/计划|目录|专业/.test(value)) return 30
+  if (/成绩|分数线|控制线/.test(value)) return 40
+  if (/志愿/.test(value)) return 50
+  if (/录取|投档|征集/.test(value)) return 60
+  return 90
+}
+
+export function sortPolicyRecords<T extends {
+  examType?: string
+  type?: string
+  title?: string
+  displayName?: string
+  name?: string
+  tags?: string[]
+  stage?: string
+  dataYear?: number
+  year?: number
+}>(records: T[]): T[] {
+  return [...records].sort((left, right) => {
+    const groupDifference = policyExamGroupIndex(getPolicyExamGroup(left)) - policyExamGroupIndex(getPolicyExamGroup(right))
+    if (groupDifference !== 0) return groupDifference
+    const stageDifference = policyStageIndex(left.stage) - policyStageIndex(right.stage)
+    if (stageDifference !== 0) return stageDifference
+    const yearDifference = (right.dataYear ?? right.year ?? 0) - (left.dataYear ?? left.year ?? 0)
+    if (yearDifference !== 0) return yearDifference
+    return policyDisplayName(left).localeCompare(policyDisplayName(right), 'zh-CN')
+  })
 }
 
 export interface ProvinceCoverage {

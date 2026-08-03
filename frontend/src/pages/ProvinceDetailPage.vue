@@ -4,7 +4,17 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ExternalLink, FileText, RefreshCcw, ShieldCheck } from '@lucide/vue'
 import PostCard from '../components/PostCard.vue'
-import { fetchPostCollection, fetchProvinceCoverage, fetchPublishedPolicies } from '../lib/api'
+import {
+  fetchPostCollection,
+  fetchProvinceCoverage,
+  fetchPublishedPolicies,
+  getPolicyExamGroup,
+  policyDisplayName,
+  policyExamGroupLabels,
+  sortPolicyRecords,
+  type PolicyExamGroup,
+  type RealDataRecord,
+} from '../lib/api'
 import { policyDocumentPath } from '../lib/policyDocuments'
 import { useOnlineState } from '../composables/useOnlineState'
 
@@ -41,14 +51,25 @@ const provincePosts = computed(() => {
   return Array.from(merged.values()).slice(0, 12)
 })
 
-const fileCards = computed(() =>
+const fileCards = computed(() => sortPolicyRecords(
   (policyRecordsQuery.data.value ?? [])
     .filter((record) =>
       record.coverageStatus === 'verified' &&
       (record.scope === provinceName.value || record.title.includes(provinceName.value)),
-    )
-    .slice(0, 12),
-)
+    ),
+))
+const fileGroups = computed(() => {
+  const groups = new Map<PolicyExamGroup, RealDataRecord[]>()
+  for (const file of fileCards.value) {
+    const group = getPolicyExamGroup(file)
+    const items = groups.get(group) ?? []
+    items.push(file)
+    groups.set(group, items)
+  }
+  return (['ordinary', 'art', 'sports', 'adult', 'other'] as PolicyExamGroup[])
+    .filter((group) => groups.has(group))
+    .map((group) => ({ group, label: policyExamGroupLabels[group], items: groups.get(group) ?? [] }))
+})
 const hasProvinceError = computed(() => coverageQuery.isError.value || policyRecordsQuery.isError.value)
 
 function refetchProvinceData() {
@@ -94,20 +115,35 @@ function refetchProvinceData() {
       <span class="primary-wide compact">{{ coverage?.coverageStatus === 'verified' ? '可查看已复核文件' : '不展示模拟结论' }}</span>
     </section>
 
-    <section v-if="hasCoverageRecord && fileCards.length" class="province-file-grid">
-      <article v-for="file in fileCards" :key="file.id" class="province-file-card">
-        <small><FileText :size="15" /> {{ file.type }}</small>
-        <h2>{{ file.title }}</h2>
-        <p>{{ file.summary || file.methodology }}</p>
-        <div class="province-file-actions">
-          <RouterLink :to="policyDocumentPath(provinceName, file.id)">
-            <FileText :size="15" /> 查看网页化全文
-          </RouterLink>
-          <a :href="file.source.url || file.url" target="_blank" rel="noreferrer">
-            官方/下载入口 <ExternalLink :size="14" />
-          </a>
+    <section v-if="hasCoverageRecord && fileCards.length" class="province-file-groups">
+      <section v-for="fileGroup in fileGroups" :key="fileGroup.group" class="province-file-group">
+        <header class="province-file-group-heading">
+          <div>
+            <h2>{{ fileGroup.label }}</h2>
+            <p>{{ fileGroup.items.length }} 份已复核资料</p>
+          </div>
+          <span v-if="fileGroup.group === 'ordinary'">优先资料</span>
+        </header>
+        <div class="province-file-grid">
+          <article v-for="file in fileGroup.items" :key="file.id" class="province-file-card">
+            <RouterLink
+              class="province-file-card-link"
+              :to="policyDocumentPath(provinceName, file.id)"
+              :aria-label="`查看${provinceName}的${policyDisplayName(file)}`"
+            >
+              <small><FileText :size="15" /> {{ file.stage || file.type }}</small>
+              <h3>{{ policyDisplayName(file) }}</h3>
+              <p>{{ file.summary || file.methodology }}</p>
+              <span class="province-file-read-action"><FileText :size="15" /> 查看网页化全文</span>
+            </RouterLink>
+            <div class="province-file-actions">
+              <a :href="file.source.url || file.url" target="_blank" rel="noreferrer">
+                官方/下载入口 <ExternalLink :size="14" />
+              </a>
+            </div>
+          </article>
         </div>
-      </article>
+      </section>
     </section>
 
     <section v-else-if="hasCoverageRecord && !policyRecordsQuery.isLoading.value" class="empty-state">

@@ -137,10 +137,19 @@ type AdminContentSummary struct {
 }
 
 type LocalPolicyDocument struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
-	Type string `json:"type"`
-	Size int64  `json:"sizeBytes"`
+	Name               string `json:"name"`
+	DisplayName        string `json:"displayName,omitempty"`
+	OriginalName       string `json:"originalName,omitempty"`
+	URL                string `json:"url"`
+	Type               string `json:"type"`
+	ExamType           string `json:"examType,omitempty"`
+	Stage              string `json:"stage,omitempty"`
+	Year               int    `json:"year,omitempty"`
+	PublishedAt        string `json:"publishedAt,omitempty"`
+	SourceTitle        string `json:"sourceTitle,omitempty"`
+	SourceURL          string `json:"sourceUrl,omitempty"`
+	VerificationStatus string `json:"verificationStatus,omitempty"`
+	Size               int64  `json:"sizeBytes"`
 }
 
 const (
@@ -579,7 +588,11 @@ func (h *AdminHandler) DownloadPolicyDocument(c *gin.Context) {
 		return
 	}
 	if c.Query("download") == "1" {
-		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(name)))
+		displayName := name
+		if metadata, ok := h.policyDocumentMetadata(scope, name); ok && strings.TrimSpace(metadata.DisplayName) != "" {
+			displayName = metadata.DisplayName
+		}
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(displayName)))
 	} else {
 		c.Header("Content-Disposition", "inline")
 		c.Header("X-Frame-Options", "SAMEORIGIN")
@@ -824,6 +837,7 @@ func (h *AdminHandler) localPolicyDocuments(scope string) []LocalPolicyDocument 
 	if err != nil {
 		return []LocalPolicyDocument{}
 	}
+	manifest := h.policyDocumentManifest(scope)
 	documents := make([]LocalPolicyDocument, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || entry.Name() == "manifest.json" || strings.HasPrefix(entry.Name(), ".") {
@@ -847,15 +861,110 @@ func (h *AdminHandler) localPolicyDocuments(scope string) []LocalPolicyDocument 
 		case ".html", ".htm":
 			docType = "来源页"
 		}
-		documents = append(documents, LocalPolicyDocument{
-			Name: entry.Name(),
-			URL:  "/api/v1/policy-documents/" + url.PathEscape(scope) + "/" + url.PathEscape(entry.Name()),
-			Type: docType,
-			Size: info.Size(),
-		})
+		item := manifest[entry.Name()]
+		item.Name = entry.Name()
+		item.URL = "/api/v1/policy-documents/" + url.PathEscape(scope) + "/" + url.PathEscape(entry.Name())
+		item.Type = docType
+		item.Size = info.Size()
+		if item.DisplayName == "" {
+			item.DisplayName = entry.Name()
+		}
+		if item.OriginalName == "" {
+			item.OriginalName = entry.Name()
+		}
+		documents = append(documents, item)
 	}
-	sort.Slice(documents, func(i, j int) bool { return documents[i].Name < documents[j].Name })
+	sort.SliceStable(documents, func(i, j int) bool {
+		if policyDocumentTypeRank(documents[i].ExamType) != policyDocumentTypeRank(documents[j].ExamType) {
+			return policyDocumentTypeRank(documents[i].ExamType) < policyDocumentTypeRank(documents[j].ExamType)
+		}
+		if documents[i].Year != documents[j].Year {
+			return documents[i].Year > documents[j].Year
+		}
+		if documents[i].PublishedAt != documents[j].PublishedAt {
+			return documents[i].PublishedAt > documents[j].PublishedAt
+		}
+		return documents[i].DisplayName < documents[j].DisplayName
+	})
 	return documents
+}
+
+type policyDocumentManifestEntry struct {
+	Path               string `json:"path"`
+	StoredName         string `json:"storedName"`
+	DisplayName        string `json:"displayName"`
+	OriginalName       string `json:"originalName"`
+	ExamType           string `json:"examType"`
+	Stage              string `json:"stage"`
+	Year               int    `json:"year"`
+	PublishedAt        string `json:"publishedAt"`
+	SourceTitle        string `json:"sourceTitle"`
+	SourceURL          string `json:"sourceUrl"`
+	VerificationStatus string `json:"verificationStatus"`
+}
+
+type policyDocumentManifestFile struct {
+	Files []policyDocumentManifestEntry `json:"files"`
+}
+
+func (h *AdminHandler) policyDocumentManifest(scope string) map[string]LocalPolicyDocument {
+	result := make(map[string]LocalPolicyDocument)
+	root := h.policyDocumentsRoot()
+	if root == "" || strings.TrimSpace(scope) == "" {
+		return result
+	}
+	data, err := os.ReadFile(filepath.Join(root, scope, "manifest.json"))
+	if err != nil {
+		return result
+	}
+	var manifest policyDocumentManifestFile
+	if json.Unmarshal(data, &manifest) != nil {
+		return result
+	}
+	for _, entry := range manifest.Files {
+		storedName := strings.TrimSpace(entry.StoredName)
+		if storedName == "" {
+			storedName = filepath.Base(strings.TrimSpace(entry.Path))
+		}
+		if storedName == "" || storedName == "." || storedName == ".." {
+			continue
+		}
+		result[storedName] = LocalPolicyDocument{
+			Name:               storedName,
+			DisplayName:        strings.TrimSpace(entry.DisplayName),
+			OriginalName:       strings.TrimSpace(entry.OriginalName),
+			ExamType:           strings.TrimSpace(entry.ExamType),
+			Stage:              strings.TrimSpace(entry.Stage),
+			Year:               entry.Year,
+			PublishedAt:        strings.TrimSpace(entry.PublishedAt),
+			SourceTitle:        strings.TrimSpace(entry.SourceTitle),
+			SourceURL:          strings.TrimSpace(entry.SourceURL),
+			VerificationStatus: strings.TrimSpace(entry.VerificationStatus),
+		}
+	}
+	return result
+}
+
+func (h *AdminHandler) policyDocumentMetadata(scope, name string) (LocalPolicyDocument, bool) {
+	item, ok := h.policyDocumentManifest(scope)[filepath.Base(name)]
+	return item, ok
+}
+
+func policyDocumentTypeRank(examType string) int {
+	switch strings.ToLower(strings.TrimSpace(examType)) {
+	case "ordinary", "普通高考", "gaokao":
+		return 0
+	case "arts", "艺术类", "艺术高考":
+		return 1
+	case "sports", "体育类", "体育高考":
+		return 2
+	case "adult", "成人高考":
+		return 3
+	case "source", "来源页":
+		return 9
+	default:
+		return 4
+	}
 }
 
 type contentMetadata struct {

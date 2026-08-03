@@ -14,7 +14,7 @@ const { source } = useForumData()
 const route = useRoute()
 const isAdminLayout = computed(() => route.meta.layout === 'admin')
 const isImmersiveLayout = computed(() => route.meta.layout === 'immersive')
-const viewKey = computed(() => route.name === 'home' ? 'home' : route.fullPath)
+const viewKey = computed(() => ['home', 'community'].includes(String(route.name)) ? 'home' : route.fullPath)
 
 onMounted(() => {
   if (forumStore.isAuthed) void forumStore.hydrateAccount()

@@ -54,7 +54,8 @@ function toggleFavorite() {
 
 function openPost(event: MouseEvent, targetSection?: 'comments') {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-  if (route.name !== 'home') {
+  const opensInFeedModal = route.name === 'home' || route.name === 'community'
+  if (!opensInFeedModal) {
     event.preventDefault()
     void router.push(`/posts/${livePost.value.id}`)
     return

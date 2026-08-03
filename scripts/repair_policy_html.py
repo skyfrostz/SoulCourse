@@ -11,10 +11,12 @@ from __future__ import annotations
 import argparse
 import base64
 import html
+import hashlib
 import json
 import mimetypes
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -37,16 +39,12 @@ def fetch(url: str, limit: int = 8 * 1024 * 1024) -> tuple[str, bytes] | None:
         return None
 
 
-def data_url(content_type: str, body: bytes) -> str:
+def normalized_type(content_type: str, url: str) -> str:
     mime = content_type.split(";", 1)[0].strip() or "application/octet-stream"
-    if mime == "text/css":
-        try:
-            css = decode(body)
-            css = CSS_URL_RE.sub(lambda m: m.group(0), css)
-            body = css.encode("utf-8")
-        except Exception:
-            pass
-    return "data:" + mime + ";base64," + base64.b64encode(body).decode("ascii")
+    suffix = Path(urllib.parse.urlparse(url).path).suffix.lower()
+    if mime == "application/octet-stream":
+        mime = mimetypes.types_map.get(suffix, mime)
+    return mime
 
 
 def decode(body: bytes) -> str:
@@ -62,6 +60,7 @@ def decode(body: bytes) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, type=Path)
+    parser.add_argument("--public-origin", default="https://soulcourse.cn")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     report: list[dict[str, object]] = []
@@ -89,21 +88,52 @@ def main() -> int:
             if not text.strip():
                 continue
             base = urllib.parse.urljoin(source, "./")
-            assets = 0
-
-            def replace(match: re.Match[str]) -> str:
-                nonlocal assets
+            matches = list(URL_RE.finditer(text))
+            targets: dict[str, str] = {}
+            for match in matches:
                 raw = html.unescape(match.group("url")).strip()
                 if not raw or raw.startswith(("#", "data:", "javascript:", "mailto:", "tel:")):
-                    return match.group(0)
+                    continue
                 absolute = urllib.parse.urljoin(base, raw)
                 if urllib.parse.urlparse(absolute).netloc != urllib.parse.urlparse(base).netloc:
+                    continue
+                targets[absolute] = raw
+
+            asset_paths: dict[str, str] = {}
+            with ThreadPoolExecutor(max_workers=12) as pool:
+                futures = {pool.submit(fetch, absolute): absolute for absolute in targets}
+                for future in as_completed(futures):
+                    absolute = futures[future]
+                    try:
+                        fetched = future.result()
+                    except Exception:
+                        fetched = None
+                    if fetched:
+                        content_type, payload = fetched
+                        digest = hashlib.sha256(payload).hexdigest()[:20]
+                        suffix = Path(urllib.parse.urlparse(absolute).path).suffix.lower()
+                        if suffix not in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".css", ".js", ".woff", ".woff2"}:
+                            suffix = mimetypes.guess_extension(normalized_type(content_type, absolute)) or ".bin"
+                        asset_name = "asset-" + digest + suffix
+                        asset_path = manifest_path.parent / asset_name
+                        if not asset_path.exists():
+                            asset_path.write_bytes(payload)
+                        scope = urllib.parse.quote(manifest_path.parent.name, safe="")
+                        asset_paths[absolute] = f"{args.public_origin.rstrip('/')}/api/v1/policy-documents/{scope}/{urllib.parse.quote(asset_name, safe='')}?preview=2"
+
+            def replace(match: re.Match[str]) -> str:
+                raw = html.unescape(match.group("url")).strip()
+                absolute = urllib.parse.urljoin(base, raw)
+                # Keep document hyperlinks usable. Do not turn an anchor to a
+                # PDF or another official page into a data URL.
+                if match.group("prefix").lower().startswith("href"):
+                    if urllib.parse.urlparse(absolute).scheme in {"http", "https"}:
+                        return match.group("prefix") + html.escape(absolute, quote=True) + match.group("suffix")
                     return match.group(0)
-                fetched = fetch(absolute)
-                if not fetched:
+                replacement = asset_paths.get(absolute)
+                if not replacement:
                     return match.group(0)
-                assets += 1
-                return match.group("prefix") + data_url(*fetched) + match.group("suffix")
+                return match.group("prefix") + replacement + match.group("suffix")
 
             repaired = URL_RE.sub(replace, text)
             repaired = re.sub(r"<meta[^>]+charset=[\"']?[^>\"']+", '<meta charset="utf-8"', repaired, flags=re.I)
@@ -114,7 +144,7 @@ def main() -> int:
                         shutil.copy2(path, backup)
                     path.write_text(repaired, encoding="utf-8")
                 changed += 1
-                report.append({"file": str(path), "assetsEmbedded": assets, "encoding": "utf-8"})
+                report.append({"file": str(path), "assetsSaved": len(asset_paths), "assetsFound": len(targets), "encoding": "utf-8"})
         if changed and not args.dry_run:
             manifest["repairedAt"] = datetime.now(timezone.utc).isoformat()
             manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

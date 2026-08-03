@@ -973,7 +973,7 @@ func (h *AdminHandler) policyDocumentManifest(scope string) map[string]LocalPoli
 
 func isPolicySnapshotName(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
-	return strings.HasPrefix(name, "snapshot-") && (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp")
+	return (strings.HasPrefix(name, "snapshot-") || strings.HasPrefix(name, "asset-")) && ext != ".html" && ext != ".htm"
 }
 
 func (h *AdminHandler) policyDocumentMetadata(scope, name string) (LocalPolicyDocument, bool) {

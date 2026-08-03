@@ -10674,19 +10674,59 @@ textarea {
 
 .post-detail-modal .article-main h1 {
   max-width: 620px;
-  padding-right: 34px;
-  font-size: clamp(22px, 2vw, 30px);
-  line-height: 1.35;
+  padding-right: 52px;
+  font-size: clamp(22px, 1.6vw, 27px);
+  line-height: 1.42;
+  font-weight: 800;
 }
 
 .post-detail-modal .article-meta {
-  margin-top: 22px;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.post-detail-modal .article-meta .avatar.medium {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+
+.post-detail-modal .article-meta strong {
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 750;
+}
+
+.post-detail-modal .article-meta small {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.post-detail-modal .article-meta .follow-button {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.post-detail-modal .article-tags {
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.post-detail-modal .article-tags .category-chip,
+.post-detail-modal .article-tags span:not(.category-chip) {
+  height: 22px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .post-detail-modal .article-body {
-  margin-top: 20px;
-  font-size: 15px;
-  line-height: 1.85;
+  margin-top: 18px;
+  font-size: 14px;
+  line-height: 1.9;
+  font-weight: 400;
 }
 
 .post-detail-modal .post-data-evidence {
@@ -10750,9 +10790,9 @@ textarea {
   display: flex;
   flex-wrap: nowrap;
   overflow-x: auto;
-  gap: 6px;
-  margin: 20px -30px 0;
-  padding: 12px 30px;
+  gap: 2px;
+  margin: 18px -30px 0;
+  padding: 10px 30px;
   border-top: 1px solid #e2e8f0;
   background: rgba(255, 255, 255, .96);
   box-shadow: 0 -8px 18px rgba(15, 23, 42, .04);
@@ -10761,8 +10801,23 @@ textarea {
 .post-detail-modal .article-actions button {
   flex: 0 0 auto;
   min-width: 44px;
+  height: 34px;
+  gap: 5px;
+  padding: 0 8px;
   border-color: transparent;
   background: transparent;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.post-detail-modal .article-actions .owner-post-action {
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+}
+
+.post-detail-modal .article-actions .owner-post-action .action-label {
+  display: none;
 }
 
 .post-detail-modal .article-side > h2 {
@@ -10775,8 +10830,8 @@ textarea {
   border-left: 3px solid #0f9f7a;
   background: #f0fdfa;
   color: #475569;
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: 12.5px;
+  line-height: 1.7;
 }
 
 .post-detail-modal .service-card {

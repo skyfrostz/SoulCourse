@@ -454,11 +454,11 @@ onBeforeUnmount(() => {
           <button type="button" @click="focusComments"><MessageSquare :size="17" /> {{ displayedCommentCount }} 评论</button>
           <button type="button" @click="sharePost"><Share2 :size="17" /> 分享</button>
           <button type="button" :disabled="isOffline || reportMutation.isPending.value" @click="submitReport"><Flag :size="17" /> 举报</button>
-          <button v-if="viewerOwnsPost" type="button" :disabled="isOffline || updateMutation.isPending.value" @click="startEditingPost">
-            <Pencil :size="17" /> 编辑帖子
+          <button v-if="viewerOwnsPost" class="owner-post-action" type="button" aria-label="编辑帖子" title="编辑帖子" :disabled="isOffline || updateMutation.isPending.value" @click="startEditingPost">
+            <Pencil :size="17" /> <span class="action-label">编辑帖子</span>
           </button>
-          <button v-if="viewerOwnsPost" class="danger-inline-action" type="button" :disabled="isOffline || deleteMutation.isPending.value" @click="deleteOwnPost">
-            <Trash2 :size="17" /> {{ deleteMutation.isPending.value ? '删除中...' : '删除帖子' }}
+          <button v-if="viewerOwnsPost" class="danger-inline-action owner-post-action" type="button" :aria-label="deleteMutation.isPending.value ? '删除中' : '删除帖子'" :title="deleteMutation.isPending.value ? '删除中' : '删除帖子'" :disabled="isOffline || deleteMutation.isPending.value" @click="deleteOwnPost">
+            <Trash2 :size="17" /> <span class="action-label">{{ deleteMutation.isPending.value ? '删除中...' : '删除帖子' }}</span>
           </button>
         </div>
         <p v-if="reportMessage" class="form-success">{{ reportMessage }}</p>

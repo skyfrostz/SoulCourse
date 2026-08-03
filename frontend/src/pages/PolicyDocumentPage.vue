@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { BookOpenCheck, ChevronLeft, ExternalLink, FileText, Search, ShieldCheck } from '@lucide/vue'
 import { fetchPublishedPolicies } from '../lib/api'
@@ -36,6 +36,7 @@ const selectedFileKind = computed(() => {
   if (/\.(html|htm)$/.test(name)) return 'html'
   return 'download'
 })
+const htmlPreview = ref('')
 const selectedFileURL = computed(() => {
   if (!selectedFile.value) return ''
   const url = new URL(selectedFile.value.url, window.location.origin)
@@ -43,6 +44,17 @@ const selectedFileURL = computed(() => {
   return url.toString()
 })
 const officeViewerURL = computed(() => `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(selectedFileURL.value)}`)
+
+watch([selectedFileURL, selectedFileKind], async ([url, kind]) => {
+  htmlPreview.value = ''
+  if (kind !== 'html' || !url) return
+  try {
+    const response = await fetch(url, { credentials: 'same-origin' })
+    if (response.ok) htmlPreview.value = await response.text()
+  } catch {
+    htmlPreview.value = ''
+  }
+}, { immediate: true })
 
 function goBack() {
   router.push(provinceName.value ? `/knowledge/${encodeURIComponent(provinceName.value)}` : '/knowledge')
@@ -100,7 +112,7 @@ function searchInForum(query: string) {
           </div>
           <iframe v-if="selectedFileKind === 'pdf'" :src="selectedFileURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame" />
           <iframe v-else-if="selectedFileKind === 'office'" :src="officeViewerURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame" />
-          <iframe v-else-if="selectedFileKind === 'html'" :src="selectedFileURL" :title="`${selectedFile.name}在线预览`" class="policy-file-frame policy-html-frame" sandbox="allow-same-origin" />
+          <iframe v-else-if="selectedFileKind === 'html'" :srcdoc="htmlPreview" :title="`${selectedFile.name}在线预览`" class="policy-file-frame policy-html-frame" sandbox="allow-same-origin" />
           <div v-else class="policy-file-unavailable">
             <FileText :size="22" />
             <p>该文件格式暂不支持网页内预览，请下载原文件查看。</p>
